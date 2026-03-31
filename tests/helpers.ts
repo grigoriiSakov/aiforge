@@ -68,18 +68,6 @@ if (mode === "copy") {
 }
 
 if (mode === "update") {
-  const answersPath = path.join(destinationPath, ".copier-answers.yml");
-  const answersContent = fs.existsSync(answersPath) ? fs.readFileSync(answersPath, "utf8") : "";
-  if (
-    !answersContent.includes("_src_path:") ||
-    !answersContent.includes("_commit:") ||
-    !answersContent.includes("_subdirectory:")
-  ) {
-    process.stderr.write(
-      "Cannot update because cannot obtain old template references from \`.copier-answers.yml\`.\\n"
-    );
-    process.exit(1);
-  }
   writeFile(path.join(destinationPath, ".copier-update-marker"), "updated\\n");
 }
 `

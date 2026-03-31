@@ -15,7 +15,6 @@ MVP CLI-конфигуратор для стандартизации AI-facing e
 - `.ai/**`
 - `.cursor/**`
 - `.cursor/settings.json`
-- `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.codex/**`
 - `.agent/**`
 - `.agents/**`
@@ -47,13 +46,11 @@ npx tsx src/cli/index.ts llms build --repo /path/to/repo
 - `.ai/reference/*`
 - `.ai/context/*`
 - `.ai/linear-scope.json`
-- `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md -> .ai/reference/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.cursor/HIERARCHY.md`
 - `.cursor/skills -> .ai/skills`
 - `.cursor/rules -> .ai/rules`
 - `.cursor/reference -> .ai/reference`
 - `.cursor/context -> .ai/context`
-- `.cursor/linear-scope.json -> .ai/linear-scope.json`
 - `.agent/skills -> .ai/skills`
 - `.agent/rules -> .ai/rules`
 - `.codex/skills -> .ai/skills`
@@ -186,7 +183,6 @@ aiforge doctor
 
 - `.ai/linear-scope.json`
 - `.cursor/settings.json`
-- `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.cursor/rules/linear-mcp.mdc`
 
 Это не заменяет локальную MCP-настройку полностью, но подсказывает:

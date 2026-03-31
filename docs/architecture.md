@@ -4,7 +4,7 @@
 
 `ai-simple-template` intentionally keeps the product thin:
 
-- `Copier` renders and updates managed surfaces;
+- `Copier` renders managed surfaces through local apply runs;
 - `Taskfile.yml` hides project-specific commands behind stable task names;
 - generated hooks and prompts read machine-friendly project data from `.agents/project.manifest.json`.
 
@@ -18,7 +18,7 @@ Thin orchestration layer over:
 
 - profile detection,
 - config bootstrap,
-- Copier copy/update,
+- Copier-based local render/apply,
 - manifesto/llms/mcp post-processing,
 - diagnostics.
 

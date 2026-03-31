@@ -50,28 +50,6 @@ export function runCopierCopy(options: CopierRunOptions): void {
   }
 }
 
-export function runCopierUpdate(destinationPath: string, trust = false, dryRun = false): void {
-  const command = resolveCopierCommand();
-  const args = ["update"];
-
-  if (dryRun) {
-    args.push("--pretend");
-  }
-
-  if (trust) {
-    args.push("--trust");
-  }
-
-  const result = spawnSync(command.bin, [...command.prefixArgs, ...args], {
-    stdio: "inherit",
-    cwd: destinationPath
-  });
-
-  if (result.status !== 0) {
-    throw new Error(`Copier update failed with exit code ${String(result.status)}`);
-  }
-}
-
 export function ensureCopierAnswersFile(params: {
   destinationPath: string;
   templatePath: string;
@@ -79,21 +57,13 @@ export function ensureCopierAnswersFile(params: {
 }): { restore: () => void } {
   const answersPath = path.join(params.destinationPath, COPIER_ANSWERS_FILE);
   const previousContent = fs.existsSync(answersPath) ? fs.readFileSync(answersPath, "utf8") : null;
-  const existingAnswers = parseAnswers(previousContent);
+  const existingAnswers = stripLegacyTemplateReferenceAnswers(parseAnswers(previousContent));
   const templateReferenceAnswers = buildTemplateReferenceAnswers(params.templatePath);
   const nextAnswers: Record<string, unknown> = {
     ...existingAnswers,
     ...params.answers,
     ...templateReferenceAnswers
   };
-
-  if (
-    !("_commit" in templateReferenceAnswers) &&
-    typeof existingAnswers._commit === "string" &&
-    existingAnswers._commit.trim()
-  ) {
-    nextAnswers._commit = existingAnswers._commit;
-  }
 
   const nextContent = YAML.stringify(nextAnswers);
   if (previousContent !== nextContent) {
@@ -145,36 +115,14 @@ function parseAnswers(content: string | null): Record<string, unknown> {
 }
 
 function buildTemplateReferenceAnswers(templatePath: string): Record<string, unknown> {
-  const gitRoot = runGit(["-C", templatePath, "rev-parse", "--show-toplevel"]);
-  const gitCommit = runGit(["-C", templatePath, "rev-parse", "HEAD"]);
-
-  if (!gitRoot || !gitCommit) {
-    return { _src_path: templatePath };
-  }
-
-  const normalizedTemplatePath = path.resolve(templatePath);
-  const normalizedGitRoot = path.resolve(gitRoot);
-  const relativeSubdirectory = path.relative(normalizedGitRoot, normalizedTemplatePath);
-  const answers: Record<string, unknown> = {
-    _src_path: normalizedGitRoot,
-    _commit: gitCommit
-  };
-
-  if (relativeSubdirectory && relativeSubdirectory !== ".") {
-    answers._subdirectory = relativeSubdirectory;
-  }
-
-  return answers;
+  return { _src_path: path.resolve(templatePath) };
 }
 
-function runGit(args: string[]): string | null {
-  const result = spawnSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  if (result.status !== 0) {
-    return null;
-  }
-
-  const value = result.stdout.trim();
-  return value ? value : null;
+function stripLegacyTemplateReferenceAnswers(answers: Record<string, unknown>): Record<string, unknown> {
+  const nextAnswers = { ...answers };
+  delete nextAnswers._commit;
+  delete nextAnswers._subdirectory;
+  return nextAnswers;
 }
 
 function resolveCopierCommand(): CopierCommand {

@@ -15,8 +15,6 @@ const SHARED_SKILLS_PATH = path.join(".ai", "skills");
 const SHARED_RULES_PATH = path.join(".ai", "rules");
 const SHARED_REFERENCE_PATH = path.join(".ai", "reference");
 const SHARED_CONTEXT_PATH = path.join(".ai", "context");
-const SHARED_LINEAR_SCOPE_FILE = path.join(".ai", "linear-scope.json");
-const SHARED_PROMPT_OPTIMIZATION_FILE = path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md");
 
 const SKILL_LINK_RUNTIMES = {
   cursor: ".cursor",
@@ -36,14 +34,6 @@ const REFERENCE_LINK_RUNTIMES = {
 } as const;
 
 const CONTEXT_LINK_RUNTIMES = {
-  cursor: ".cursor"
-} as const;
-
-const LINEAR_SCOPE_LINK_RUNTIMES = {
-  cursor: ".cursor"
-} as const;
-
-const PROMPT_OPTIMIZATION_LINK_RUNTIMES = {
   cursor: ".cursor"
 } as const;
 
@@ -75,14 +65,6 @@ function ensureSharedLinks(repoRoot: string, runtimes: RuntimeFlags): void {
   ensureSharedDirectoryLinks(repoRoot, SHARED_RULES_PATH, "rules", RULE_LINK_RUNTIMES, runtimes);
   ensureSharedDirectoryLinks(repoRoot, SHARED_REFERENCE_PATH, "reference", REFERENCE_LINK_RUNTIMES, runtimes);
   ensureSharedDirectoryLinks(repoRoot, SHARED_CONTEXT_PATH, "context", CONTEXT_LINK_RUNTIMES, runtimes);
-  ensureSharedFileLinks(repoRoot, SHARED_LINEAR_SCOPE_FILE, "linear-scope.json", LINEAR_SCOPE_LINK_RUNTIMES, runtimes);
-  ensureSharedFileLinks(
-    repoRoot,
-    SHARED_PROMPT_OPTIMIZATION_FILE,
-    "PROMPT_OPTIMIZATION_STRATEGY.md",
-    PROMPT_OPTIMIZATION_LINK_RUNTIMES,
-    runtimes
-  );
 }
 
 function ensureSharedDirectoryLinks<T extends Record<string, string>>(
@@ -119,42 +101,5 @@ function ensureSharedDirectoryLinks<T extends Record<string, string>>(
     }
 
     fs.symlinkSync(linkTarget, linkPath, process.platform === "win32" ? "junction" : "dir");
-  }
-}
-
-function ensureSharedFileLinks<T extends Record<string, string>>(
-  repoRoot: string,
-  sharedRelativePath: string,
-  fileName: string,
-  runtimeDirectories: T,
-  runtimes: RuntimeFlags
-): void {
-  const sharedAbsolutePath = path.join(repoRoot, sharedRelativePath);
-  if (!fs.existsSync(sharedAbsolutePath)) {
-    return;
-  }
-
-  for (const [runtime, runtimeDir] of Object.entries(runtimeDirectories)) {
-    if (!runtimes[runtime as keyof RuntimeFlags]) {
-      continue;
-    }
-
-    const runtimeRoot = path.join(repoRoot, runtimeDir);
-    if (!fs.existsSync(runtimeRoot)) {
-      continue;
-    }
-
-    const linkPath = path.join(runtimeRoot, fileName);
-    const linkTarget = path.relative(path.dirname(linkPath), sharedAbsolutePath);
-    if (fs.existsSync(linkPath)) {
-      const linkStat = fs.lstatSync(linkPath);
-      if (linkStat.isSymbolicLink() && fs.readlinkSync(linkPath) === linkTarget) {
-        continue;
-      }
-
-      fs.rmSync(linkPath, { recursive: true, force: true });
-    }
-
-    fs.symlinkSync(linkTarget, linkPath);
   }
 }

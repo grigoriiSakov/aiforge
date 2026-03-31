@@ -20,7 +20,7 @@ CLI предоставляет команды:
 - `adopt` — принятие существующего проекта под управление (без полного перегенерата всего подряд).
 - `detect` — определение project profile и текущего состояния поверхностей.
 - `sync` — выравнивание managed surfaces с текущим профилем/манифестом.
-- `update` — обновление template/runtime артефактов через Copier update flow.
+- `update` — обновление template/runtime артефактов через локальный render/apply flow без git-зависимости.
 - `doctor` — диагностика drift/конфликтов/битых зависимостей.
 - `mcp scaffold` — каркас MCP-конфигурации/подключений.
 - `manifesto init` — первичная инициализация `MANIFESTO.md`.
@@ -32,7 +32,7 @@ CLI предоставляет команды:
 - `vue-quasar-capacitor`
 
 Template/update engine:
-- Copier (single source for template render and update).
+- Copier copy/render как локальный apply engine без зависимости от git-based template update.
 
 Unified command layer:
 - Task (единая точка запуска команд для пользователя и CI).

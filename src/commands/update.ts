@@ -1,4 +1,10 @@
-import { ensureCopierAnswersFile, ensureCopierInstalled, runCopierUpdate } from "../core/copier.js";
+import {
+  cleanupTemporaryAnswersFile,
+  ensureCopierAnswersFile,
+  ensureCopierInstalled,
+  runCopierCopy,
+  writeTemporaryAnswersFile
+} from "../core/copier.js";
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig } from "../core/config.js";
 import { buildLlms } from "../core/llms.js";
 import { generateManifesto } from "../core/manifesto.js";
@@ -16,22 +22,25 @@ export async function runUpdateCommand(
   ensureCopierInstalled();
   const loadedConfig = loadConfig(repoRoot);
   const config = profileId ? applyProfileToConfig(loadedConfig, profileId) : loadedConfig;
+  const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(config));
 
   if (dryRun) {
-    const preparedAnswers = ensureCopierAnswersFile({
-      destinationPath: repoRoot,
-      templatePath: resolveTemplatePath(),
-      answers: buildCopierAnswers(config)
-    });
     try {
-      runCopierUpdate(repoRoot, true, true);
+      runCopierCopy({
+        templatePath: resolveTemplatePath(),
+        destinationPath: repoRoot,
+        dataFilePath: answersFilePath,
+        dryRun: true,
+        force: false,
+        trust: true
+      });
       return {
         ok: true,
         code: 0,
         message: "Dry-run template update completed"
       };
     } finally {
-      preparedAnswers.restore();
+      cleanupTemporaryAnswersFile(answersFilePath);
     }
   }
 
@@ -43,7 +52,14 @@ export async function runUpdateCommand(
       templatePath: resolveTemplatePath(),
       answers: buildCopierAnswers(config)
     });
-    runCopierUpdate(repoRoot, true, false);
+    runCopierCopy({
+      templatePath: resolveTemplatePath(),
+      destinationPath: repoRoot,
+      dataFilePath: answersFilePath,
+      dryRun: false,
+      force: false,
+      trust: true
+    });
 
     applyRuntimeFlags(repoRoot);
     generateManifesto(repoRoot);
@@ -53,6 +69,7 @@ export async function runUpdateCommand(
     restoreManagedSnapshot(repoRoot, snapshot);
     throw error;
   } finally {
+    cleanupTemporaryAnswersFile(answersFilePath);
     cleanupSnapshot(snapshot);
   }
 

@@ -15,7 +15,7 @@
 - `schemaVersion`: версия схемы манифеста.
 - `projectProfile`: `python-fastapi-docker | laravel-docker | vue-quasar-capacitor`.
 - `managedSurfaces`: список путей и политик управления (`managed`, `semi-managed`, `unmanaged`).
-- `tooling`: флаги и опции для Copier/Task/MCP/LLMS.
+- `tooling`: флаги и опции для local render/Task/MCP/LLMS.
 - `updatePolicy`: режим update (strict, preserve-local-overrides, report-only).
 - `features`: включенные capability-флаги (`mcp`, `llms`, `manifesto`, ...).
 
@@ -40,7 +40,7 @@ Managed surfaces:
 Suggested service internals for CLI repo:
 - `src/commands/*` — command handlers (`init`, `adopt`, ...).
 - `src/core/config/*` — load/validate/merge config.
-- `src/core/copier/*` — render/update adapter.
+- `src/core/copier/*` — local render adapter.
 - `src/core/surfaces/*` — apply/backup/diff/ownership logic.
 - `src/core/profiles/*` — profile definitions and detection rules.
 - `src/core/doctor/*` — diagnostics and health checks.
@@ -69,7 +69,7 @@ Ownership contract:
 2) `detect environment` (repo facts, profile hints)
 3) `plan changes` (diff intended vs actual)
 4) `preflight checks` (permissions, required binaries, conflicts)
-5) `apply` (Copier render/update + surface writer)
+5) `apply` (local render + surface writer)
 6) `post-verify` (`doctor` checks subset)
 7) `report` (human + optional JSON)
 
@@ -78,7 +78,7 @@ Ownership contract:
 - `adopt`: detect existing files, map ownership, then selective sync.
 - `detect`: read-only profile/state inference.
 - `sync`: reconcile to desired state by manifest.
-- `update`: Copier-based template update lifecycle.
+- `update`: локальный reconcile/apply lifecycle без git template refs.
 - `doctor`: consistency + dependency + drift checks.
 - `mcp scaffold`: create/update MCP baseline artifacts.
 - `manifesto init`: create initial manifesto surface.
@@ -88,11 +88,11 @@ Ownership contract:
 
 Stages:
 1) Snapshot current managed surfaces.
-2) Fetch/resolve template version.
-3) Compute change-set (current vs template target).
-4) Apply with conflict detection.
+2) Render current template locally against current config.
+3) Compute/apply managed surface changes.
+4) Restore shared symlinks and runtime artifacts.
 5) Run doctor subset.
-6) Commit-style summary output (changed/skipped/conflicted).
+6) Summary output (changed/skipped/conflicted).
 
 Failure policy (MVP):
 - Hard-fail on schema mismatch or critical conflicts.
@@ -108,8 +108,8 @@ Test pyramid:
   - managed ownership and diff planner,
   - error code mapping.
 - Integration tests:
-  - command e2e in temp git repos,
-  - Copier render/update flow on fixture templates,
+  - command e2e in temp repos,
+  - local Copier render/apply flow on fixture templates,
   - `detect -> sync -> doctor` lifecycle per profile.
 - Golden/snapshot tests:
   - generated surfaces (`AGENTS.md`, `MANIFESTO.md`, `llms` tree).

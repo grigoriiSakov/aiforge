@@ -39,7 +39,6 @@ Please analyze this project and produce only the project-specific additions I st
 - \`.cursor/rules -> .ai/rules\`
 - \`.cursor/reference -> .ai/reference\`
 - \`.cursor/context -> .ai/context\`
-- \`.cursor/linear-scope.json -> .ai/linear-scope.json\`
 - \`.cursor/hooks.json\`
 - \`.cursor/hooks/*\`
 - \`.codex/hooks/*\`
