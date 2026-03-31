@@ -3,7 +3,13 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { resolveTemplatePath } from "../src/core/template.js";
+
 describe("generic reusable surfaces", () => {
+  test("template path resolves to an existing directory", () => {
+    expect(fs.existsSync(resolveTemplatePath())).toBe(true);
+  });
+
   test("template includes core generic commands, references, skills and codex wrappers", () => {
     const root = path.join(process.cwd(), "template", "base");
 

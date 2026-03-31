@@ -16,8 +16,10 @@ export function copyFixture(fixtureName: string): string {
 
 export function createFakeCopierBin(): string {
   const tempDir = makeTempRepo("ai-simple-copier-bin-");
-  const binPath = path.join(tempDir, "fake-copier");
-  const content = `#!/usr/bin/env node
+  return createFakeExecutable(
+    tempDir,
+    "fake-copier",
+    `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -64,7 +66,12 @@ if (mode === "copy") {
 if (mode === "update") {
   writeFile(path.join(destinationPath, ".copier-update-marker"), "updated\\n");
 }
-`;
+`
+  );
+}
+
+export function createFakeExecutable(directory: string, name: string, content: string): string {
+  const binPath = path.join(directory, name);
   fs.writeFileSync(binPath, content, { mode: 0o755 });
   return binPath;
 }

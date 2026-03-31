@@ -16,6 +16,7 @@ import { runSyncCommand } from "../src/commands/sync.js";
 import { runUpdateCommand } from "../src/commands/update.js";
 import { CONFIG_FILE_NAME } from "../src/core/config.js";
 import {
+  createFakeExecutable,
   copyFixture,
   createFakeCopierBin,
   installCursorHookTemplates,
@@ -27,8 +28,12 @@ import {
 } from "./helpers.js";
 
 describe("command flow", () => {
+  const originalPath = process.env.PATH ?? "";
+
   beforeEach(() => {
+    process.env.PATH = originalPath;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
+    delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
   });
 
   test("init creates config and generated artifacts", async () => {
@@ -102,6 +107,56 @@ describe("command flow", () => {
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".copier-update-marker"))).toBe(true);
+  });
+
+  test("init falls back to uvx when copier binary is missing", async () => {
+    const repoRoot = makeTempRepo("ai-simple-uvx-init-");
+    const fakeBinDir = makeTempRepo("ai-simple-uvx-bin-");
+    createFakeExecutable(
+      fakeBinDir,
+      "copier",
+      `#!/usr/bin/env node
+process.exit(1);
+`
+    );
+    createFakeExecutable(
+      fakeBinDir,
+      "uvx",
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const mode = args.includes("copy") ? "copy" : args.includes("update") ? "update" : "help";
+if (mode === "help") process.exit(0);
+const destinationPath = mode === "copy" ? args[args.length - 1] : process.cwd();
+fs.mkdirSync(path.join(destinationPath, ".cursor"), { recursive: true });
+fs.mkdirSync(path.join(destinationPath, ".agents", "runtime"), { recursive: true });
+fs.writeFileSync(path.join(destinationPath, "AGENTS.md"), "# generated\\n");
+fs.writeFileSync(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
+fs.writeFileSync(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
+fs.writeFileSync(path.join(destinationPath, ".cursor", "linear-scope.json"), "[]\\n");
+fs.writeFileSync(path.join(destinationPath, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
+fs.writeFileSync(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
+fs.writeFileSync(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
+fs.writeFileSync(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
+fs.writeFileSync(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
+fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slug: fixture\\n");
+`
+    );
+
+    delete process.env.AI_SIMPLE_COPIER_BIN;
+    process.env.PATH = `${fakeBinDir}:${process.env.PATH ?? ""}`;
+
+    const result = await runInitCommand({
+      repoRoot,
+      projectName: "UVX Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, "AGENTS.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, CONFIG_FILE_NAME))).toBe(true);
   });
 
   test("mcp scaffold, manifesto init and llms build are callable independently", async () => {

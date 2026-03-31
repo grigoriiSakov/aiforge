@@ -7,7 +7,7 @@
     "aiforge": "./dist/src/cli/index.js"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/ensure-bin-permissions.mjs",
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

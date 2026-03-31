@@ -8,6 +8,12 @@ import YAML from "yaml";
 import { writeTextFile } from "./filesystem.js";
 import type { CopierRunOptions } from "./types.js";
 
+type CopierCommand = {
+  bin: string;
+  prefixArgs: string[];
+  label: string;
+};
+
 export function runCopierCopy(options: CopierRunOptions): void {
   const command = resolveCopierCommand();
   const args = [
@@ -76,28 +82,59 @@ export function cleanupTemporaryAnswersFile(filePath: string): void {
 }
 
 export function ensureCopierInstalled(): void {
-  const command = resolveCopierCommand();
-  const result = spawnSync(command.bin, [...command.prefixArgs, "--help"], {
-    stdio: "ignore"
-  });
-
-  if (result.status !== 0) {
-    throw new Error(
-      "Copier is not available. Install it with `uv tool install copier` or `pipx install copier`."
-    );
-  }
+  resolveCopierCommand();
 }
 
-function resolveCopierCommand(): { bin: string; prefixArgs: string[] } {
+function resolveCopierCommand(): CopierCommand {
   const override = process.env.AI_SIMPLE_COPIER_BIN;
   if (override) {
-    return { bin: override, prefixArgs: [] };
+    return resolveSpecificCommand({ bin: override, prefixArgs: [], label: override });
   }
 
   const pythonModule = process.env.AI_SIMPLE_COPIER_USE_PYTHON === "1";
   if (pythonModule) {
-    return { bin: "python3", prefixArgs: ["-m", "copier"] };
+    return resolveSpecificCommand({
+      bin: "python3",
+      prefixArgs: ["-m", "copier"],
+      label: "python3 -m copier"
+    });
   }
 
-  return { bin: "copier", prefixArgs: [] };
+  const candidates: CopierCommand[] = [
+    { bin: "copier", prefixArgs: [], label: "copier" },
+    { bin: "uvx", prefixArgs: ["--from", "copier", "copier"], label: "uvx --from copier copier" },
+    {
+      bin: "uv",
+      prefixArgs: ["tool", "run", "--from", "copier", "copier"],
+      label: "uv tool run --from copier copier"
+    },
+    { bin: "pipx", prefixArgs: ["run", "copier"], label: "pipx run copier" },
+    { bin: "python3", prefixArgs: ["-m", "copier"], label: "python3 -m copier" }
+  ];
+
+  for (const candidate of candidates) {
+    if (isCommandAvailable(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    "Copier is not available. Install `copier`, or make one of these available in PATH: `uvx`, `uv`, `pipx`, `python3 -m copier`."
+  );
+}
+
+function resolveSpecificCommand(command: CopierCommand): CopierCommand {
+  if (isCommandAvailable(command)) {
+    return command;
+  }
+
+  throw new Error(`Configured Copier command is not available: \`${command.label}\`.`);
+}
+
+function isCommandAvailable(command: CopierCommand): boolean {
+  const result = spawnSync(command.bin, [...command.prefixArgs, "--help"], {
+    stdio: "ignore"
+  });
+
+  return result.status === 0;
 }
