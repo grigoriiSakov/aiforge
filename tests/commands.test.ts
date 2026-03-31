@@ -14,7 +14,7 @@ import { runMcpScaffoldCommand } from "../src/commands/mcp-scaffold.js";
 import { runProjectStubCommand } from "../src/commands/project-stub.js";
 import { runSyncCommand } from "../src/commands/sync.js";
 import { runUpdateCommand } from "../src/commands/update.js";
-import { CONFIG_FILE_NAME } from "../src/core/config.js";
+import { CONFIG_FILE_NAME, loadConfig, saveConfig } from "../src/core/config.js";
 import {
   createFakeExecutable,
   copyFixture,
@@ -150,6 +150,215 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("sync backfills new config sections for older projects", async () => {
+    const repoRoot = makeTempRepo("ai-simple-config-backfill-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Backfill Demo",
+      profileId: "laravel-docker",
+      dryRun: false
+    });
+
+    const legacyConfig = loadConfig(repoRoot);
+    delete legacyConfig.projectRules;
+    delete legacyConfig.agents;
+    delete legacyConfig.manifesto.markdown;
+    legacyConfig.managedSurfaces = legacyConfig.managedSurfaces.filter((entry) => entry.path !== ".ai");
+    const legacyConfigYaml = [
+      "schemaVersion: 1",
+      "project:",
+      `  slug: ${legacyConfig.project.slug}`,
+      `  name: ${legacyConfig.project.name}`,
+      `  mainBranch: ${legacyConfig.project.mainBranch}`,
+      "workflow:",
+      `  tracker: ${legacyConfig.workflow.tracker}`,
+      "  phases:",
+      ...legacyConfig.workflow.phases.map((phase) => `    - ${phase}`),
+      `  language: ${legacyConfig.workflow.language}`,
+      "linear:",
+      `  enabled: ${legacyConfig.linear.enabled}`,
+      `  requireTrackerForIssueFlow: ${legacyConfig.linear.requireTrackerForIssueFlow}`,
+      "  scopes: []",
+      "profile:",
+      `  id: ${legacyConfig.profile.id}`,
+      "runtimes:",
+      `  cursor: ${legacyConfig.runtimes.cursor}`,
+      `  codex: ${legacyConfig.runtimes.codex}`,
+      `  agent: ${legacyConfig.runtimes.agent}`,
+      `  agents: ${legacyConfig.runtimes.agents}`,
+      "task:",
+      `  command: ${legacyConfig.task.command}`,
+      "  tasks:",
+      `    build: ${legacyConfig.task.tasks.build}`,
+      `    test: ${legacyConfig.task.tasks.test}`,
+      `    lint: ${legacyConfig.task.tasks.lint}`,
+      `    verify: ${legacyConfig.task.tasks.verify}`,
+      `    review: ${legacyConfig.task.tasks.review}`,
+      "commands:",
+      "  build: []",
+      "  test: []",
+      "  lint: []",
+      "  verify: []",
+      "  review: []",
+      "manifesto:",
+      `  path: ${legacyConfig.manifesto.path}`,
+      `  title: ${legacyConfig.manifesto.title}`,
+      "llms:",
+      `  rootDir: ${legacyConfig.llms.rootDir}`,
+      `  txtPath: ${legacyConfig.llms.txtPath}`,
+      "  sourceGlobs: []",
+      "mcp:",
+      `  scaffold: ${legacyConfig.mcp.scaffold}`,
+      "  placeholders: []",
+      "managedSurfaces:",
+      ...legacyConfig.managedSurfaces.map((entry) => `  - path: ${entry.path}\n    policy: ${entry.policy}`),
+      `updatePolicy: ${legacyConfig.updatePolicy}`,
+      "features:",
+      `  mcp: ${legacyConfig.features.mcp}`,
+      `  llms: ${legacyConfig.features.llms}`,
+      `  manifesto: ${legacyConfig.features.manifesto}`,
+      ""
+    ].join("\n");
+    fs.writeFileSync(path.join(repoRoot, CONFIG_FILE_NAME), legacyConfigYaml);
+
+    const rawLegacyConfig = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    expect(rawLegacyConfig).not.toContain("\nprojectRules:\n");
+    expect(rawLegacyConfig).not.toContain("\nagents:\n  markdown:");
+    expect(rawLegacyConfig).not.toContain("\n  markdown: \"\"");
+    expect(rawLegacyConfig).not.toContain("- path: .ai");
+
+    const result = await runSyncCommand(repoRoot, false);
+    expect(result.ok).toBe(true);
+
+    const syncedConfig = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    expect(syncedConfig).toContain("\nprojectRules:\n");
+    expect(syncedConfig).toContain("\nagents:\n  markdown: \"\"");
+    expect(syncedConfig).toContain("\nmanifesto:\n");
+    expect(syncedConfig).toContain("\n  markdown: \"\"");
+    expect(syncedConfig).toContain("- path: .ai");
+  });
+
+  test("sync and update regenerate project profile from config markdown", async () => {
+    const repoRoot = makeTempRepo("ai-simple-project-rules-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Project Rules Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.projectRules = {
+      markdown: [
+        "## Architecture Constraints",
+        "- API schema changes require explicit migration notes.",
+        "- Do not introduce cross-module imports from `app/*` into `domain/*`."
+      ].join("\n")
+    };
+    saveConfig(repoRoot, config);
+
+    const syncResult = await runSyncCommand(repoRoot, false);
+    expect(syncResult.ok).toBe(true);
+
+    const projectProfilePath = path.join(repoRoot, ".ai", "rules", "project-profile.mdc");
+    const syncedProjectProfile = fs.readFileSync(projectProfilePath, "utf8");
+    expect(syncedProjectProfile).toContain("## Project-Specific Rules");
+    expect(syncedProjectProfile).toContain("API schema changes require explicit migration notes.");
+    expect(syncedProjectProfile).toContain("Do not introduce cross-module imports");
+
+    fs.writeFileSync(projectProfilePath, "# manual overwrite\n");
+
+    const updateResult = await runUpdateCommand(repoRoot, false);
+    expect(updateResult.ok).toBe(true);
+
+    const updatedProjectProfile = fs.readFileSync(projectProfilePath, "utf8");
+    expect(updatedProjectProfile).toContain("## Project-Specific Rules");
+    expect(updatedProjectProfile).toContain("API schema changes require explicit migration notes.");
+    expect(updatedProjectProfile).not.toContain("# manual overwrite");
+  });
+
+  test("sync and update regenerate manifesto from config markdown", async () => {
+    const repoRoot = makeTempRepo("ai-simple-manifesto-markdown-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Manifesto Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.manifesto.markdown = [
+      "# Project Workflow Manifesto",
+      "",
+      "## Non-Negotiables",
+      "",
+      "- Every behavior change requires explicit spec notes.",
+      "- Every non-trivial task must leave behind verification evidence."
+    ].join("\n");
+    saveConfig(repoRoot, config);
+
+    const syncResult = await runSyncCommand(repoRoot, false);
+    expect(syncResult.ok).toBe(true);
+
+    const manifestoPath = path.join(repoRoot, "MANIFESTO.md");
+    const syncedManifesto = fs.readFileSync(manifestoPath, "utf8");
+    expect(syncedManifesto).toContain("## Non-Negotiables");
+    expect(syncedManifesto).toContain("Every behavior change requires explicit spec notes.");
+    expect(syncedManifesto).not.toContain("## Profile Notes");
+
+    fs.writeFileSync(manifestoPath, "# manual manifesto overwrite\n");
+
+    const updateResult = await runUpdateCommand(repoRoot, false);
+    expect(updateResult.ok).toBe(true);
+
+    const updatedManifesto = fs.readFileSync(manifestoPath, "utf8");
+    expect(updatedManifesto).toContain("## Non-Negotiables");
+    expect(updatedManifesto).toContain("Every non-trivial task must leave behind verification evidence.");
+    expect(updatedManifesto).not.toContain("# manual manifesto overwrite");
+  });
+
+  test("sync and update regenerate agents from config markdown", async () => {
+    const repoRoot = makeTempRepo("ai-simple-agents-markdown-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Agents Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.agents = {
+      markdown: [
+        "# AGENTS.md",
+        "",
+        "## Repo-Specific Constraints",
+        "",
+        "- Always treat `apps/api` as the system-of-record boundary.",
+        "- Never modify deployment manifests without updating rollout notes."
+      ].join("\n")
+    };
+    saveConfig(repoRoot, config);
+
+    const syncResult = await runSyncCommand(repoRoot, false);
+    expect(syncResult.ok).toBe(true);
+
+    const agentsPath = path.join(repoRoot, "AGENTS.md");
+    const syncedAgents = fs.readFileSync(agentsPath, "utf8");
+    expect(syncedAgents).toContain("## Repo-Specific Constraints");
+    expect(syncedAgents).toContain("Always treat `apps/api` as the system-of-record boundary.");
+    expect(syncedAgents).not.toContain("This repository uses the `ai-simple-template` workflow baseline.");
+
+    fs.writeFileSync(agentsPath, "# manual agents overwrite\n");
+
+    const updateResult = await runUpdateCommand(repoRoot, false);
+    expect(updateResult.ok).toBe(true);
+
+    const updatedAgents = fs.readFileSync(agentsPath, "utf8");
+    expect(updatedAgents).toContain("## Repo-Specific Constraints");
+    expect(updatedAgents).toContain("Never modify deployment manifests without updating rollout notes.");
+    expect(updatedAgents).not.toContain("# manual agents overwrite");
   });
 
   test("update completes without git-based copier update", async () => {
@@ -553,7 +762,9 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(result.ok).toBe(true);
     expect(result.message).toContain("Project-Specific Aiforge Customization Request");
     expect(result.message).toContain("python-fastapi-docker");
-    expect(result.message).toContain(".ai/rules/project-profile.mdc");
+    expect(result.message).toContain("projectRules.markdown");
+    expect(result.message).toContain("manifesto.markdown");
+    expect(result.message).toContain("agents.markdown");
     expect(result.message).toContain(".cursor/mcp.example.json");
   });
 });

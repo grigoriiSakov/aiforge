@@ -1,3 +1,6 @@
+{% if agents_markdown | trim %}
+{{ agents_markdown | trim }}
+{% else %}
 # AGENTS.md
 
 This repository uses the `ai-simple-template` workflow baseline.
@@ -48,3 +51,4 @@ Canonical phases:
 {% for note in profile_notes -%}
 - {{ note }}
 {% endfor -%}
+{% endif -%}

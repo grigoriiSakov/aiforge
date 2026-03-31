@@ -26,14 +26,47 @@ const path = require("node:path");
 const args = process.argv.slice(2);
 const mode = args[0];
 const destinationPath = mode === "copy" ? args[args.length - 1] : process.cwd();
+const manifestPath = path.join(destinationPath, ".agents", "project.manifest.json");
 const ensureDir = (targetPath) => fs.mkdirSync(targetPath, { recursive: true });
 const writeFile = (targetPath, content) => {
   ensureDir(path.dirname(targetPath));
   fs.writeFileSync(targetPath, content, "utf8");
 };
+const readManifest = () => {
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+
+  return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+};
 
 if (mode === "copy") {
   const templatePath = args[args.length - 2];
+  const manifest = readManifest();
+  const verifyCommands = Array.isArray(manifest?.commands?.verify) ? manifest.commands.verify : [];
+  const projectRulesMarkdown =
+    typeof manifest?.projectRules?.markdown === "string" ? manifest.projectRules.markdown.trim() : "";
+  const agentsMarkdown = typeof manifest?.agents?.markdown === "string" ? manifest.agents.markdown.trim() : "";
+  const projectProfileLines = [
+    "# Project Profile Rule",
+    "",
+    "- Profile: \`" + String(manifest?.profile?.id ?? "unknown") + "\`",
+    "- Tracker: \`" + String(manifest?.workflow?.tracker ?? "unknown") + "\`",
+    "- Language: \`" + String(manifest?.workflow?.language ?? "unknown") + "\`",
+    "",
+    "## Verify Commands",
+    ...verifyCommands.map((command) => "- \`" + String(command) + "\`")
+  ];
+  if (projectRulesMarkdown) {
+    projectProfileLines.push("", "## Project-Specific Rules", "", projectRulesMarkdown);
+  }
+  const agentsContent =
+    agentsMarkdown ||
+    [
+      "# AGENTS.md",
+      "",
+      "This repository uses the ai-simple-template workflow baseline."
+    ].join("\\n");
   ensureDir(path.join(destinationPath, ".ai", "skills", "plan"));
   ensureDir(path.join(destinationPath, ".ai", "rules"));
   ensureDir(path.join(destinationPath, ".ai", "reference"));
@@ -42,7 +75,7 @@ if (mode === "copy") {
   ensureDir(path.join(destinationPath, ".codex"));
   ensureDir(path.join(destinationPath, ".agent"));
   ensureDir(path.join(destinationPath, ".agents", "runtime"));
-  writeFile(path.join(destinationPath, "AGENTS.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, "AGENTS.md"), agentsContent + "\\n");
   writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
   writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");
   writeFile(
@@ -50,6 +83,7 @@ if (mode === "copy") {
     "---\\nname: plan\\ndescription: Shared planning workflow.\\n---\\n\\n# Plan\\n"
   );
   writeFile(path.join(destinationPath, ".ai", "rules", "linear-mcp.mdc"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "rules", "project-profile.mdc"), projectProfileLines.join("\\n") + "\\n");
   writeFile(path.join(destinationPath, ".ai", "reference", "context-budget.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".ai", "context", "README.md"), "# generated\\n");

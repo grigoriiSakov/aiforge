@@ -58,7 +58,11 @@ export function createConfig(params: {
     commands: profile.taskCommands,
     manifesto: {
       path: "MANIFESTO.md",
-      title: profile.manifestoTitle
+      title: profile.manifestoTitle,
+      markdown: ""
+    },
+    agents: {
+      markdown: ""
     },
     llms: {
       rootDir: "llms",
@@ -68,6 +72,9 @@ export function createConfig(params: {
     mcp: {
       scaffold: true,
       placeholders: ["linear", "framework-docs", "project-db"]
+    },
+    projectRules: {
+      markdown: ""
     },
     managedSurfaces: [
       { path: ".ai", policy: "managed" },
@@ -99,17 +106,19 @@ export function loadConfig(repoRoot: string): ProjectConfig {
   }
 
   const parsed = YAML.parse(content) as ProjectConfig;
-  validateConfig(parsed);
-  return parsed;
+  const normalized = normalizeConfig(parsed);
+  validateConfig(normalized);
+  return normalized;
 }
 
 export function saveConfig(repoRoot: string, config: ProjectConfig): string {
-  validateConfig(config);
+  const normalized = normalizeConfig(config);
+  validateConfig(normalized);
   const configPath = path.join(repoRoot, CONFIG_FILE_NAME);
-  writeTextFile(configPath, YAML.stringify(config));
+  writeTextFile(configPath, YAML.stringify(normalized));
   const manifestPath = path.join(repoRoot, MACHINE_MANIFEST_PATH);
   ensureDir(path.dirname(manifestPath));
-  writeTextFile(manifestPath, `${JSON.stringify(config, null, 2)}\n`);
+  writeTextFile(manifestPath, `${JSON.stringify(normalized, null, 2)}\n`);
   return configPath;
 }
 
@@ -141,7 +150,9 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     task_review_name: config.task.tasks.review,
     commands: config.commands,
     profile_notes: getProfileDefinition(config.profile.id).notes,
-    mcp_placeholders: config.mcp.placeholders
+    mcp_placeholders: config.mcp.placeholders,
+    project_rules_markdown: config.projectRules?.markdown ?? "",
+    agents_markdown: config.agents?.markdown ?? ""
   };
 }
 
@@ -156,6 +167,33 @@ function validateConfig(config: ProjectConfig): void {
 
   if (!config.profile.id) {
     throw new Error("Config profile.id is required");
+  }
+
+  if (!config.manifesto?.path || !config.manifesto?.title) {
+    throw new Error("Config manifesto.path and manifesto.title are required");
+  }
+
+  if (config.manifesto.markdown !== undefined && typeof config.manifesto.markdown !== "string") {
+    throw new Error("Config manifesto.markdown must be a string when provided");
+  }
+
+  if (config.agents && typeof config.agents !== "object") {
+    throw new Error("Config agents must be an object when provided");
+  }
+
+  if (config.agents?.markdown !== undefined && typeof config.agents.markdown !== "string") {
+    throw new Error("Config agents.markdown must be a string when provided");
+  }
+
+  if (config.projectRules && typeof config.projectRules !== "object") {
+    throw new Error("Config projectRules must be an object when provided");
+  }
+
+  if (
+    config.projectRules?.markdown !== undefined &&
+    typeof config.projectRules.markdown !== "string"
+  ) {
+    throw new Error("Config projectRules.markdown must be a string when provided");
   }
 
   getProfileDefinition(config.profile.id);
@@ -189,4 +227,84 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
       sourceGlobs: profile.llmsSourceGlobs
     }
   };
+}
+
+function normalizeConfig(config: ProjectConfig): ProjectConfig {
+  const defaults = createConfig({
+    repoRoot: "",
+    projectSlug: config.project?.slug ?? "project",
+    projectName: config.project?.name ?? "Project",
+    profileId: config.profile?.id ?? "python-fastapi-docker"
+  });
+
+  return {
+    ...defaults,
+    ...config,
+    project: {
+      ...defaults.project,
+      ...config.project
+    },
+    workflow: {
+      ...defaults.workflow,
+      ...config.workflow
+    },
+    linear: {
+      ...defaults.linear,
+      ...config.linear
+    },
+    profile: {
+      ...defaults.profile,
+      ...config.profile
+    },
+    runtimes: {
+      ...defaults.runtimes,
+      ...config.runtimes
+    },
+    task: {
+      ...defaults.task,
+      ...config.task,
+      tasks: {
+        ...defaults.task.tasks,
+        ...config.task?.tasks
+      }
+    },
+    commands: {
+      ...defaults.commands,
+      ...config.commands
+    },
+    manifesto: {
+      ...defaults.manifesto,
+      ...config.manifesto
+    },
+    agents: {
+      ...defaults.agents,
+      ...config.agents
+    },
+    llms: {
+      ...defaults.llms,
+      ...config.llms
+    },
+    mcp: {
+      ...defaults.mcp,
+      ...config.mcp
+    },
+    projectRules: {
+      ...defaults.projectRules,
+      ...config.projectRules
+    },
+    managedSurfaces: mergeManagedSurfaces(config.managedSurfaces, defaults.managedSurfaces),
+    features: {
+      ...defaults.features,
+      ...config.features
+    }
+  };
+}
+
+function mergeManagedSurfaces(
+  current: ProjectConfig["managedSurfaces"] | undefined,
+  defaults: ProjectConfig["managedSurfaces"]
+): ProjectConfig["managedSurfaces"] {
+  const existing = Array.isArray(current) ? current : [];
+  const seen = new Set(existing.map((entry) => entry.path));
+  return [...existing, ...defaults.filter((entry) => !seen.has(entry.path))];
 }

@@ -55,8 +55,9 @@ Please analyze this project and produce only the project-specific additions I st
 
 ## Fill or update these project-specific surfaces
 
-- \`.ai/rules/project-profile.mdc\`
-- \`MANIFESTO.md\`
+- \`ai.config.yaml\` -> \`projectRules.markdown\`
+- \`ai.config.yaml\` -> \`manifesto.markdown\`
+- \`ai.config.yaml\` -> \`agents.markdown\`
 - \`Taskfile.yml\`
 - \`.ai/linear-scope.json\`
 - \`.cursor/settings.json\`
@@ -75,11 +76,30 @@ Examples:
 - docs sync rules
 - MCP placeholders specific to the project
 
+## Project-specific rule storage
+
+- Treat \`ai.config.yaml\` as the durable source of truth for project-specific workflow rules.
+- Put repository-specific markdown into \`projectRules.markdown\`.
+- Do not hand-edit generated \`.ai/rules/project-profile.mdc\`; it will be regenerated from config during \`sync\` / \`update\`.
+
+## Manifesto storage
+
+- Treat \`ai.config.yaml\` -> \`manifesto.markdown\` as the durable source of truth for manifesto customizations.
+- Do not hand-edit generated \`MANIFESTO.md\`; it will be regenerated from config during \`sync\` / \`update\`.
+
+## AGENTS storage
+
+- Treat \`ai.config.yaml\` -> \`agents.markdown\` as the durable source of truth for AGENTS customizations.
+- Do not hand-edit generated \`AGENTS.md\`; it will be regenerated from config during \`sync\` / \`update\`.
+
 ## Important constraints
 
 - Keep commands executable as written.
 - Prefer concise, enforceable rules over high-level prose.
 - Do not duplicate generic workflow files if a small project override is enough.
+- When proposing project-specific rules, return the exact YAML block for \`projectRules.markdown\`.
+- When proposing manifesto customizations, return the exact YAML block for \`manifesto.markdown\`.
+- When proposing AGENTS customizations, return the exact YAML block for \`agents.markdown\`.
 - If something should stay manual, output an explicit TODO block.
 
 ## Output format

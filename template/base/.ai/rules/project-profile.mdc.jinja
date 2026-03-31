@@ -13,3 +13,9 @@
 {% for command in commands.verify -%}
 - `{{ command }}`
 {% endfor -%}
+{% if project_rules_markdown | trim %}
+
+## Project-Specific Rules
+
+{{ project_rules_markdown | trim }}
+{% endif -%}

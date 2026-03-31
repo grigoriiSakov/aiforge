@@ -8,7 +8,9 @@ export function generateManifesto(repoRoot: string): string {
   const config = loadConfig(repoRoot);
   const profile = getProfileDefinition(config.profile.id);
   const targetPath = path.join(repoRoot, config.manifesto.path);
-  const content = `# ${config.manifesto.title}
+  const content = config.manifesto.markdown?.trim()
+    ? `${config.manifesto.markdown.trim()}\n`
+    : `# ${config.manifesto.title}
 
 ## Project
 

@@ -71,9 +71,56 @@ aiforge project-stub
 Он печатает в консоль markdown-заглушку, которую можно копипастнуть модели, чтобы она:
 
 - проанализировала конкретный репозиторий;
-- дописала project-specific правила;
-- обновила `Taskfile.yml`, `MANIFESTO.md`, `.ai/rules/project-profile.mdc`;
+- подготовила durable project-specific rules в `ai.config.yaml` -> `projectRules.markdown`;
+- подготовила durable manifesto content в `ai.config.yaml` -> `manifesto.markdown`;
+- подготовила durable `AGENTS.md` content в `ai.config.yaml` -> `agents.markdown`;
+- обновила `Taskfile.yml` и связанные generated surfaces;
 - настроила tracker/MCP-specific surfaces без переписывания generic kernel.
+
+Важно:
+
+- не редактируй руками `.ai/rules/project-profile.mdc` как источник истины;
+- не редактируй руками `MANIFESTO.md` как источник истины;
+- не редактируй руками `AGENTS.md` как источник истины;
+- эти файлы генерируются из `ai.config.yaml` и будут пересобраны при `aiforge sync` / `aiforge update`.
+
+Пример durable project-specific rules:
+
+```yaml
+projectRules:
+  markdown: |
+    ## Architecture Constraints
+    - API schema changes require explicit migration notes.
+    - Do not introduce cross-module imports from `app/*` into `domain/*`.
+```
+
+Пример durable manifesto:
+
+```yaml
+manifesto:
+  title: Project Workflow Manifesto
+  path: MANIFESTO.md
+  markdown: |
+    # Project Workflow Manifesto
+
+    ## Non-Negotiables
+
+    - All externally visible behavior changes require spec notes.
+    - Every non-trivial task must leave behind durable verification evidence.
+```
+
+Пример durable AGENTS:
+
+```yaml
+agents:
+  markdown: |
+    # AGENTS.md
+
+    ## Repo-Specific Constraints
+
+    - Always treat `apps/api` as the system-of-record boundary.
+    - Never modify deployment manifests without updating rollout notes.
+```
 
 ## Linear helpers
 

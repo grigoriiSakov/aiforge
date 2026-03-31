@@ -110,3 +110,11 @@ profile_notes:
 mcp_placeholders:
   type: yaml
   default: []
+
+project_rules_markdown:
+  type: str
+  default: ""
+
+agents_markdown:
+  type: str
+  default: ""

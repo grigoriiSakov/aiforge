@@ -64,6 +64,10 @@ export interface ProjectConfig {
   manifesto: {
     path: string;
     title: string;
+    markdown?: string;
+  };
+  agents?: {
+    markdown?: string;
   };
   llms: {
     rootDir: string;
@@ -73,6 +77,9 @@ export interface ProjectConfig {
   mcp: {
     scaffold: boolean;
     placeholders: string[];
+  };
+  projectRules?: {
+    markdown?: string;
   };
   managedSurfaces: Array<{
     path: string;
