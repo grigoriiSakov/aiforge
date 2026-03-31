@@ -12,8 +12,8 @@ MVP CLI-конфигуратор для стандартизации AI-facing e
 
 - `AGENTS.md`
 - `MANIFESTO.md`
+- `.ai/**`
 - `.cursor/**`
-- `.cursor/linear-scope.json`
 - `.cursor/settings.json`
 - `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.codex/**`
@@ -42,21 +42,23 @@ npx tsx src/cli/index.ts llms build --repo /path/to/repo
 
 `aiforge` теперь тащит не только runtime surfaces, но и reusable process kernel:
 
+- `.ai/rules/*`
+- `.ai/skills/*`
+- `.ai/reference/*`
+- `.ai/context/*`
+- `.ai/linear-scope.json`
+- `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md -> .ai/reference/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.cursor/HIERARCHY.md`
-- `.cursor/rules/workflow-gates.mdc`
-- `.cursor/reference/context-budget.md`
-- `.cursor/reference/issue-spec-template.md`
-- `.cursor/reference/tracker-degraded-mode.md`
-- `.cursor/commands/issue.md`
-- `.cursor/commands/clarify.md`
-- `.cursor/commands/check.md`
-- `.cursor/commands/debug.md`
-- `.cursor/commands/docs.md`
-- `.cursor/commands/investigate.md`
-- `.cursor/commands/refactor.md`
-- `.cursor/commands/repeat.md`
-- `.cursor/skills/*`
-- `.codex/skills/aiforge-*`
+- `.cursor/skills -> .ai/skills`
+- `.cursor/rules -> .ai/rules`
+- `.cursor/reference -> .ai/reference`
+- `.cursor/context -> .ai/context`
+- `.cursor/linear-scope.json -> .ai/linear-scope.json`
+- `.agent/skills -> .ai/skills`
+- `.agent/rules -> .ai/rules`
+- `.codex/skills -> .ai/skills`
+- `.codex/rules -> .ai/rules`
+- `.agents/skills -> .ai/skills`
 
 Это generic слой. Он не должен знать твой конкретный стек глубоко.
 Например, `workflow-gates.mdc` тащит общие plan/build/test/review/docs gate'ы, а profile-specific ограничения докручиваются отдельными rules поверх него.
@@ -73,12 +75,12 @@ aiforge project-stub
 
 - проанализировала конкретный репозиторий;
 - дописала project-specific правила;
-- обновила `Taskfile.yml`, `MANIFESTO.md`, `.cursor/rules/project-profile.mdc`;
+- обновила `Taskfile.yml`, `MANIFESTO.md`, `.ai/rules/project-profile.mdc`;
 - настроила tracker/MCP-specific surfaces без переписывания generic kernel.
 
 ## Linear helpers
 
-Чтобы не править `.cursor/linear-scope.json` руками:
+Чтобы не править shared tracker scope руками:
 
 ```bash
 aiforge linear init
@@ -86,7 +88,7 @@ aiforge linear init
 
 Это переинициализирует:
 
-- `.cursor/linear-scope.json`
+- `.ai/linear-scope.json`
 - `.cursor/settings.json`
 
 из текущего `ai.config.yaml`.
@@ -106,7 +108,7 @@ aiforge linear scope set \
 
 - `ai.config.yaml`
 - `.agents/project.manifest.json`
-- `.cursor/linear-scope.json`
+- `.ai/linear-scope.json`
 - `.cursor/settings.json`
 
 ## Установка CLI как глобальной команды
@@ -182,7 +184,7 @@ aiforge doctor
 
 Если проект живёт вокруг Linear workflow, `aiforge` теперь генерирует и scaffold'ит:
 
-- `.cursor/linear-scope.json`
+- `.ai/linear-scope.json`
 - `.cursor/settings.json`
 - `.cursor/PROMPT_OPTIMIZATION_STRATEGY.md`
 - `.cursor/rules/linear-mcp.mdc`

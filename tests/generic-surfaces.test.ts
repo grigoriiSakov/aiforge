@@ -10,33 +10,32 @@ describe("generic reusable surfaces", () => {
     expect(fs.existsSync(resolveTemplatePath())).toBe(true);
   });
 
-  test("template includes core generic commands, references, skills and codex wrappers", () => {
+  test("template includes shared rules, shared skills, and runtime references", () => {
     const root = path.join(process.cwd(), "template", "base");
 
     const expectedPaths = [
       ".cursor/HIERARCHY.md.jinja",
-      ".cursor/rules/workflow-gates.mdc.jinja",
-      ".cursor/reference/context-budget.md.jinja",
-      ".cursor/reference/issue-spec-template.md.jinja",
-      ".cursor/reference/tracker-degraded-mode.md.jinja",
-      ".cursor/commands/issue.md.jinja",
-      ".cursor/commands/clarify.md.jinja",
-      ".cursor/commands/check.md.jinja",
-      ".cursor/commands/debug.md.jinja",
-      ".cursor/commands/docs.md.jinja",
-      ".cursor/commands/investigate.md.jinja",
-      ".cursor/commands/refactor.md.jinja",
-      ".cursor/commands/repeat.md.jinja",
-      ".cursor/skills/planning/SKILL.md.jinja",
-      ".cursor/skills/execution/SKILL.md.jinja",
-      ".cursor/skills/review/SKILL.md.jinja",
-      ".cursor/skills/debug/SKILL.md.jinja",
-      ".cursor/skills/documentation/SKILL.md.jinja",
-      ".cursor/skills/process-evolution/SKILL.md.jinja",
-      ".cursor/skills/tracker/SKILL.md.jinja",
-      ".codex/skills/aiforge-plan/SKILL.md.jinja",
-      ".codex/skills/aiforge-build/SKILL.md.jinja",
-      ".codex/skills/aiforge-review/SKILL.md.jinja"
+      ".ai/reference/context-budget.md.jinja",
+      ".ai/reference/context-artifacts.md.jinja",
+      ".ai/reference/issue-spec-template.md.jinja",
+      ".ai/reference/PROMPT_OPTIMIZATION_STRATEGY.md.jinja",
+      ".ai/reference/plan-progress-template.md.jinja",
+      ".ai/reference/plan-template.md.jinja",
+      ".ai/reference/tracker-degraded-mode.md.jinja",
+      ".ai/context/README.md.jinja",
+      ".ai/linear-scope.json.jinja",
+      ".ai/rules/workflow-gates.mdc.jinja",
+      ".ai/rules/workflow.mdc.jinja",
+      ".ai/rules/project-profile.mdc.jinja",
+      ".ai/rules/linear-mcp.mdc.jinja",
+      ".ai/skills/plan/SKILL.md.jinja",
+      ".ai/skills/build/SKILL.md.jinja",
+      ".ai/skills/review/SKILL.md.jinja",
+      ".ai/skills/issue/SKILL.md.jinja",
+      ".ai/skills/check/SKILL.md.jinja",
+      ".ai/skills/debug/SKILL.md.jinja",
+      ".ai/skills/docs/SKILL.md.jinja",
+      ".ai/skills/tracker/SKILL.md.jinja"
     ];
 
     for (const relativePath of expectedPaths) {

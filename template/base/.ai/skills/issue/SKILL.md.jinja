@@ -1,0 +1,15 @@
+---
+name: issue
+description: Resolve or create task context before planning. Use when the user asks for issue setup, task setup, /issue, or equivalent tracker-first preparation.
+---
+
+# Issue
+
+Use this skill to resolve or create the task context before planning.
+
+## Protocol
+
+1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
+2. If tracker is enabled, use `.ai/linear-scope.json` and `.ai/rules/linear-mcp.mdc`.
+3. Ensure the issue/spec has enough detail for `/plan`.
+4. If details are missing, route to `/clarify`.

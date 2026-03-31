@@ -70,6 +70,7 @@ export function createConfig(params: {
       placeholders: ["linear", "framework-docs", "project-db"]
     },
     managedSurfaces: [
+      { path: ".ai", policy: "managed" },
       { path: "AGENTS.md", policy: "managed" },
       { path: "MANIFESTO.md", policy: "managed" },
       { path: "Taskfile.yml", policy: "managed" },

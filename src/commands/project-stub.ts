@@ -27,15 +27,22 @@ Please analyze this project and produce only the project-specific additions I st
 ## Existing generic surfaces
 
 - \`.cursor/HIERARCHY.md\`
-- \`.cursor/commands/*\`
-- \`.cursor/rules/workflow.mdc\`
-- \`.cursor/rules/linear-mcp.mdc\`
-- \`.cursor/reference/*\`
+- \`.ai/skills/*\`
+- \`.ai/reference/*\`
+- \`.ai/context/*\`
+- \`.ai/linear-scope.json\`
+- \`.ai/rules/*\`
+- \`.cursor/skills -> .ai/skills\`
+- \`.agent/skills -> .ai/skills\`
+- \`.codex/skills -> .ai/skills\`
+- \`.agents/skills -> .ai/skills\`
+- \`.cursor/rules -> .ai/rules\`
+- \`.cursor/reference -> .ai/reference\`
+- \`.cursor/context -> .ai/context\`
+- \`.cursor/linear-scope.json -> .ai/linear-scope.json\`
 - \`.cursor/hooks.json\`
 - \`.cursor/hooks/*\`
-- \`.cursor/skills/*\`
 - \`.codex/hooks/*\`
-- \`.codex/skills/*\`
 - \`AGENTS.md\`
 - \`MANIFESTO.md\`
 - \`Taskfile.yml\`
@@ -49,10 +56,10 @@ Please analyze this project and produce only the project-specific additions I st
 
 ## Fill or update these project-specific surfaces
 
-- \`.cursor/rules/project-profile.mdc\`
+- \`.ai/rules/project-profile.mdc\`
 - \`MANIFESTO.md\`
 - \`Taskfile.yml\`
-- \`.cursor/linear-scope.json\`
+- \`.ai/linear-scope.json\`
 - \`.cursor/settings.json\`
 - \`.cursor/mcp.example.json\`
 

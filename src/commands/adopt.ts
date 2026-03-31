@@ -3,6 +3,7 @@ import path from "node:path";
 import { buildCopierAnswers, createConfig, saveConfig } from "../core/config.js";
 import {
   cleanupTemporaryAnswersFile,
+  ensureCopierAnswersFile,
   ensureCopierInstalled,
   runCopierCopy,
   writeTemporaryAnswersFile
@@ -72,6 +73,11 @@ export async function runAdoptCommand(options: {
       dryRun: false,
       force: false,
       trust: true
+    });
+    ensureCopierAnswersFile({
+      destinationPath: options.repoRoot,
+      templatePath: resolveTemplatePath(),
+      answers: buildCopierAnswers(config)
     });
 
     applyRuntimeFlags(options.repoRoot);

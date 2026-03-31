@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { LinearScope, ProjectConfig } from "./types.js";
 
-export const LINEAR_SCOPE_FILE = path.join(".cursor", "linear-scope.json");
+export const LINEAR_SCOPE_FILE = path.join(".ai", "linear-scope.json");
 export const CURSOR_SETTINGS_FILE = path.join(".cursor", "settings.json");
 
 export function writeLinearScopeFile(repoRoot: string, scopes: LinearScope[]): string {

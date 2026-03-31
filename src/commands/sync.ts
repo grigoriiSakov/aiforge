@@ -1,6 +1,7 @@
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig } from "../core/config.js";
 import {
   cleanupTemporaryAnswersFile,
+  ensureCopierAnswersFile,
   ensureCopierInstalled,
   runCopierCopy,
   writeTemporaryAnswersFile
@@ -48,9 +49,7 @@ export async function runSyncCommand(
 
   const snapshot = createManagedSnapshot(repoRoot, config);
   try {
-    if (profileId) {
-      saveConfig(repoRoot, config);
-    }
+    saveConfig(repoRoot, config);
     runCopierCopy({
       templatePath: resolveTemplatePath(),
       destinationPath: repoRoot,
@@ -58,6 +57,11 @@ export async function runSyncCommand(
       dryRun: false,
       force: false,
       trust: true
+    });
+    ensureCopierAnswersFile({
+      destinationPath: repoRoot,
+      templatePath: resolveTemplatePath(),
+      answers: buildCopierAnswers(config)
     });
 
     applyRuntimeFlags(repoRoot);

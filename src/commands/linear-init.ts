@@ -28,7 +28,7 @@ export function runLinearInitCommand(repoRoot: string, dryRun = false): CommandR
     details: {
       created: [scopePath, settingsPath],
       nextSteps: [
-        "Fill real teamId/projectId in .cursor/linear-scope.json if placeholders remain.",
+        "Fill real teamId/projectId in .ai/linear-scope.json if placeholders remain.",
         "Configure local Linear MCP auth/connection outside the repository if needed."
       ]
     }

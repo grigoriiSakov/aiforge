@@ -8,7 +8,7 @@ const projectDir = process.cwd();
 const manifestPath = path.join(projectDir, ".agents", "project.manifest.json");
 const taskStatePath = path.join(projectDir, ".agents", "runtime", "task-state.json");
 const reviewStatePath = path.join(projectDir, ".agents", "runtime", "review-verdict.json");
-const contextDir = path.join(projectDir, ".cursor", "context");
+const contextDir = path.join(projectDir, ".ai", "context");
 const currentPath = path.join(contextDir, "current.md");
 
 function readJson(filePath) {

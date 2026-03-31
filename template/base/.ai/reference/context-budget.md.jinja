@@ -1,0 +1,19 @@
+# Context Budget
+
+## Goal
+
+Keep process context lean, current, and non-contradictory.
+
+## Artifacts
+
+- `{{ manifesto_path }}`: durable engineering contract
+- `.ai/context/current.md`: short runtime digest
+- `PLAN::ISSUE-ID`: planning memory
+- `PROGRESS::ISSUE-ID`: execution memory
+
+## Rules
+
+- `current.md` should be short and execution-oriented.
+- Do not duplicate the whole manifesto into runtime artifacts.
+- Prefer pointers to files, globs, and steps over long narrative summaries.
+- Move stack-specific behavior into profile rules and config, not into generic artifacts.

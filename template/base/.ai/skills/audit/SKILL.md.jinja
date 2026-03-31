@@ -1,0 +1,27 @@
+---
+name: audit
+description: Perform a read-only architecture and process audit. Use when the user asks for an audit, workflow compliance check, or /audit.
+---
+
+# Audit
+
+Use this skill for a read-only architecture and quality audit.
+
+## Mandatory protocol
+
+1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
+2. Read `.ai/context/current.md` if it exists.
+3. Confirm the selected profile and its canonical verify commands.
+4. Audit only:
+   - workflow rule compliance
+   - task evidence
+   - plan/progress artifact quality
+   - architecture drift
+   - missing tests
+   - dangerous command usage
+
+## Output contract
+
+- Markdown report only.
+- Findings first.
+- No code edits.

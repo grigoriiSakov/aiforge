@@ -8,6 +8,8 @@ import YAML from "yaml";
 import { writeTextFile } from "./filesystem.js";
 import type { CopierRunOptions } from "./types.js";
 
+const COPIER_ANSWERS_FILE = ".copier-answers.yml";
+
 type CopierCommand = {
   bin: string;
   prefixArgs: string[];
@@ -70,6 +72,46 @@ export function runCopierUpdate(destinationPath: string, trust = false, dryRun =
   }
 }
 
+export function ensureCopierAnswersFile(params: {
+  destinationPath: string;
+  templatePath: string;
+  answers: Record<string, unknown>;
+}): { restore: () => void } {
+  const answersPath = path.join(params.destinationPath, COPIER_ANSWERS_FILE);
+  const previousContent = fs.existsSync(answersPath) ? fs.readFileSync(answersPath, "utf8") : null;
+  const existingAnswers = parseAnswers(previousContent);
+  const templateReferenceAnswers = buildTemplateReferenceAnswers(params.templatePath);
+  const nextAnswers: Record<string, unknown> = {
+    ...existingAnswers,
+    ...params.answers,
+    ...templateReferenceAnswers
+  };
+
+  if (
+    !("_commit" in templateReferenceAnswers) &&
+    typeof existingAnswers._commit === "string" &&
+    existingAnswers._commit.trim()
+  ) {
+    nextAnswers._commit = existingAnswers._commit;
+  }
+
+  const nextContent = YAML.stringify(nextAnswers);
+  if (previousContent !== nextContent) {
+    writeTextFile(answersPath, nextContent);
+  }
+
+  return {
+    restore: () => {
+      if (previousContent === null) {
+        fs.rmSync(answersPath, { force: true });
+        return;
+      }
+
+      writeTextFile(answersPath, previousContent);
+    }
+  };
+}
+
 export function writeTemporaryAnswersFile(data: Record<string, unknown>): string {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-simple-copier-"));
   const targetPath = path.join(tempDir, "answers.yml");
@@ -83,6 +125,56 @@ export function cleanupTemporaryAnswersFile(filePath: string): void {
 
 export function ensureCopierInstalled(): void {
   resolveCopierCommand();
+}
+
+function parseAnswers(content: string | null): Record<string, unknown> {
+  if (!content) {
+    return {};
+  }
+
+  try {
+    const parsed = YAML.parse(content);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+
+  return {};
+}
+
+function buildTemplateReferenceAnswers(templatePath: string): Record<string, unknown> {
+  const gitRoot = runGit(["-C", templatePath, "rev-parse", "--show-toplevel"]);
+  const gitCommit = runGit(["-C", templatePath, "rev-parse", "HEAD"]);
+
+  if (!gitRoot || !gitCommit) {
+    return { _src_path: templatePath };
+  }
+
+  const normalizedTemplatePath = path.resolve(templatePath);
+  const normalizedGitRoot = path.resolve(gitRoot);
+  const relativeSubdirectory = path.relative(normalizedGitRoot, normalizedTemplatePath);
+  const answers: Record<string, unknown> = {
+    _src_path: normalizedGitRoot,
+    _commit: gitCommit
+  };
+
+  if (relativeSubdirectory && relativeSubdirectory !== ".") {
+    answers._subdirectory = relativeSubdirectory;
+  }
+
+  return answers;
+}
+
+function runGit(args: string[]): string | null {
+  const result = spawnSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const value = result.stdout.trim();
+  return value ? value : null;
 }
 
 function resolveCopierCommand(): CopierCommand {

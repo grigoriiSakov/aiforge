@@ -1,0 +1,33 @@
+---
+description: "Shared workflow source-of-truth ordering and execution contract."
+alwaysApply: true
+---
+
+# Workflow Rule
+
+- Source of truth order: `{{ manifesto_path }}` -> `ai.config.yaml` -> `.ai/rules/*` -> `.ai/skills/*` -> `.ai/reference/*` -> `Taskfile.yml`
+- Generic execution gates live in `.ai/rules/workflow-gates.mdc`.
+- Shared rule and skill sources are projected into provider runtimes via symlinks; update `.ai/*` first.
+- Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
+- Use canonical tasks only:
+  - `{{ task_command }} {{ task_build_name }}`
+  - `{{ task_command }} {{ task_test_name }}`
+  - `{{ task_command }} {{ task_lint_name }}`
+  - `{{ task_command }} {{ task_verify_name }}`
+  - `{{ task_command }} {{ task_review_name }}`
+- Do not hardcode stack-specific commands in generic workflow prompts or status updates.
+- For non-trivial work, planning and execution memory must live in explicit artifacts:
+  - `PLAN::ISSUE-ID`
+  - `PROGRESS::ISSUE-ID`
+- Plan quality minimum:
+  - `Execution Contract`
+  - `Spec Coverage Matrix`
+  - `Do Not Break`
+  - `Acceptance Traceability`
+  - `Open Questions / Blockers`
+- Progress artifact minimum:
+  - `Выполнено`
+  - `Текущий шаг`
+  - `Дальше`
+  - `Spec Conformance`
+  - `Решения по ходу`

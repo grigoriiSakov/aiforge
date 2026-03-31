@@ -1,0 +1,55 @@
+---
+name: plan
+description: Build a deterministic implementation plan before code changes. Use when the user asks for plan, /plan, or equivalent planning intent.
+---
+
+# Plan
+
+Use this skill to produce a build-ready implementation plan before code changes.
+
+## Goal
+
+Turn the current request or issue into an execution artifact that is specific enough for `/build`.
+
+## Mandatory protocol
+
+1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
+2. Read:
+   - `.ai/reference/plan-template.md`
+   - `.ai/reference/plan-progress-template.md`
+   - `.ai/reference/context-artifacts.md`
+3. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
+4. Build the plan around canonical tasks only:
+   - `{{ task_command }} {{ task_build_name }}`
+   - `{{ task_command }} {{ task_test_name }}`
+   - `{{ task_command }} {{ task_lint_name }}`
+   - `{{ task_command }} {{ task_verify_name }}`
+   - `{{ task_command }} {{ task_review_name }}`
+5. Before writing the plan, extract:
+   - source request / issue requirements
+   - explicit non-goals
+   - adjacent behavior that must remain stable
+   - existing reusable surfaces
+6. The plan is invalid if it does not contain:
+   - `Execution Contract`
+   - `Current State Snapshot`
+   - `Spec Coverage Matrix`
+   - `Do Not Break`
+   - `Acceptance Traceability`
+   - `Step Plan`
+   - `Risk Registry`
+   - `Open Questions / Blockers`
+7. If requirements are ambiguous, stop and ask focused clarification before coding.
+
+## Storage contract
+
+- If `{{ workflow_tracker }}` is tracker-backed, keep one updatable `PLAN::ISSUE-ID` artifact in the tracker comment.
+- If tracker integration is unavailable, mirror the same structure into local runtime artifacts under `.ai/context/runtime/`.
+- Use wrappers from `.ai/reference/plan-template.md`.
+
+## Quality bar
+
+- Prefer exact file targets over vague directories.
+- Each acceptance criterion must map to at least one step and one verify command.
+- Do not leave unresolved blockers inside a ready plan.
+- Do not hardcode stack commands in the plan narrative; refer to canonical tasks.

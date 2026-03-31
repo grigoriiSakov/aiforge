@@ -50,9 +50,66 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "linear-scope.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
+    const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
+    expect(answersContent).toContain("_src_path:");
+    expect(answersContent).toContain("_commit:");
+    expect(answersContent).toContain("_subdirectory: template/base");
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands"))).toBe(false);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "reference")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "context")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "linear-scope.json")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md")).isSymbolicLink()).toBe(
+      true
+    );
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agent", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agents", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".codex", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "reference"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "reference"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "context"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "context"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "linear-scope.json"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agent", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agents", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".codex", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.readFileSync(path.join(repoRoot, ".ai", "skills", "plan", "SKILL.md"), "utf8")).toContain(
+      "---\nname: plan\ndescription:"
+    );
+    expect(fs.lstatSync(path.join(repoRoot, ".codex", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agent", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(repoRoot, ".codex", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agent", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
@@ -91,22 +148,115 @@ describe("command flow", () => {
 
     fs.rmSync(path.join(repoRoot, "MANIFESTO.md"));
     fs.rmSync(path.join(repoRoot, "llms.txt"));
+    fs.writeFileSync(
+      path.join(repoRoot, ".agents", "project.manifest.json"),
+      JSON.stringify({ stale: true }, null, 2) + "\n"
+    );
 
     const result = await runSyncCommand(repoRoot, false);
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
+    expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
   test("update writes copier marker via fake copier", async () => {
     const repoRoot = copyFixture("python-fastapi-docker");
     await runAdoptCommand({ repoRoot, dryRun: false });
+    fs.writeFileSync(
+      path.join(repoRoot, ".agents", "project.manifest.json"),
+      JSON.stringify({ stale: true }, null, 2) + "\n"
+    );
 
     const result = await runUpdateCommand(repoRoot, false);
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".copier-update-marker"))).toBe(true);
+    expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("update restores shared skills and rules links for existing projects", async () => {
+    const repoRoot = copyFixture("python-fastapi-docker");
+    await runAdoptCommand({ repoRoot, dryRun: false });
+
+    fs.rmSync(path.join(repoRoot, ".cursor", "skills"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".cursor", "reference"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".cursor", "context"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".cursor", "linear-scope.json"), { force: true });
+    fs.rmSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), { force: true });
+    fs.rmSync(path.join(repoRoot, ".agent", "skills"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".codex", "skills"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".agents", "skills"), { recursive: true, force: true });
+    fs.mkdirSync(path.join(repoRoot, ".cursor", "commands"), { recursive: true });
+    fs.rmSync(path.join(repoRoot, ".codex", "rules"), { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, ".agent", "rules"), { recursive: true, force: true });
+
+    const result = await runUpdateCommand(repoRoot, false);
+
+    expect(result.ok).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands"))).toBe(false);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "reference")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "context")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "linear-scope.json")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md")).isSymbolicLink()).toBe(
+      true
+    );
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agent", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".codex", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agents", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "reference"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "reference"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "context"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "context"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "linear-scope.json"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agent", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".codex", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agents", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.lstatSync(path.join(repoRoot, ".codex", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".agent", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".cursor", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(repoRoot, ".codex", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".agent", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".cursor", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+  });
+
+  test("update recreates missing copier answers metadata for legacy repos", async () => {
+    const repoRoot = copyFixture("python-fastapi-docker");
+    await runAdoptCommand({ repoRoot, dryRun: false });
+
+    fs.rmSync(path.join(repoRoot, ".copier-answers.yml"), { force: true });
+
+    const result = await runUpdateCommand(repoRoot, false);
+    const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
+
+    expect(result.ok).toBe(true);
+    expect(answersContent).toContain("_src_path:");
+    expect(answersContent).toContain("_commit:");
+    expect(answersContent).toContain("_subdirectory: template/base");
   });
 
   test("init falls back to uvx when copier binary is missing", async () => {
@@ -193,6 +343,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "linear-scope.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
   });
 
@@ -216,7 +367,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(result.ok).toBe(true);
 
     const configContent = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
-    const scopeContent = fs.readFileSync(path.join(repoRoot, ".cursor", "linear-scope.json"), "utf8");
+    const scopeContent = fs.readFileSync(path.join(repoRoot, ".ai", "linear-scope.json"), "utf8");
     const settingsContent = fs.readFileSync(path.join(repoRoot, ".cursor", "settings.json"), "utf8");
 
     expect(configContent).toContain("tracker: linear");
@@ -296,7 +447,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     const blockDangerPath = path.join(repoRoot, ".cursor", "hooks", "block-danger.mjs");
 
     runNodeScript(sessionInitPath, [], repoRoot);
-    expect(fs.existsSync(path.join(repoRoot, ".cursor", "context", "current.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "context", "current.md"))).toBe(true);
 
     const auditResult = runNodeScriptWithInput(
       auditPath,
@@ -308,7 +459,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "hooks", "audit.log"))).toBe(true);
 
     const currentContent = fs.readFileSync(
-      path.join(repoRoot, ".cursor", "context", "current.md"),
+      path.join(repoRoot, ".ai", "context", "current.md"),
       "utf8"
     );
     expect(currentContent).toContain("Cursor Hook Demo");
@@ -341,7 +492,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(result.ok).toBe(true);
     expect(result.message).toContain("Project-Specific Aiforge Customization Request");
     expect(result.message).toContain("python-fastapi-docker");
-    expect(result.message).toContain(".cursor/rules/project-profile.mdc");
+    expect(result.message).toContain(".ai/rules/project-profile.mdc");
     expect(result.message).toContain(".cursor/mcp.example.json");
   });
 });

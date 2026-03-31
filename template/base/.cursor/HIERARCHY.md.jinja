@@ -7,18 +7,15 @@ RULES
   ->
 SKILLS
   ->
-COMMANDS
-  ->
 HOOKS
 ```
 
 ## Interpretation Order
 
 1. `{{ manifesto_path }}` defines long-term engineering laws.
-2. `.cursor/rules/*.mdc` define always-on guardrails.
-3. `.cursor/skills/*/SKILL.md` define task-specific playbooks.
-4. `.cursor/commands/*.md` define workflow entrypoints.
-5. `.cursor/hooks.json` and `.cursor/hooks/*` inject runtime context and safety checks.
+2. `.ai/rules/*.mdc` are the shared rule source, exposed to runtimes via symlinks.
+3. `.ai/skills/*/SKILL.md` are the shared workflow/source-of-truth skills.
+4. Provider hooks under `.cursor/hooks*` and `.codex/hooks*` inject runtime context and safety checks.
 
 ## Canonical Workflow
 

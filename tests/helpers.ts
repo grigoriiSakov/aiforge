@@ -33,37 +33,53 @@ const writeFile = (targetPath, content) => {
 };
 
 if (mode === "copy") {
+  const templatePath = args[args.length - 2];
+  ensureDir(path.join(destinationPath, ".ai", "skills", "plan"));
+  ensureDir(path.join(destinationPath, ".ai", "rules"));
+  ensureDir(path.join(destinationPath, ".ai", "reference"));
+  ensureDir(path.join(destinationPath, ".ai", "context"));
   ensureDir(path.join(destinationPath, ".cursor"));
-  ensureDir(path.join(destinationPath, ".cursor", "commands"));
-  ensureDir(path.join(destinationPath, ".cursor", "reference"));
-  ensureDir(path.join(destinationPath, ".cursor", "skills", "planning", "checklists"));
-  ensureDir(path.join(destinationPath, ".codex", "skills", "aiforge-plan"));
-  ensureDir(path.join(destinationPath, ".cursor", "rules"));
   ensureDir(path.join(destinationPath, ".codex"));
   ensureDir(path.join(destinationPath, ".agent"));
   ensureDir(path.join(destinationPath, ".agents", "runtime"));
   writeFile(path.join(destinationPath, "AGENTS.md"), "# generated\\n");
   writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
   writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");
+  writeFile(
+    path.join(destinationPath, ".ai", "skills", "plan", "SKILL.md"),
+    "---\\nname: plan\\ndescription: Shared planning workflow.\\n---\\n\\n# Plan\\n"
+  );
+  writeFile(path.join(destinationPath, ".ai", "rules", "linear-mcp.mdc"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "reference", "context-budget.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "context", "README.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "linear-scope.json"), "[]\\n");
   writeFile(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".cursor", "HIERARCHY.md"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".cursor", "commands", "issue.md"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".cursor", "reference", "context-budget.md"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".cursor", "skills", "planning", "SKILL.md"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".cursor", "skills", "planning", "checklists", "plan-quality-checklist.md"), "- [ ] generated\\n");
   writeFile(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
-  writeFile(path.join(destinationPath, ".cursor", "linear-scope.json"), "[]\\n");
-  writeFile(path.join(destinationPath, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".cursor", "rules", "linear-mcp.mdc"), "# generated\\n");
-  writeFile(path.join(destinationPath, ".codex", "skills", "aiforge-plan", "SKILL.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agent", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
   writeFile(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
-  writeFile(path.join(destinationPath, ".copier-answers.yml"), "project_slug: fixture\\n");
+  writeFile(
+    path.join(destinationPath, ".copier-answers.yml"),
+    "_src_path: " + templatePath + "\\nproject_slug: fixture\\n"
+  );
 }
 
 if (mode === "update") {
+  const answersPath = path.join(destinationPath, ".copier-answers.yml");
+  const answersContent = fs.existsSync(answersPath) ? fs.readFileSync(answersPath, "utf8") : "";
+  if (
+    !answersContent.includes("_src_path:") ||
+    !answersContent.includes("_commit:") ||
+    !answersContent.includes("_subdirectory:")
+  ) {
+    process.stderr.write(
+      "Cannot update because cannot obtain old template references from \`.copier-answers.yml\`.\\n"
+    );
+    process.exit(1);
+  }
   writeFile(path.join(destinationPath, ".copier-update-marker"), "updated\\n");
 }
 `
