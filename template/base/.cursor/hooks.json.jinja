@@ -2,7 +2,13 @@
   "version": 1,
   "hooks": {
     "sessionStart": [{ "command": "node .cursor/hooks/session-init.mjs" }],
-    "beforeShellExecution": [{ "command": "node .cursor/hooks/block-danger.mjs", "failClosed": true }],
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/block-danger.mjs",
+        "failClosed": true,
+        "matcher": "git\\s+reset\\s+--hard|git\\s+checkout\\s+--|rm\\s+-rf\\s+/|del\\s+/f\\s+/q"
+      }
+    ],
     "beforeReadFile": [{ "command": "node .cursor/hooks/audit.mjs" }],
     "beforeSubmitPrompt": [{ "command": "node .cursor/hooks/audit.mjs" }],
     "postToolUseFailure": [{ "command": "node .cursor/hooks/audit.mjs" }]

@@ -225,3 +225,20 @@ export function installCursorHookTemplates(repoRoot: string): void {
     fs.chmodSync(targetPath, 0o755);
   }
 }
+
+export function installCodexHookTemplates(repoRoot: string): void {
+  const templateRoot = path.join(process.cwd(), "template", "base", ".codex");
+  const hookFiles = [
+    "hooks.json.jinja",
+    path.join("hooks", "post-tool-use-guard.mjs.jinja"),
+    path.join("hooks", "stop-delivery-guard.mjs.jinja")
+  ];
+
+  for (const relativePath of hookFiles) {
+    const sourcePath = path.join(templateRoot, relativePath);
+    const targetPath = path.join(repoRoot, ".codex", relativePath.replace(/\.jinja$/, ""));
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(sourcePath, targetPath);
+    fs.chmodSync(targetPath, 0o755);
+  }
+}

@@ -1,5 +1,25 @@
 #!/usr/bin/env node
 
+function respond(payload, exitCode = 0) {
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  process.exit(exitCode);
+}
+
+function extractCommand(payload) {
+  try {
+    const parsed = payload ? JSON.parse(payload) : {};
+    return String(
+      parsed.command ??
+        parsed.shellCommand ??
+        parsed.tool_input?.command ??
+        parsed.input ??
+        payload
+    );
+  } catch {
+    return payload;
+  }
+}
+
 let raw = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -8,20 +28,7 @@ process.stdin.on("data", (chunk) => {
 
 process.stdin.on("end", () => {
   const payload = raw.trim();
-  let command = payload;
-
-  try {
-    const parsed = payload ? JSON.parse(payload) : {};
-    command = String(
-      parsed.command ??
-        parsed.shellCommand ??
-        parsed.tool_input?.command ??
-        parsed.input ??
-        payload
-    );
-  } catch {
-    command = payload;
-  }
+  const command = extractCommand(payload);
 
   const blockedPatterns = [
     /\bgit\s+reset\s+--hard\b/,
@@ -32,9 +39,19 @@ process.stdin.on("end", () => {
 
   const matched = blockedPatterns.some((pattern) => pattern.test(command));
   if (matched) {
-    process.stderr.write("Blocked by aiforge Cursor hook: destructive command detected.\n");
-    process.exit(1);
+    respond(
+      {
+        permission: "deny",
+        user_message: "Blocked by aiforge Cursor hook: destructive command detected.",
+        agent_message: "Use a safer non-destructive command or ask for an explicit remediation path."
+      },
+      2
+    );
   }
 
-  process.exit(0);
+  respond({ permission: "allow" });
+});
+
+process.stdin.on("error", () => {
+  respond({ permission: "allow" });
 });

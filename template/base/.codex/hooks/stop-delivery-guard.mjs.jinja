@@ -24,6 +24,8 @@ if (!manifest || !state) {
 }
 
 const verifyTask = manifest.task.tasks.verify;
+const reviewTask = manifest.task.tasks.review;
+const taskCommand = manifest.task.command;
 const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
 
 if (!successfulVerify) {
@@ -48,7 +50,7 @@ if (!reviewState) {
         continue: false,
         stopReason: "review_missing",
         systemMessage:
-          "Run task review and record a final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+          `Run ${taskCommand} ${reviewTask} and record a final verdict with \`node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
       },
       null,
       2
@@ -64,7 +66,7 @@ if (reviewState.status === "pending" || reviewState.status === "missing") {
         continue: false,
         stopReason: "review_pending",
         systemMessage:
-          "Review is still pending. Record a final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+          `Review is still pending after ${taskCommand} ${reviewTask}. Record a final verdict with \`node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
       },
       null,
       2

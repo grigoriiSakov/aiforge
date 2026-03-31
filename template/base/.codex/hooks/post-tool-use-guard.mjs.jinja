@@ -1,5 +1,35 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
+import path from "node:path";
+
+function readManifest() {
+  const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesCanonicalTask(command, taskCommand, taskName) {
+  const phrase = `${taskCommand} ${taskName}`.trim();
+  if (!phrase) {
+    return false;
+  }
+
+  const pattern = new RegExp(`(?:^|[;&|]\\s*)${escapeRegex(phrase)}(?:\\b|$)`);
+  return pattern.test(command);
+}
+
 let raw = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
@@ -8,8 +38,14 @@ process.stdin.on("data", (chunk) => {
 process.stdin.on("end", () => {
   const input = raw.trim() ? JSON.parse(raw) : {};
   const command = String(input?.tool_input?.command ?? "");
+  const manifest = readManifest();
+  const taskCommand = String(manifest?.task?.command ?? "task");
+  const tasks = manifest?.task?.tasks ?? {};
+  const canonicalTaskNames = [tasks.verify, tasks.review, tasks.test, tasks.lint, tasks.build].filter(
+    (taskName) => typeof taskName === "string" && taskName.trim()
+  );
 
-  if (!/\btask\s+(verify|review|test|lint|build)\b/.test(command)) {
+  if (!canonicalTaskNames.some((taskName) => matchesCanonicalTask(command, taskCommand, taskName))) {
     process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
     return;
   }
@@ -18,7 +54,8 @@ process.stdin.on("end", () => {
     `${JSON.stringify(
       {
         continue: true,
-        systemMessage: /\btask\s+review\b/.test(command)
+        systemMessage:
+          typeof tasks.review === "string" && matchesCanonicalTask(command, taskCommand, tasks.review)
           ? "Review task finished. Record the final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
           : "Task command finished. Re-check workflow state before stopping."
       },

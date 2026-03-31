@@ -19,6 +19,7 @@ import {
   createFakeExecutable,
   copyFixture,
   createFakeCopierBin,
+  installCodexHookTemplates,
   installCursorHookTemplates,
   installReviewRuntime,
   installStopGuard,
@@ -412,6 +413,83 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(cleanGuard.continue).toBe(true);
   });
 
+  test("codex hooks derive workflow commands from manifest task runner", async () => {
+    const repoRoot = makeTempRepo("ai-simple-codex-hooks-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Codex Hook Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    installReviewRuntime(repoRoot);
+    installCodexHookTemplates(repoRoot);
+
+    fs.writeFileSync(
+      path.join(repoRoot, ".agents", "project.manifest.json"),
+      JSON.stringify(
+        {
+          task: {
+            command: "just",
+            tasks: {
+              verify: "verify",
+              review: "review",
+              test: "test",
+              lint: "lint",
+              build: "build"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    fs.writeFileSync(
+      path.join(repoRoot, ".agents", "runtime", "task-state.json"),
+      JSON.stringify(
+        {
+          history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
+    const postToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "post-tool-use-guard.mjs");
+
+    const missingReviewGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(missingReviewGuard.stopReason).toBe("review_missing");
+    expect(missingReviewGuard.systemMessage).toContain("Run just review");
+
+    runNodeScript(path.join(repoRoot, ".agents", "runtime", "review-state.mjs"), ["start"], repoRoot);
+    const pendingReviewGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(pendingReviewGuard.stopReason).toBe("review_pending");
+    expect(pendingReviewGuard.systemMessage).toContain("just review");
+
+    const matchedReviewCommand = JSON.parse(
+      runNodeScriptWithInput(
+        postToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_input: { command: "just review" } })
+      ).stdout
+    );
+    expect(matchedReviewCommand.systemMessage).toContain("Record the final verdict");
+
+    const unmatchedLegacyCommand = JSON.parse(
+      runNodeScriptWithInput(
+        postToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_input: { command: "task review" } })
+      ).stdout
+    );
+    expect(unmatchedLegacyCommand.continue).toBe(true);
+    expect(unmatchedLegacyCommand.systemMessage).toBeUndefined();
+  });
+
   test("cursor hooks build current context and block destructive commands", async () => {
     const repoRoot = makeTempRepo("ai-simple-cursor-hooks-");
     await runInitCommand({
@@ -448,6 +526,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
 
     const safeResult = runNodeScriptWithInput(blockDangerPath, [], repoRoot, "git status");
     expect(safeResult.status).toBe(0);
+    expect(safeResult.stdout).toContain("\"permission\": \"allow\"");
 
     const blockedResult = runNodeScriptWithInput(
       blockDangerPath,
@@ -455,8 +534,9 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       repoRoot,
       JSON.stringify({ command: "git reset --hard HEAD~1" })
     );
-    expect(blockedResult.status).toBe(1);
-    expect(blockedResult.stderr).toContain("destructive command");
+    expect(blockedResult.status).toBe(2);
+    expect(blockedResult.stdout).toContain("\"permission\": \"deny\"");
+    expect(blockedResult.stdout).toContain("destructive command");
   });
 
   test("project-stub prints a copyable project-specific customization prompt", async () => {
