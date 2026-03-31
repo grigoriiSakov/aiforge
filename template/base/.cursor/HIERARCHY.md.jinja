@@ -1,0 +1,36 @@
+# Process Hierarchy
+
+```text
+MANIFESTO
+  ->
+RULES
+  ->
+SKILLS
+  ->
+COMMANDS
+  ->
+HOOKS
+```
+
+## Interpretation Order
+
+1. `{{ manifesto_path }}` defines long-term engineering laws.
+2. `.cursor/rules/*.mdc` define always-on guardrails.
+3. `.cursor/skills/*/SKILL.md` define task-specific playbooks.
+4. `.cursor/commands/*.md` define workflow entrypoints.
+5. `.cursor/hooks.json` and `.cursor/hooks/*` inject runtime context and safety checks.
+
+## Canonical Workflow
+
+`issue -> plan -> build -> test -> review`
+
+Optional wrappers:
+
+- `clarify`
+- `check`
+- `audit`
+- `debug`
+- `docs`
+- `investigate`
+- `refactor`
+- `repeat`

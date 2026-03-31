@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+});
+
+process.stdin.on("end", () => {
+  const payload = raw.trim();
+  let command = payload;
+
+  try {
+    const parsed = payload ? JSON.parse(payload) : {};
+    command = String(
+      parsed.command ??
+        parsed.shellCommand ??
+        parsed.tool_input?.command ??
+        parsed.input ??
+        payload
+    );
+  } catch {
+    command = payload;
+  }
+
+  const blockedPatterns = [
+    /\bgit\s+reset\s+--hard\b/,
+    /\bgit\s+checkout\s+--\b/,
+    /\brm\s+-rf\s+\/($|\s)/,
+    /\bdel\s+\/f\s+\/q\b/i
+  ];
+
+  const matched = blockedPatterns.some((pattern) => pattern.test(command));
+  if (matched) {
+    process.stderr.write("Blocked by aiforge Cursor hook: destructive command detected.\n");
+    process.exit(1);
+  }
+
+  process.exit(0);
+});

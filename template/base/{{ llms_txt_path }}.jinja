@@ -1,0 +1,9 @@
+# LLMs Index
+
+Project: {{ project_name }}
+Profile: {{ profile_id }}
+
+## Source globs
+{% for entry in llms_source_globs -%}
+- `{{ entry }}`
+{% endfor -%}

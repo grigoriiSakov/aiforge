@@ -1,0 +1,3 @@
+typecheck:
+  script:
+    - yarn gate:prepush

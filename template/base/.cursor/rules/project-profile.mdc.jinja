@@ -1,0 +1,15 @@
+# Project Profile Rule
+
+- Profile: `{{ profile_id }}`
+- Tracker: `{{ workflow_tracker }}`
+- Language: `{{ workflow_language }}`
+
+## Profile Notes
+{% for note in profile_notes -%}
+- {{ note }}
+{% endfor -%}
+
+## Verify Commands
+{% for command in commands.verify -%}
+- `{{ command }}`
+{% endfor -%}

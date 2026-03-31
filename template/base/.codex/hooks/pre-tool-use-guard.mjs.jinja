@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+});
+process.stdin.on("end", () => {
+  const input = raw.trim() ? JSON.parse(raw) : {};
+  const command = String(input?.tool_input?.command ?? "");
+  if (/\bgit\s+reset\s+--hard\b/.test(command)) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "Destructive git reset is blocked by aiforge workflow."
+          },
+          systemMessage: "Destructive git reset is blocked by aiforge workflow."
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+});

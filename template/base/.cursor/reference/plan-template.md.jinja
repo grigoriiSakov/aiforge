@@ -1,0 +1,124 @@
+---
+title: "Plan Artifact Template"
+---
+
+# Plan Artifact Template
+
+Use this as the full body template for the planning artifact.
+
+```markdown
+<!-- AI_SIMPLE_PLAN:START -->
+# PLAN::ISSUE-ID
+
+## Source Request
+- Tracker: `{{ workflow_tracker }}`
+- Issue / task id: `ISSUE-ID`
+- Title: `...`
+- Source contract: present / missing / partial
+- Notes: prerequisites, constraints, missing artifacts
+
+## Execution Contract
+
+```json
+{
+  "change_class": "small|medium|large",
+  "risk_level": "low|medium|high",
+  "system_shape": ["cli", "templates", "docs", "runtime-surfaces"],
+  "owner_surfaces": ["src/...", "template/..."],
+  "touches_docs": true,
+  "touches_runtime_surfaces": true,
+  "cross_profile": false
+}
+```
+
+## Current State Snapshot
+- Fact 1
+- Fact 2
+- Fact 3
+
+## System Fit
+- Existing reusable surfaces
+- Boundaries that must stay stable
+- Tracker/runtime assumptions
+
+## Spec Delta
+- What changes
+- What stays unchanged
+- Compatibility notes
+
+## Spec Coverage Matrix
+- Requirement 1 -> `implemented-in-this-issue` -> Step 1 -> `{{ task_command }} {{ task_verify_name }}`
+- Requirement 2 -> `implemented-in-this-issue` -> Step 2 -> `{{ task_command }} {{ task_test_name }}`
+- Requirement 3 -> `explicit-non-goal` -> reason
+- Requirement 4 -> `follow-up-required:<id|reason>` -> reason
+
+## Do Not Break
+- Invariant 1
+- Invariant 2
+- Adjacent surface that must remain stable
+
+## Acceptance Criteria
+- Criterion 1
+- Criterion 2
+- Criterion 3
+
+## Acceptance Traceability
+- Criterion 1 -> Step 1 -> `{{ task_command }} {{ task_lint_name }}`
+- Criterion 2 -> Step 2 -> `{{ task_command }} {{ task_test_name }}`
+- Criterion 3 -> Step 3 -> `{{ task_command }} {{ task_verify_name }}`
+
+## File Map
+
+### CREATE
+- `path/to/file`
+
+### MODIFY
+- `path/to/file`
+
+### DELETE
+- `path/to/file`
+
+## Reuse Map
+- Existing canonical surfaces to extend
+- Why new files are needed
+
+## Adjacent Impact Scan
+- Similar sibling implementations
+- Fix now
+- Follow-up only
+
+## Step Plan
+
+### Step 1: Title
+What: ...
+Where: `path/to/file`
+Verify: `{{ task_command }} {{ task_lint_name }}`
+Anti-pattern: ...
+
+### Step 2: Title
+What: ...
+Where: `path/to/file`
+Verify: `{{ task_command }} {{ task_test_name }}`
+Anti-pattern: ...
+
+### Step 3: Title
+What: ...
+Where: `path/to/file`
+Verify: `{{ task_command }} {{ task_verify_name }}`
+Anti-pattern: ...
+
+## Risk Registry
+- Risk: ...
+  Mitigation: ...
+  Fallback: ...
+
+## Open Questions / Blockers
+- `None.` when plan is build-ready
+
+## Verification Commands
+- `{{ task_command }} {{ task_lint_name }}`
+- `{{ task_command }} {{ task_test_name }}`
+- `{{ task_command }} {{ task_verify_name }}`
+- `{{ task_command }} {{ task_review_name }}`
+<!-- AI_SIMPLE_PLAN:END -->
+```

@@ -1,0 +1,40 @@
+# /build
+
+Use this command to implement the planned change step by step.
+
+## Mandatory protocol
+
+1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
+2. Read:
+   - `.cursor/reference/plan-template.md`
+   - `.cursor/reference/plan-progress-template.md`
+   - `.cursor/reference/context-artifacts.md`
+3. Find the current `PLAN::ISSUE-ID` artifact or its local fallback mirror.
+4. Do not start medium/large work without a plan artifact.
+5. Before changing code, extract from the plan:
+   - `Execution Contract`
+   - `Spec Coverage Matrix`
+   - `Do Not Break`
+   - `Acceptance Traceability`
+   - current step boundaries
+6. Create or update a `PROGRESS::ISSUE-ID` artifact before the first code change.
+7. Execute strictly step by step. On every step transition:
+   - update `## Выполнено`
+   - update `## Текущий шаг`
+   - update `## Дальше`
+   - update `## Spec Conformance`
+   - append short decisions to `## Решения по ходу`
+8. Use canonical tasks instead of stack-specific guesses:
+   - `{{ task_command }} {{ task_lint_name }}`
+   - `{{ task_command }} {{ task_test_name }}`
+   - `{{ task_command }} {{ task_verify_name }}`
+9. If implementation drifts from source request or plan:
+   - either fix the code
+   - or update the plan first
+   - otherwise stop
+
+## Do not do this
+
+- Do not silently invent extra scope.
+- Do not write a long diary instead of a progress artifact.
+- Do not bypass canonical tasks with direct stack commands in prompts or status updates.

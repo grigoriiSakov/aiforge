@@ -1,0 +1,216 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+export function makeTempRepo(prefix: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+export function copyFixture(fixtureName: string): string {
+  const sourcePath = path.join(process.cwd(), "tests", "fixtures", fixtureName);
+  const tempPath = makeTempRepo(`ai-simple-${fixtureName}-`);
+  fs.cpSync(sourcePath, tempPath, { recursive: true });
+  return tempPath;
+}
+
+export function createFakeCopierBin(): string {
+  const tempDir = makeTempRepo("ai-simple-copier-bin-");
+  const binPath = path.join(tempDir, "fake-copier");
+  const content = `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+
+const args = process.argv.slice(2);
+const mode = args[0];
+const destinationPath = mode === "copy" ? args[args.length - 1] : process.cwd();
+const ensureDir = (targetPath) => fs.mkdirSync(targetPath, { recursive: true });
+const writeFile = (targetPath, content) => {
+  ensureDir(path.dirname(targetPath));
+  fs.writeFileSync(targetPath, content, "utf8");
+};
+
+if (mode === "copy") {
+  ensureDir(path.join(destinationPath, ".cursor"));
+  ensureDir(path.join(destinationPath, ".cursor", "commands"));
+  ensureDir(path.join(destinationPath, ".cursor", "reference"));
+  ensureDir(path.join(destinationPath, ".cursor", "skills", "planning", "checklists"));
+  ensureDir(path.join(destinationPath, ".codex", "skills", "aiforge-plan"));
+  ensureDir(path.join(destinationPath, ".cursor", "rules"));
+  ensureDir(path.join(destinationPath, ".codex"));
+  ensureDir(path.join(destinationPath, ".agent"));
+  ensureDir(path.join(destinationPath, ".agents", "runtime"));
+  writeFile(path.join(destinationPath, "AGENTS.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
+  writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");
+  writeFile(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "HIERARCHY.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "commands", "issue.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "reference", "context-budget.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "skills", "planning", "SKILL.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "skills", "planning", "checklists", "plan-quality-checklist.md"), "- [ ] generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
+  writeFile(path.join(destinationPath, ".cursor", "linear-scope.json"), "[]\\n");
+  writeFile(path.join(destinationPath, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".cursor", "rules", "linear-mcp.mdc"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".codex", "skills", "aiforge-plan", "SKILL.md"), "generated\\n");
+  writeFile(path.join(destinationPath, ".agent", "README.md"), "generated\\n");
+  writeFile(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
+  writeFile(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".copier-answers.yml"), "project_slug: fixture\\n");
+}
+
+if (mode === "update") {
+  writeFile(path.join(destinationPath, ".copier-update-marker"), "updated\\n");
+}
+`;
+  fs.writeFileSync(binPath, content, { mode: 0o755 });
+  return binPath;
+}
+
+export function installReviewRuntime(repoRoot: string): void {
+  const runtimeDir = path.join(repoRoot, ".agents", "runtime");
+  fs.mkdirSync(runtimeDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(runtimeDir, "review-state.mjs"),
+    `#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+const [, , command = "show", arg1 = "", ...rest] = process.argv;
+const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+function readState() {
+  if (!fs.existsSync(reviewStatePath)) return { status: "missing", history: [] };
+  return JSON.parse(fs.readFileSync(reviewStatePath, "utf8"));
+}
+function writeState(nextState) {
+  fs.mkdirSync(path.dirname(reviewStatePath), { recursive: true });
+  fs.writeFileSync(reviewStatePath, JSON.stringify(nextState, null, 2) + "\\n");
+}
+function appendHistory(state, event) {
+  const history = Array.isArray(state.history) ? state.history : [];
+  history.push({ ...event, timestamp: new Date().toISOString() });
+  return { ...state, history };
+}
+if (command === "start") {
+  const current = readState();
+  const next = appendHistory({ status: "pending", startedAt: new Date().toISOString() }, { type: "start" });
+  writeState({ ...current, ...next });
+  process.exit(0);
+}
+if (command === "verdict") {
+  const verdict = arg1;
+  const summary = rest.join(" ").trim();
+  const current = readState();
+  const next = appendHistory({ ...current, status: verdict, summary, decidedAt: new Date().toISOString() }, { type: "verdict", verdict, summary });
+  writeState(next);
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify(readState(), null, 2) + "\\n");
+`,
+    { mode: 0o755 }
+  );
+
+  fs.writeFileSync(
+    path.join(runtimeDir, "task-state.json"),
+    JSON.stringify({ history: [] }, null, 2) + "\n"
+  );
+}
+
+export function installStopGuard(repoRoot: string): string {
+  const codexDir = path.join(repoRoot, ".codex", "hooks");
+  fs.mkdirSync(codexDir, { recursive: true });
+  const scriptPath = path.join(codexDir, "stop-delivery-guard.mjs");
+  fs.writeFileSync(
+    scriptPath,
+    `#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+const taskStatePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
+const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+const manifest = readJson(manifestPath);
+const state = readJson(taskStatePath);
+const reviewState = readJson(reviewStatePath);
+if (!manifest || !state) {
+  process.stdout.write(JSON.stringify({ continue: true }, null, 2) + "\\n");
+  process.exit(0);
+}
+const verifyTask = manifest.task.tasks.verify;
+const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
+if (!successfulVerify) {
+  process.stdout.write(JSON.stringify({ continue: false, stopReason: "verify_missing" }, null, 2) + "\\n");
+  process.exit(0);
+}
+if (!reviewState) {
+  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_missing" }, null, 2) + "\\n");
+  process.exit(0);
+}
+if (reviewState.status === "pending" || reviewState.status === "missing") {
+  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_pending" }, null, 2) + "\\n");
+  process.exit(0);
+}
+if (reviewState.status === "issues-found") {
+  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_failed" }, null, 2) + "\\n");
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ continue: true }, null, 2) + "\\n");
+`,
+    { mode: 0o755 }
+  );
+  return scriptPath;
+}
+
+export function runNodeScript(scriptPath: string, args: string[], cwd: string): string {
+  const result = spawnSync("node", [scriptPath, ...args], {
+    cwd,
+    encoding: "utf8"
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `Node script failed: ${scriptPath}`);
+  }
+  return result.stdout;
+}
+
+export function runNodeScriptWithInput(
+  scriptPath: string,
+  args: string[],
+  cwd: string,
+  input: string
+): { status: number; stdout: string; stderr: string } {
+  const result = spawnSync("node", [scriptPath, ...args], {
+    cwd,
+    encoding: "utf8",
+    input
+  });
+
+  return {
+    status: result.status ?? 0,
+    stdout: result.stdout,
+    stderr: result.stderr
+  };
+}
+
+export function installCursorHookTemplates(repoRoot: string): void {
+  const templateRoot = path.join(process.cwd(), "template", "base", ".cursor");
+  const hookFiles = [
+    "hooks.json.jinja",
+    path.join("hooks", "session-init.mjs.jinja"),
+    path.join("hooks", "audit.mjs.jinja"),
+    path.join("hooks", "block-danger.mjs.jinja"),
+    path.join("hooks", "render-context.mjs.jinja")
+  ];
+
+  for (const relativePath of hookFiles) {
+    const sourcePath = path.join(templateRoot, relativePath);
+    const targetPath = path.join(repoRoot, ".cursor", relativePath.replace(/\.jinja$/, ""));
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(sourcePath, targetPath);
+    fs.chmodSync(targetPath, 0o755);
+  }
+}

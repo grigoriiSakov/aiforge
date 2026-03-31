@@ -1,0 +1,81 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+const [, , eventName = "manual", eventFilePath = ""] = process.argv;
+const projectDir = process.cwd();
+const manifestPath = path.join(projectDir, ".agents", "project.manifest.json");
+const taskStatePath = path.join(projectDir, ".agents", "runtime", "task-state.json");
+const reviewStatePath = path.join(projectDir, ".agents", "runtime", "review-verdict.json");
+const contextDir = path.join(projectDir, ".cursor", "context");
+const currentPath = path.join(contextDir, "current.md");
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function loadEvent(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return {
+      raw: fs.readFileSync(filePath, "utf8")
+    };
+  }
+}
+
+const manifest = readJson(manifestPath);
+if (!manifest) {
+  process.exit(0);
+}
+
+const taskState = readJson(taskStatePath) ?? { history: [] };
+const reviewState = readJson(reviewStatePath);
+const eventPayload = loadEvent(eventFilePath);
+const recentTasks = Array.isArray(taskState.history) ? taskState.history.slice(-5).reverse() : [];
+const llmsGlobs = Array.isArray(manifest.llms?.sourceGlobs) ? manifest.llms.sourceGlobs : [];
+const notes = Array.isArray(manifest.commands?.verify) ? manifest.commands.verify : [];
+
+const lines = [
+  "# Current Context",
+  "",
+  `- Event: ${eventName}`,
+  `- Updated: ${new Date().toISOString()}`,
+  `- Project: ${manifest.project?.name ?? "unknown"}`,
+  `- Profile: ${manifest.profile?.id ?? "unknown"}`,
+  `- Tracker: ${manifest.workflow?.tracker ?? "unknown"}`,
+  `- Main branch: ${manifest.project?.mainBranch ?? "unknown"}`,
+  `- Verify task: ${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.verify ?? "verify"}`,
+  `- Review task: ${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.review ?? "review"}`,
+  `- Review verdict: ${reviewState?.status ?? "missing"}`,
+  "",
+  "## Recent Task Evidence",
+  recentTasks.length > 0
+    ? recentTasks.map((entry) => `- ${entry.timestamp} :: ${entry.stage} ${entry.taskName}`).join("\n")
+    : "- No task evidence yet.",
+  "",
+  "## Verify Commands",
+  notes.length > 0 ? notes.map((entry) => `- \`${entry}\``).join("\n") : "- No verify commands declared.",
+  "",
+  "## Source Globs",
+  llmsGlobs.length > 0 ? llmsGlobs.map((entry) => `- \`${entry}\``).join("\n") : "- No source globs declared.",
+  "",
+  "## Last Hook Event",
+  eventPayload ? `- ${JSON.stringify(eventPayload).slice(0, 500)}` : "- No event payload captured."
+];
+
+fs.mkdirSync(contextDir, { recursive: true });
+fs.writeFileSync(currentPath, `${lines.join("\n")}\n`, "utf8");

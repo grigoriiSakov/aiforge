@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+const [, , command = "show", arg1 = "", ...rest] = process.argv;
+const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+
+function readState() {
+  if (!fs.existsSync(reviewStatePath)) {
+    return {
+      status: "missing",
+      history: []
+    };
+  }
+
+  return JSON.parse(fs.readFileSync(reviewStatePath, "utf8"));
+}
+
+function writeState(nextState) {
+  fs.mkdirSync(path.dirname(reviewStatePath), { recursive: true });
+  fs.writeFileSync(reviewStatePath, `${JSON.stringify(nextState, null, 2)}\n`);
+}
+
+function appendHistory(state, event) {
+  const history = Array.isArray(state.history) ? state.history : [];
+  history.push({
+    ...event,
+    timestamp: new Date().toISOString()
+  });
+  return {
+    ...state,
+    history
+  };
+}
+
+if (command === "start") {
+  const current = readState();
+  const next = appendHistory(
+    {
+      status: "pending",
+      startedAt: new Date().toISOString()
+    },
+    {
+      type: "start",
+      note: "Review started. Final verdict is still required."
+    }
+  );
+  writeState({ ...current, ...next });
+  process.stdout.write("Review state initialized.\n");
+  process.exit(0);
+}
+
+if (command === "verdict") {
+  const verdict = arg1;
+  if (!["clean", "issues-found"].includes(verdict)) {
+    process.stderr.write("Usage: node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\n");
+    process.exit(2);
+  }
+
+  const summary = rest.join(" ").trim();
+  const current = readState();
+  const next = appendHistory(
+    {
+      ...current,
+      status: verdict,
+      summary,
+      decidedAt: new Date().toISOString()
+    },
+    {
+      type: "verdict",
+      verdict,
+      summary
+    }
+  );
+  writeState(next);
+  process.stdout.write(`Review verdict recorded: ${verdict}\n`);
+  process.exit(0);
+}
+
+if (command === "show") {
+  process.stdout.write(`${JSON.stringify(readState(), null, 2)}\n`);
+  process.exit(0);
+}
+
+process.stderr.write("Unknown review-state command.\n");
+process.exit(2);

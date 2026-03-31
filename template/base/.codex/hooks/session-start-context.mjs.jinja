@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+function readManifest() {
+  const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+}
+
+const manifest = readManifest();
+
+if (!manifest) {
+  process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+  process.exit(0);
+}
+
+const additionalContext = [
+  `Project: ${manifest.project.name}`,
+  `Profile: ${manifest.profile.id}`,
+  `Tracker: ${manifest.workflow.tracker}`,
+  `Canonical verify task: ${manifest.task.command} ${manifest.task.tasks.verify}`
+].join(" ");
+
+process.stdout.write(
+  `${JSON.stringify(
+    {
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext
+      }
+    },
+    null,
+    2
+  )}\n`
+);

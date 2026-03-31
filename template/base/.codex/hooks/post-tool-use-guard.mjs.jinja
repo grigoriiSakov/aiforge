@@ -1,0 +1,29 @@
+#!/usr/bin/env node
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+});
+process.stdin.on("end", () => {
+  const input = raw.trim() ? JSON.parse(raw) : {};
+  const command = String(input?.tool_input?.command ?? "");
+
+  if (!/\btask\s+(verify|review|test|lint|build)\b/.test(command)) {
+    process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+    return;
+  }
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: true,
+        systemMessage: /\btask\s+review\b/.test(command)
+          ? "Review task finished. Record the final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+          : "Task command finished. Re-check workflow state before stopping."
+      },
+      null,
+      2
+    )}\n`
+  );
+});

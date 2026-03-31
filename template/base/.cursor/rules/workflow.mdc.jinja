@@ -1,0 +1,27 @@
+# Workflow Rule
+
+- Source of truth order: `{{ manifesto_path }}` -> `ai.config.yaml` -> `.cursor/commands/*` -> `.cursor/rules/*` -> `Taskfile.yml`
+- Generic execution gates live in `.cursor/rules/workflow-gates.mdc`.
+- Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
+- Use canonical tasks only:
+  - `{{ task_command }} {{ task_build_name }}`
+  - `{{ task_command }} {{ task_test_name }}`
+  - `{{ task_command }} {{ task_lint_name }}`
+  - `{{ task_command }} {{ task_verify_name }}`
+  - `{{ task_command }} {{ task_review_name }}`
+- Do not hardcode stack-specific commands in generic workflow prompts or hooks.
+- For non-trivial work, planning and execution memory must live in explicit artifacts:
+  - `PLAN::ISSUE-ID`
+  - `PROGRESS::ISSUE-ID`
+- Plan quality minimum:
+  - `Execution Contract`
+  - `Spec Coverage Matrix`
+  - `Do Not Break`
+  - `Acceptance Traceability`
+  - `Open Questions / Blockers`
+- Progress artifact minimum:
+  - `Выполнено`
+  - `Текущий шаг`
+  - `Дальше`
+  - `Spec Conformance`
+  - `Решения по ходу`

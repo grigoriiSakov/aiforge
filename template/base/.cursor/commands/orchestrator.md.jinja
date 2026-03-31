@@ -1,0 +1,29 @@
+# /orchestrator
+
+Pipeline owner for:
+
+`issue -> plan -> build -> test -> review`
+
+## Mandatory protocol
+
+1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
+2. Treat `.cursor/reference/plan-template.md` and `.cursor/reference/plan-progress-template.md` as required runtime contracts.
+3. Ensure the workflow keeps a single source of truth for:
+   - plan memory: `PLAN::ISSUE-ID`
+   - execution memory: `PROGRESS::ISSUE-ID`
+4. Use canonical task names from `ai.config.yaml`.
+5. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
+6. A phase is not complete without evidence:
+   - `plan` -> complete plan artifact
+   - `build` -> code changes aligned with plan
+   - `test` -> canonical task evidence
+   - `review` -> findings-first output plus recorded clean review verdict
+7. Re-check managed runtime state before stopping the turn.
+
+## Stop conditions
+
+- No source request / issue contract
+- No valid plan artifact for non-trivial work
+- Drift between source request, plan, and implementation
+- Missing verify evidence
+- Missing clean review verdict

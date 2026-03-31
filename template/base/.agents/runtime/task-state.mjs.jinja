@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+const [, , stage = "pre", taskName = "unknown"] = process.argv;
+const statePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
+
+function readState() {
+  if (!fs.existsSync(statePath)) {
+    return { history: [] };
+  }
+
+  return JSON.parse(fs.readFileSync(statePath, "utf8"));
+}
+
+function writeState(nextState) {
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, `${JSON.stringify(nextState, null, 2)}\n`);
+}
+
+const state = readState();
+state.history.push({
+  stage,
+  taskName,
+  timestamp: new Date().toISOString()
+});
+writeState(state);

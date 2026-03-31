@@ -1,0 +1,49 @@
+# AGENTS.md
+
+This repository uses the `ai-simple-template` workflow baseline.
+
+## Sources Of Truth
+
+1. `{{ manifesto_path }}`
+2. `ai.config.yaml`
+3. `.cursor/commands/*`
+4. `.cursor/rules/*`
+5. `.codex/hooks/*`
+6. `Taskfile.yml`
+
+## Workflow
+
+Canonical phases:
+
+- `issue`
+- `plan`
+- `build`
+- `test`
+- `review`
+
+## Runtime Surfaces
+
+- Cursor: `{{ "enabled" if enable_cursor else "disabled" }}`
+- Codex: `{{ "enabled" if enable_codex else "disabled" }}`
+- Antigravity `.agent`: `{{ "enabled" if enable_agent else "disabled" }}`
+- Codex agent mode `.agents`: `{{ "enabled" if enable_agents else "disabled" }}`
+
+## Command Contract
+
+- Build: `{{ task_command }} {{ task_build_name }}`
+- Test: `{{ task_command }} {{ task_test_name }}`
+- Lint: `{{ task_command }} {{ task_lint_name }}`
+- Verify: `{{ task_command }} {{ task_verify_name }}`
+- Review: `{{ task_command }} {{ task_review_name }}`
+
+## Profile
+
+- Profile ID: `{{ profile_id }}`
+- Tracker: `{{ workflow_tracker }}`
+- Language: `{{ workflow_language }}`
+
+## Notes
+
+{% for note in profile_notes -%}
+- {{ note }}
+{% endfor -%}

@@ -1,0 +1,12 @@
+# /check
+
+Use this command for quick verification of the current implementation state.
+
+## Protocol
+
+1. Read `ai.config.yaml`.
+2. Prefer canonical tasks:
+   - `{{ task_command }} {{ task_lint_name }}`
+   - `{{ task_command }} {{ task_test_name }}`
+   - `{{ task_command }} {{ task_verify_name }}`
+3. Return concrete failures or a clean verdict.

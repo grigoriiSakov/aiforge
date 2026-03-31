@@ -1,0 +1,112 @@
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+project_slug:
+  type: str
+  help: Project slug
+
+project_name:
+  type: str
+  help: Human-readable project name
+
+main_branch:
+  type: str
+  default: dev
+
+workflow_tracker:
+  type: str
+  default: linear
+  choices:
+    - linear
+    - gitlab
+    - github
+    - none
+
+workflow_language:
+  type: str
+  default: ru
+
+profile_id:
+  type: str
+  default: python-fastapi-docker
+  choices:
+    - python-fastapi-docker
+    - laravel-docker
+    - vue-quasar-capacitor
+
+enable_cursor:
+  type: bool
+  default: true
+
+enable_codex:
+  type: bool
+  default: true
+
+enable_agent:
+  type: bool
+  default: true
+
+enable_agents:
+  type: bool
+  default: true
+
+manifesto_title:
+  type: str
+  default: Project Workflow Manifesto
+
+manifesto_path:
+  type: str
+  default: MANIFESTO.md
+
+llms_root_dir:
+  type: str
+  default: llms
+
+llms_txt_path:
+  type: str
+  default: llms.txt
+
+llms_source_globs:
+  type: yaml
+  default: []
+
+task_command:
+  type: str
+  default: task
+
+task_build_name:
+  type: str
+  default: build
+
+task_test_name:
+  type: str
+  default: test
+
+task_lint_name:
+  type: str
+  default: lint
+
+task_verify_name:
+  type: str
+  default: verify
+
+task_review_name:
+  type: str
+  default: review
+
+commands:
+  type: yaml
+  default:
+    build: []
+    test: []
+    lint: []
+    verify: []
+    review: []
+
+profile_notes:
+  type: yaml
+  default: []
+
+mcp_placeholders:
+  type: yaml
+  default: []

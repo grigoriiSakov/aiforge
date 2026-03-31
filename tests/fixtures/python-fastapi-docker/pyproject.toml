@@ -1,0 +1,12 @@
+[project]
+name = "vertex-backend-lite"
+version = "0.1.0"
+
+[project.dependencies]
+fastapi = "*"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

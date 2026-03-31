@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+});
+
+process.stdin.on("end", () => {
+  const projectDir = process.cwd();
+  const hooksDir = path.join(projectDir, ".cursor", "hooks");
+  const logPath = path.join(hooksDir, "audit.log");
+  const eventPath = path.join(hooksDir, "last-event.json");
+  fs.mkdirSync(hooksDir, { recursive: true });
+
+  fs.appendFileSync(logPath, `${new Date().toISOString()} ${raw}\n`, "utf8");
+  fs.writeFileSync(eventPath, raw || "{}", "utf8");
+
+  const renderContextPath = path.join(hooksDir, "render-context.mjs");
+  const result = spawnSync("node", [renderContextPath, "audit", eventPath], {
+    stdio: "inherit",
+    cwd: projectDir
+  });
+
+  process.exit(result.status ?? 0);
+});

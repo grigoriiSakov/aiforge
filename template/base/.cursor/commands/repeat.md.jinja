@@ -1,0 +1,9 @@
+# /repeat
+
+Use this command to rerun the last failed or incomplete workflow step with updated context.
+
+## Protocol
+
+1. Read `.cursor/context/current.md`.
+2. Read `PROGRESS::ISSUE-ID` if it exists.
+3. Re-run only the missing step and its relevant verification.

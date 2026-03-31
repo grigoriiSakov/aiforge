@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+
+const taskStatePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
+const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+const manifest = readJson(manifestPath);
+const state = readJson(taskStatePath);
+const reviewState = readJson(reviewStatePath);
+
+if (!manifest || !state) {
+  process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+  process.exit(0);
+}
+
+const verifyTask = manifest.task.tasks.verify;
+const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
+
+if (!successfulVerify) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "verify_missing",
+        systemMessage: `Run ${manifest.task.command} ${verifyTask} before stopping.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (!reviewState) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_missing",
+        systemMessage:
+          "Run task review and record a final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (reviewState.status === "pending" || reviewState.status === "missing") {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_pending",
+        systemMessage:
+          "Review is still pending. Record a final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (reviewState.status === "issues-found") {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_failed",
+        systemMessage: "Review found issues. Fix them before closing or rerun review and record a clean verdict."
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+process.stdout.write(
+  `${JSON.stringify(
+    {
+      continue: true,
+      systemMessage: "Workflow stop guard passed: verify evidence and clean review verdict found."
+    },
+    null,
+    2
+  )}\n`
+);

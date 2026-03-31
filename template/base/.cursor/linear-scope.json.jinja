@@ -1,0 +1,11 @@
+[
+{% for scope in linear_scopes -%}
+  {
+    "teamId": {{ "null" if scope.teamId is none else ('"' ~ scope.teamId ~ '"') }},
+    "team": {{ "null" if scope.team is none else ('"' ~ scope.team ~ '"') }},
+    "projectId": {{ "null" if scope.projectId is none else ('"' ~ scope.projectId ~ '"') }},
+    "project": {{ "null" if scope.project is none else ('"' ~ scope.project ~ '"') }},
+    "defaultLabels": [{% for label in scope.defaultLabels %}"{{ label }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  }{% if not loop.last %},{% endif %}
+{% endfor -%}
+]

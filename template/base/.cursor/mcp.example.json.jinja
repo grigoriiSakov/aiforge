@@ -1,0 +1,10 @@
+{
+  "servers": [
+{% for placeholder in mcp_placeholders -%}
+    {
+      "name": "{{ placeholder }}",
+      "note": "Fill in transport and credentials locally."
+    }{% if not loop.last %},{% endif %}
+{% endfor -%}
+  ]
+}

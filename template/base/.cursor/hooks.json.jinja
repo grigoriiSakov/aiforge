@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{ "command": "node .cursor/hooks/session-init.mjs" }],
+    "beforeShellExecution": [{ "command": "node .cursor/hooks/block-danger.mjs", "failClosed": true }],
+    "beforeReadFile": [{ "command": "node .cursor/hooks/audit.mjs" }],
+    "beforeSubmitPrompt": [{ "command": "node .cursor/hooks/audit.mjs" }],
+    "postToolUseFailure": [{ "command": "node .cursor/hooks/audit.mjs" }]
+  }
+}
