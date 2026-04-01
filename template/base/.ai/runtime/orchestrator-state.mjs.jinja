@@ -37,23 +37,16 @@ const ALLOWED_STATUS_TRANSITIONS = {
   aborted: new Set(["aborted"])
 };
 
-function utcNow() {
-  return new Date().toISOString();
-}
-
 function repoRoot() {
   return process.cwd();
 }
 
-function expandHome(targetPath) {
-  if (!targetPath.startsWith("~/")) {
-    return targetPath;
-  }
-  return path.join(os.homedir(), targetPath.slice(2));
+function runtimeRoot() {
+  return path.join(repoRoot(), ".ai", "runtime");
 }
 
 function orchestratorRoot() {
-  return path.join(repoRoot(), ".agents", "runtime", "orchestrator");
+  return path.join(runtimeRoot(), "orchestrator");
 }
 
 function runsDir() {
@@ -64,8 +57,35 @@ function registryPath() {
   return path.join(orchestratorRoot(), "registry.json");
 }
 
+function ensureDir(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
 function ensureStateDirs() {
-  fs.mkdirSync(runsDir(), { recursive: true });
+  ensureDir(runsDir());
+}
+
+function utcNow() {
+  return new Date().toISOString();
+}
+
+function expandHome(targetPath) {
+  if (!targetPath.startsWith("~/")) {
+    return targetPath;
+  }
+  return path.join(os.homedir(), targetPath.slice(2));
+}
+
+function readJson(filePath, fallback) {
+  if (!fs.existsSync(filePath)) {
+    return fallback;
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeJson(filePath, payload) {
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
 function defaultRegistry() {
@@ -81,23 +101,11 @@ function defaultRegistry() {
   };
 }
 
-function readJson(filePath, fallback) {
-  if (!fs.existsSync(filePath)) {
-    return fallback;
-  }
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
-function writeJson(filePath, payload) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`);
-}
-
 function loadRegistry() {
   ensureStateDirs();
   if (!fs.existsSync(registryPath())) {
     const registry = defaultRegistry();
-    writeJson(registryPath(), registry);
+    saveRegistry(registry);
     return registry;
   }
   return readJson(registryPath(), defaultRegistry());
@@ -121,25 +129,12 @@ function saveRun(run) {
   writeJson(runPath(run.issueId), run);
 }
 
-function normalizePath(rawPath) {
-  return rawPath.replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "").trim();
+function normalizePath(rawValue) {
+  return String(rawValue).replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "").trim();
 }
 
 function dedupe(values) {
   return [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
-}
-
-function isFileLevelClaim(claimPath) {
-  const normalized = normalizePath(claimPath);
-  if (!normalized) {
-    return false;
-  }
-  const absolutePath = path.join(repoRoot(), normalized);
-  if (fs.existsSync(absolutePath)) {
-    return fs.statSync(absolutePath).isFile();
-  }
-  const baseName = path.posix.basename(normalized);
-  return baseName.includes(".") || PROCESS_LAYER_FILES.has(baseName);
 }
 
 function isProcessLayerPath(claimPath) {
@@ -147,28 +142,39 @@ function isProcessLayerPath(claimPath) {
   return PROCESS_LAYER_FILES.has(normalized) || PROCESS_LAYER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
-function parseScope(raw) {
+function isFileLevelClaim(claimPath) {
+  const normalized = normalizePath(claimPath);
+  if (!normalized) {
+    return false;
+  }
+
+  const absolutePath = path.join(repoRoot(), normalized);
+  if (fs.existsSync(absolutePath)) {
+    return fs.statSync(absolutePath).isFile();
+  }
+
+  const baseName = path.posix.basename(normalized);
+  return baseName.includes(".") || PROCESS_LAYER_FILES.has(baseName);
+}
+
+function parseScope(rawScope) {
   const scope = {
-    areas: dedupe(Array.isArray(raw?.areas) ? raw.areas : []),
-    paths: dedupe(Array.isArray(raw?.paths) ? raw.paths.map(normalizePath) : []),
+    areas: dedupe(Array.isArray(rawScope?.areas) ? rawScope.areas : []),
+    paths: dedupe(Array.isArray(rawScope?.paths) ? rawScope.paths.map(normalizePath) : []),
     sharedSurfaces: dedupe(
-      Array.isArray(raw?.shared_surfaces) ? raw.shared_surfaces.map(normalizePath) : []
+      Array.isArray(rawScope?.shared_surfaces) ? rawScope.shared_surfaces.map(normalizePath) : []
     ),
-    relatedIssues: dedupe(
-      Array.isArray(raw?.related_issues) ? raw.related_issues : []
-    ),
-    touchesProcessLayer: Boolean(raw?.touches_process_layer)
+    relatedIssues: dedupe(Array.isArray(rawScope?.related_issues) ? rawScope.related_issues : []),
+    touchesProcessLayer: Boolean(rawScope?.touches_process_layer)
   };
 
   if (scope.paths.length === 0 && scope.sharedSurfaces.length === 0) {
-    throw new Error("claimed_write_scope must include at least one file in paths or shared_surfaces");
+    throw new Error("claimed_write_scope must contain at least one file in paths/shared_surfaces");
   }
 
   const invalidClaims = [...scope.paths, ...scope.sharedSurfaces].filter((claimPath) => !isFileLevelClaim(claimPath));
   if (invalidClaims.length > 0) {
-    throw new Error(
-      `claimed_write_scope paths/shared_surfaces must be exact files, not directories: ${invalidClaims.join(", ")}`
-    );
+    throw new Error(`scope claims must be file-level exact: ${invalidClaims.join(", ")}`);
   }
 
   if (scope.touchesProcessLayer) {
@@ -193,49 +199,7 @@ function scopeToJson(scope) {
   };
 }
 
-function pathOverlap(left, right) {
-  const leftPath = normalizePath(left);
-  const rightPath = normalizePath(right);
-  return leftPath === rightPath;
-}
-
-function collectConflicts(issueId, incomingScope, registry) {
-  const activeIssues = Object.keys(registry.activeReservations ?? {});
-  const conflicts = [];
-
-  for (const otherIssueId of activeIssues) {
-    if (otherIssueId === issueId) {
-      continue;
-    }
-
-    const otherRun = loadRun(otherIssueId);
-    if (!otherRun) {
-      continue;
-    }
-
-    const otherScope = parseScope(otherRun.claimedWriteScope);
-    const explicitRelation =
-      incomingScope.relatedIssues.includes(otherIssueId) || otherScope.relatedIssues.includes(issueId);
-    const fileOverlap =
-      incomingScope.paths.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
-      incomingScope.paths.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right))) ||
-      incomingScope.sharedSurfaces.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
-      incomingScope.sharedSurfaces.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right)));
-
-    if (fileOverlap) {
-      conflicts.push({ issueId: otherIssueId, relation: "hard-conflict" });
-      continue;
-    }
-
-    if (explicitRelation) {
-      conflicts.push({ issueId: otherIssueId, relation: "related-conflict" });
-    }
-  }
-
-  return conflicts;
-}
-
-function buildRun(issueId, scope, existingRun, overrides = {}) {
+function buildRun(issueId, scope, existingRun = null, overrides = {}) {
   return {
     issueId,
     status: overrides.status ?? existingRun?.status ?? "submitted",
@@ -266,9 +230,47 @@ function updateRegistryForRun(registry, run) {
   };
 }
 
+function pathOverlap(leftPath, rightPath) {
+  return normalizePath(leftPath) === normalizePath(rightPath);
+}
+
+function collectConflicts(issueId, incomingScope, registry) {
+  const conflicts = [];
+  for (const otherIssueId of Object.keys(registry.activeReservations ?? {})) {
+    if (otherIssueId === issueId) {
+      continue;
+    }
+
+    const otherRun = loadRun(otherIssueId);
+    if (!otherRun) {
+      continue;
+    }
+
+    const otherScope = parseScope(otherRun.claimedWriteScope);
+    const directOverlap =
+      incomingScope.paths.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
+      incomingScope.paths.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right))) ||
+      incomingScope.sharedSurfaces.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
+      incomingScope.sharedSurfaces.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right)));
+    const related =
+      incomingScope.relatedIssues.includes(otherIssueId) || otherScope.relatedIssues.includes(issueId);
+
+    if (directOverlap) {
+      conflicts.push({ issueId: otherIssueId, relation: "hard-conflict" });
+      continue;
+    }
+
+    if (related) {
+      conflicts.push({ issueId: otherIssueId, relation: "related-conflict" });
+    }
+  }
+
+  return conflicts;
+}
+
 function requireTransition(currentStatus, nextStatus) {
-  const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? new Set([nextStatus]);
-  if (!allowed.has(nextStatus)) {
+  const allowedTargets = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? new Set([nextStatus]);
+  if (!allowedTargets.has(nextStatus)) {
     throw new Error(`invalid orchestrator transition: ${currentStatus} -> ${nextStatus}`);
   }
 }
@@ -285,74 +287,67 @@ function runGit(args, cwd = repoRoot(), allowFailure = false) {
 }
 
 function gitOutput(args, cwd = repoRoot(), allowFailure = false) {
-  const result = runGit(args, cwd, allowFailure);
-  return (result.stdout ?? "").trim();
+  return (runGit(args, cwd, allowFailure).stdout ?? "").trim();
 }
 
 function resolveStartPoint(baseBranch) {
   const remoteBranch = `origin/${baseBranch}`;
-  const remoteCheck = runGit(["rev-parse", "--verify", remoteBranch], repoRoot(), true);
-  if (remoteCheck.status === 0) {
+  if (runGit(["rev-parse", "--verify", remoteBranch], repoRoot(), true).status === 0) {
     return remoteBranch;
   }
-
-  const localCheck = runGit(["rev-parse", "--verify", baseBranch], repoRoot(), true);
-  if (localCheck.status === 0) {
+  if (runGit(["rev-parse", "--verify", baseBranch], repoRoot(), true).status === 0) {
     return baseBranch;
   }
-
   return "HEAD";
 }
 
 function currentWorkspaceFingerprint(run) {
   if (!run.worktreePath) {
-    throw new Error("worktree is required for this orchestrator step");
+    throw new Error("worktree is required for this step");
   }
-  const worktreePath = run.worktreePath;
-  if (!fs.existsSync(worktreePath)) {
-    throw new Error(`worktree not found: ${worktreePath}`);
+  if (!fs.existsSync(run.worktreePath)) {
+    throw new Error(`worktree not found: ${run.worktreePath}`);
   }
 
-  const head = gitOutput(["rev-parse", "HEAD"], worktreePath);
-  const status = gitOutput(["status", "--short"], worktreePath, true);
-  const diff = gitOutput(["diff", "--binary", "HEAD", "--"], worktreePath, true);
+  const head = gitOutput(["rev-parse", "HEAD"], run.worktreePath);
+  const status = gitOutput(["status", "--short"], run.worktreePath, true);
+  const diff = gitOutput(["diff", "--binary", "HEAD", "--"], run.worktreePath, true);
   return JSON.stringify({ head, status, diff });
 }
 
 function requirePassingTest(run) {
   if (run.lastTestResult !== "pass") {
-    throw new Error("cannot move to review without passing test evidence for current worktree");
+    throw new Error("cannot move to review without passing test evidence");
   }
-  const currentFingerprint = currentWorkspaceFingerprint(run);
-  if (run.lastTestFingerprint !== currentFingerprint) {
-    throw new Error("worktree changed after the last passing test; rerun testing before review");
+  if (run.lastTestFingerprint !== currentWorkspaceFingerprint(run)) {
+    throw new Error("worktree changed after the last passing test; rerun tests first");
   }
 }
 
 function requireCleanReview(run) {
   if (!["clean", "low"].includes(run.lastReviewResult)) {
-    throw new Error("cannot finalize without clean or low review result");
+    throw new Error("cannot finalize without clean or low review evidence");
   }
-  const currentFingerprint = currentWorkspaceFingerprint(run);
-  if (run.lastReviewFingerprint !== currentFingerprint) {
-    throw new Error("worktree changed after the last clean review; rerun review");
+  if (run.lastReviewFingerprint !== currentWorkspaceFingerprint(run)) {
+    throw new Error("worktree changed after the last clean review; rerun review first");
   }
 }
 
 function reconcilePendingRuns(registry) {
-  const candidates = [
+  const candidateIssueIds = [
     ...(registry.queue ?? []),
     ...Object.keys(registry.blocked ?? {}).filter((issueId) => !(registry.queue ?? []).includes(issueId))
   ];
-  const promoted = [];
   const nextQueue = [];
   const nextBlocked = {};
+  const promoted = [];
 
-  for (const issueId of candidates) {
+  for (const issueId of candidateIssueIds) {
     const run = loadRun(issueId);
     if (!run) {
       continue;
     }
+
     const scope = parseScope(run.claimedWriteScope);
     const conflicts = collectConflicts(issueId, scope, registry);
     run.conflictsWith = conflicts.map((entry) => entry.issueId);
@@ -365,7 +360,7 @@ function reconcilePendingRuns(registry) {
       nextQueue.push(issueId);
     } else {
       run.status = "reserved";
-      registry.activeReservations[issueId] = scopeToJson(scope);
+      registry.activeReservations[issueId] = run.claimedWriteScope;
       promoted.push(issueId);
     }
 
@@ -378,6 +373,22 @@ function reconcilePendingRuns(registry) {
   return promoted;
 }
 
+function getOption(args, name, fallback = null) {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return fallback;
+  }
+  return args[index + 1] ?? fallback;
+}
+
+function requireOption(args, name) {
+  const value = getOption(args, name, null);
+  if (!value) {
+    throw new Error(`missing required option: ${name}`);
+  }
+  return value;
+}
+
 function commandInit() {
   ensureStateDirs();
   const registry = loadRegistry();
@@ -387,25 +398,23 @@ function commandInit() {
 
 function commandSubmit(args) {
   const issueId = requireOption(args, "--issue");
-  const scopeJson = requireOption(args, "--scope-json");
-  const scope = parseScope(JSON.parse(scopeJson));
+  const scope = parseScope(JSON.parse(requireOption(args, "--scope-json")));
   const baseBranch = getOption(args, "--base-branch", DEFAULT_BASE_BRANCH);
   const branch = getOption(args, "--branch", `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`);
-
   const registry = loadRegistry();
-  const run = buildRun(issueId, scope, loadRun(issueId), {
-    status: "submitted",
-    branch,
-    baseBranch,
-    currentStep: "awaiting-admission"
-  });
 
   delete registry.activeReservations[issueId];
   registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
   delete registry.blocked[issueId];
 
   const conflicts = collectConflicts(issueId, scope, registry);
-  run.conflictsWith = conflicts.map((entry) => entry.issueId);
+  const run = buildRun(issueId, scope, loadRun(issueId), {
+    status: "submitted",
+    branch,
+    baseBranch,
+    currentStep: "awaiting-admission",
+    conflictsWith: conflicts.map((entry) => entry.issueId)
+  });
 
   if (conflicts.some((entry) => entry.relation === "hard-conflict")) {
     run.status = "blocked-by-conflict";
@@ -415,7 +424,7 @@ function commandSubmit(args) {
     registry.queue.push(issueId);
   } else {
     run.status = "reserved";
-    registry.activeReservations[issueId] = scopeToJson(scope);
+    registry.activeReservations[issueId] = run.claimedWriteScope;
   }
 
   saveRun(run);
@@ -426,7 +435,7 @@ function commandSubmit(args) {
 
 function commandRelease(args) {
   const issueId = requireOption(args, "--issue");
-  const status = getOption(args, "--status", "aborted");
+  const nextStatus = getOption(args, "--status", "aborted");
   const currentStep = getOption(args, "--current-step", "released");
   const removeWorktree = args.includes("--remove-worktree");
   const registry = loadRegistry();
@@ -440,12 +449,12 @@ function commandRelease(args) {
   registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
   delete registry.blocked[issueId];
 
-  if (removeWorktree && run.worktreePath && fs.existsSync(run.worktreePath)) {
+  if (removeWorktree && run.worktreePath) {
     runGit(["worktree", "remove", "--force", run.worktreePath], repoRoot(), true);
     run.worktreePath = null;
   }
 
-  run.status = status;
+  run.status = nextStatus;
   run.currentStep = currentStep;
   run.conflictsWith = [];
   saveRun(run);
@@ -513,9 +522,8 @@ function commandRecordTest(args) {
     throw new Error("record-test result must be pass or fail");
   }
 
-  const fingerprint = currentWorkspaceFingerprint(run);
   run.lastTestResult = result;
-  run.lastTestFingerprint = fingerprint;
+  run.lastTestFingerprint = currentWorkspaceFingerprint(run);
   run.lastReviewResult = null;
   run.lastReviewFingerprint = null;
 
@@ -543,16 +551,15 @@ function commandRecordReview(args) {
     throw new Error(`unknown issue: ${issueId}`);
   }
   if (run.status !== "reviewing") {
-    throw new Error(`cannot record review in status ${run.status}; move run to reviewing first`);
+    throw new Error(`cannot record review in status ${run.status}; move the run to reviewing first`);
   }
   if (!REVIEW_RESULTS.has(result)) {
     throw new Error(`unknown review result: ${result}`);
   }
 
   requirePassingTest(run);
-  const fingerprint = currentWorkspaceFingerprint(run);
   run.lastReviewResult = result;
-  run.lastReviewFingerprint = fingerprint;
+  run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
 
   if (["clean", "low"].includes(result)) {
     run.status = "awaiting-finalize";
@@ -560,9 +567,7 @@ function commandRecordReview(args) {
   } else {
     run.reviewIteration = Number(run.reviewIteration ?? 0) + 1;
     if (run.reviewIteration > MAX_REVIEW_ITERATIONS) {
-      throw new Error(
-        `review fix-loop exceeded limit (${String(MAX_REVIEW_ITERATIONS)}); re-plan before continuing`
-      );
+      throw new Error(`review fix-loop exceeded limit (${String(MAX_REVIEW_ITERATIONS)}); re-plan before continuing`);
     }
     run.status = "fix-loop";
     run.currentStep = currentStep ?? `review-fix-${String(run.reviewIteration)}`;
@@ -595,13 +600,13 @@ function commandStartWorktree(args) {
 
   const worktreeRoot = expandHome(registry.worktreeRoot || DEFAULT_WORKTREE_ROOT);
   const worktreePath = path.join(worktreeRoot, issueId);
-  fs.mkdirSync(worktreeRoot, { recursive: true });
+  ensureDir(worktreeRoot);
   if (fs.existsSync(worktreePath)) {
     throw new Error(`worktree path already exists: ${worktreePath}`);
   }
 
-  const startPoint = resolveStartPoint(run.baseBranch || DEFAULT_BASE_BRANCH);
   const branch = run.branch || `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`;
+  const startPoint = resolveStartPoint(run.baseBranch || DEFAULT_BASE_BRANCH);
   const branchExists = runGit(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot(), true).status === 0;
 
   if (branchExists) {
@@ -629,35 +634,26 @@ function commandStatus(args) {
     process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
     return;
   }
-
   process.stdout.write(`${JSON.stringify(loadRegistry(), null, 2)}\n`);
 }
 
 function commandGraphNext(args) {
-  const issueId = positionalArg(args, 2);
+  const issueId = args[2] ?? null;
   if (!issueId) {
     throw new Error("graph next requires ISSUE-ID");
   }
 
   const run = loadRun(issueId);
-  if (!run) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          step: "pending",
-          action: "run_plan",
-          issue: issueId,
-          message: "No orchestrator run exists yet. Create a plan with Claimed Write Scope first."
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
-
   let payload;
-  if (run.status === "reserved" && !run.worktreePath) {
+
+  if (!run) {
+    payload = {
+      step: "pending",
+      action: "run_plan",
+      issue: issueId,
+      message: "No orchestrator run exists yet. Create a plan with Claimed Write Scope first."
+    };
+  } else if (run.status === "reserved" && !run.worktreePath) {
     payload = {
       step: "pending",
       action: "start_worktree",
@@ -713,33 +709,9 @@ function commandWorktreeEnv(args) {
   process.stdout.write(`export AIFORGE_WORKTREE_PATH=${JSON.stringify(run.worktreePath)}\n`);
 }
 
-function requireOption(args, name) {
-  const value = getOption(args, name, null);
-  if (!value) {
-    throw new Error(`missing required option: ${name}`);
-  }
-  return value;
-}
-
-function getOption(args, name, fallback) {
-  const index = args.indexOf(name);
-  if (index === -1) {
-    return fallback;
-  }
-  return args[index + 1] ?? fallback;
-}
-
-function positionalArg(args, index) {
-  return args[index] ?? null;
-}
-
 function main() {
   const args = process.argv.slice(2);
   const command = args[0];
-
-  if (!command) {
-    throw new Error("expected orchestrator command");
-  }
 
   switch (command) {
     case "init":
@@ -776,7 +748,7 @@ function main() {
       commandGraphNext(args);
       return;
     default:
-      throw new Error(`unknown orchestrator command: ${command}`);
+      throw new Error(`unknown orchestrator command: ${String(command ?? "")}`);
   }
 }
 

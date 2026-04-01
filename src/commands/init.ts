@@ -60,7 +60,7 @@ export async function runInitCommand(options: {
       ok: true,
       code: 0,
       message: `Dry-run init for profile ${profileId}`,
-      details: { profileId, detected, wouldWrite: ["ai.config.yaml", ".agents/project.manifest.json"] }
+      details: { profileId, detected, wouldWrite: ["ai.config.yaml", ".ai/project.manifest.json"] }
     };
   }
 

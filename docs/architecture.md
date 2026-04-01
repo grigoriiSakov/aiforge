@@ -6,7 +6,7 @@
 
 - `Copier` renders managed surfaces through local apply runs;
 - `Taskfile.yml` hides project-specific commands behind stable task names;
-- generated hooks and prompts read machine-friendly project data from `.agents/project.manifest.json`.
+- generated hooks and prompts read machine-friendly project data from `.ai/project.manifest.json`.
 
 ## Layers
 
@@ -59,16 +59,16 @@ Profile defaults live in TypeScript definitions and docs:
 
 1. CLI detects a likely profile.
 2. CLI creates `ai.config.yaml`.
-3. CLI also writes `.agents/project.manifest.json` for runtime hooks.
+3. CLI also writes `.ai/project.manifest.json` for runtime hooks.
 4. CLI converts config into Copier answers.
 5. Copier renders target surfaces.
 6. Post-processing regenerates `MANIFESTO.md`, `llms`, MCP placeholders.
 
-## Why `.agents/project.manifest.json`
+## Why `.ai/project.manifest.json`
 
 Generated runtime scripts must not depend on npm packages from the configurator repo.
 
 So:
 
 - humans read/edit `ai.config.yaml`;
-- hooks and runtime scripts read JSON from `.agents/project.manifest.json`.
+- hooks and runtime scripts read JSON from `.ai/project.manifest.json`.

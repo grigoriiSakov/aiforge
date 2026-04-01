@@ -75,6 +75,6 @@ Minimal structure:
 - `/plan` creates or updates `PLAN::ISSUE-ID`.
 - `/build` creates or updates `PROGRESS::ISSUE-ID`.
 - Orchestrator-ready plans must also include `## Claimed Write Scope`.
-- If `.agents/runtime/orchestrator-state.mjs` manages the issue, progress updates must stay aligned with orchestrator run state.
+- If `.ai/runtime/orchestrator-state.mjs` manages the issue, progress updates must stay aligned with orchestrator run state.
 - Progress must be updated at every step transition, not only at the end.
 - `Do Not Break` invariants come from the plan, not from improvisation during coding.

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const [, , stage = "pre", taskName = "unknown"] = process.argv;
-const statePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
+const statePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
 
 function readState() {
   if (!fs.existsSync(statePath)) {

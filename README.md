@@ -151,7 +151,7 @@ aiforge linear scope set \
 Эта команда обновляет:
 
 - `ai.config.yaml`
-- `.agents/project.manifest.json`
+- `.ai/project.manifest.json`
 - `.ai/linear-scope.json`
 - `.cursor/settings.json`
 

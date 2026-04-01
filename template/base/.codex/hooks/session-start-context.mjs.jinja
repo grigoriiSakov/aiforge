@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 function readManifest() {
-  const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+  const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
   if (!fs.existsSync(manifestPath)) {
     return null;
   }

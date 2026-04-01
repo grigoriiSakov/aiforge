@@ -10,7 +10,7 @@
 
 ## 2) Configuration Model
 
-Конфигурация строится вокруг единого project manifest (logical model, может храниться в `.agents/project.manifest.json`):
+Конфигурация строится вокруг единого project manifest (logical model, может храниться в `.ai/project.manifest.json`):
 
 - `schemaVersion`: версия схемы манифеста.
 - `projectProfile`: `python-fastapi-docker | laravel-docker | vue-quasar-capacitor`.

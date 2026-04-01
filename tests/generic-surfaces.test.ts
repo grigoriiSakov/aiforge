@@ -37,7 +37,9 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/debug/SKILL.md.jinja",
       ".ai/skills/docs/SKILL.md.jinja",
       ".ai/skills/tracker/SKILL.md.jinja",
-      ".agents/runtime/orchestrator-state.mjs.jinja"
+      ".ai/runtime/task-state.mjs.jinja",
+      ".ai/runtime/review-state.mjs.jinja",
+      ".ai/runtime/orchestrator-state.mjs.jinja"
     ];
 
     for (const relativePath of expectedPaths) {

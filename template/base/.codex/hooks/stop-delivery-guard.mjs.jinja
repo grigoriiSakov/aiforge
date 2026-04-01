@@ -3,9 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const taskStatePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
-const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
-const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
+const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
+const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -50,7 +50,7 @@ if (!reviewState) {
         continue: false,
         stopReason: "review_missing",
         systemMessage:
-          `Run ${taskCommand} ${reviewTask} and record a final verdict with \`node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
+          `Run ${taskCommand} ${reviewTask} and record a final verdict with \`node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
       },
       null,
       2
@@ -66,7 +66,7 @@ if (reviewState.status === "pending" || reviewState.status === "missing") {
         continue: false,
         stopReason: "review_pending",
         systemMessage:
-          `Review is still pending after ${taskCommand} ${reviewTask}. Record a final verdict with \`node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
+          `Review is still pending after ${taskCommand} ${reviewTask}. Record a final verdict with \`node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
       },
       null,
       2

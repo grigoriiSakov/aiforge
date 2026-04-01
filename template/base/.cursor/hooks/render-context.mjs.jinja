@@ -5,9 +5,9 @@ import path from "node:path";
 
 const [, , eventName = "manual", eventFilePath = ""] = process.argv;
 const projectDir = process.cwd();
-const manifestPath = path.join(projectDir, ".agents", "project.manifest.json");
-const taskStatePath = path.join(projectDir, ".agents", "runtime", "task-state.json");
-const reviewStatePath = path.join(projectDir, ".agents", "runtime", "review-verdict.json");
+const manifestPath = path.join(projectDir, ".ai", "project.manifest.json");
+const taskStatePath = path.join(projectDir, ".ai", "runtime", "task-state.json");
+const reviewStatePath = path.join(projectDir, ".ai", "runtime", "review-verdict.json");
 const contextDir = path.join(projectDir, ".ai", "context");
 const currentPath = path.join(contextDir, "current.md");
 

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const [, , command = "show", arg1 = "", ...rest] = process.argv;
-const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
 
 function readState() {
   if (!fs.existsSync(reviewStatePath)) {
@@ -54,7 +54,7 @@ if (command === "start") {
 if (command === "verdict") {
   const verdict = arg1;
   if (!["clean", "issues-found"].includes(verdict)) {
-    process.stderr.write("Usage: node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]\n");
+    process.stderr.write("Usage: node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]\n");
     process.exit(2);
   }
 

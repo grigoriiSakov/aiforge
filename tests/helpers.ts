@@ -26,7 +26,7 @@ const path = require("node:path");
 const args = process.argv.slice(2);
 const mode = args[0];
 const destinationPath = mode === "copy" ? args[args.length - 1] : process.cwd();
-const manifestPath = path.join(destinationPath, ".agents", "project.manifest.json");
+const manifestPath = path.join(destinationPath, ".ai", "project.manifest.json");
 const ensureDir = (targetPath) => fs.mkdirSync(targetPath, { recursive: true });
 const writeFile = (targetPath, content) => {
   ensureDir(path.dirname(targetPath));
@@ -74,7 +74,7 @@ if (mode === "copy") {
   ensureDir(path.join(destinationPath, ".cursor"));
   ensureDir(path.join(destinationPath, ".codex"));
   ensureDir(path.join(destinationPath, ".agent"));
-  ensureDir(path.join(destinationPath, ".agents", "runtime"));
+  ensureDir(path.join(destinationPath, ".ai", "runtime"));
   writeFile(path.join(destinationPath, "AGENTS.md"), agentsContent + "\\n");
   writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
   writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");
@@ -94,9 +94,9 @@ if (mode === "copy") {
   writeFile(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
   writeFile(path.join(destinationPath, ".agent", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
-  writeFile(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
-  writeFile(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
-  writeFile(path.join(destinationPath, ".agents", "runtime", "orchestrator-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".ai", "runtime", "task-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".ai", "runtime", "review-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".ai", "runtime", "orchestrator-state.mjs"), "console.log('ok')\\n");
   writeFile(
     path.join(destinationPath, ".copier-answers.yml"),
     "_src_path: " + templatePath + "\\nproject_slug: fixture\\n"
@@ -117,7 +117,7 @@ export function createFakeExecutable(directory: string, name: string, content: s
 }
 
 export function installReviewRuntime(repoRoot: string): void {
-  const runtimeDir = path.join(repoRoot, ".agents", "runtime");
+  const runtimeDir = path.join(repoRoot, ".ai", "runtime");
   fs.mkdirSync(runtimeDir, { recursive: true });
 
   fs.writeFileSync(
@@ -126,7 +126,7 @@ export function installReviewRuntime(repoRoot: string): void {
 import fs from "node:fs";
 import path from "node:path";
 const [, , command = "show", arg1 = "", ...rest] = process.argv;
-const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
+const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
 function readState() {
   if (!fs.existsSync(reviewStatePath)) return { status: "missing", history: [] };
   return JSON.parse(fs.readFileSync(reviewStatePath, "utf8"));
@@ -174,9 +174,9 @@ export function installStopGuard(repoRoot: string): string {
     `#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-const taskStatePath = path.join(process.cwd(), ".agents", "runtime", "task-state.json");
-const reviewStatePath = path.join(process.cwd(), ".agents", "runtime", "review-verdict.json");
-const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
+const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
+const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, "utf8"));

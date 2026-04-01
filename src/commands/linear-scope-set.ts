@@ -53,7 +53,7 @@ export function runLinearScopeSetCommand(
       details: {
         tracker: nextConfig.workflow.tracker,
         scope: nextConfig.linear.scopes[0],
-        wouldWrite: ["ai.config.yaml", ".agents/project.manifest.json", LINEAR_SCOPE_FILE, CURSOR_SETTINGS_FILE]
+        wouldWrite: ["ai.config.yaml", ".ai/project.manifest.json", LINEAR_SCOPE_FILE, CURSOR_SETTINGS_FILE]
       }
     };
   }
@@ -69,7 +69,7 @@ export function runLinearScopeSetCommand(
     details: {
       tracker: nextConfig.workflow.tracker,
       scope: nextConfig.linear.scopes[0],
-      created: ["ai.config.yaml", ".agents/project.manifest.json", scopePath, settingsPath]
+      created: ["ai.config.yaml", ".ai/project.manifest.json", scopePath, settingsPath]
     }
   };
 }

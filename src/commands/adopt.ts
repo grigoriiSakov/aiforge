@@ -58,7 +58,7 @@ export async function runAdoptCommand(options: {
       ok: true,
       code: 0,
       message: `Dry-run adopt for profile ${profileId}`,
-      details: { detected, wouldWrite: ["ai.config.yaml", ".agents/project.manifest.json"] }
+      details: { detected, wouldWrite: ["ai.config.yaml", ".ai/project.manifest.json"] }
     };
   }
 

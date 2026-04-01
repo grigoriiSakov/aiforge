@@ -56,7 +56,7 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, ".agents", "runtime", "orchestrator-state.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs"))).toBe(true);
     const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
     expect(answersContent).toContain("_src_path:");
     expect(answersContent).not.toContain("_commit:");
@@ -108,14 +108,14 @@ describe("command flow", () => {
 
   test("orchestrator runtime serializes related issues and direct conflicts", () => {
     const repoRoot = makeTempRepo("ai-simple-orchestrator-runtime-");
-    const runtimeDir = path.join(repoRoot, ".agents", "runtime");
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
     fs.mkdirSync(runtimeDir, { recursive: true });
 
     const templatePath = path.join(
       process.cwd(),
       "template",
       "base",
-      ".agents",
+      ".ai",
       "runtime",
       "orchestrator-state.mjs.jinja"
     );
@@ -214,7 +214,7 @@ describe("command flow", () => {
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, CONFIG_FILE_NAME))).toBe(false);
-    expect(fs.existsSync(path.join(repoRoot, ".agents", "project.manifest.json"))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "project.manifest.json"))).toBe(false);
   });
 
   test("adopt uses detected profile and keeps repo healthy", async () => {
@@ -239,7 +239,7 @@ describe("command flow", () => {
     fs.rmSync(path.join(repoRoot, "MANIFESTO.md"));
     fs.rmSync(path.join(repoRoot, "llms.txt"));
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "project.manifest.json"),
+      path.join(repoRoot, ".ai", "project.manifest.json"),
       JSON.stringify({ stale: true }, null, 2) + "\n"
     );
 
@@ -474,7 +474,7 @@ describe("command flow", () => {
     const repoRoot = copyFixture("python-fastapi-docker");
     await runAdoptCommand({ repoRoot, dryRun: false });
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "project.manifest.json"),
+      path.join(repoRoot, ".ai", "project.manifest.json"),
       JSON.stringify({ stale: true }, null, 2) + "\n"
     );
 
@@ -581,7 +581,8 @@ const mode = args.includes("copy") ? "copy" : args.includes("update") ? "update"
 if (mode === "help") process.exit(0);
 const destinationPath = mode === "copy" ? args[args.length - 1] : process.cwd();
 fs.mkdirSync(path.join(destinationPath, ".cursor"), { recursive: true });
-fs.mkdirSync(path.join(destinationPath, ".agents", "runtime"), { recursive: true });
+fs.mkdirSync(path.join(destinationPath, ".agents"), { recursive: true });
+fs.mkdirSync(path.join(destinationPath, ".ai", "runtime"), { recursive: true });
 fs.writeFileSync(path.join(destinationPath, "AGENTS.md"), "# generated\\n");
 fs.writeFileSync(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
 fs.writeFileSync(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
@@ -589,8 +590,8 @@ fs.writeFileSync(path.join(destinationPath, ".cursor", "linear-scope.json"), "[]
 fs.writeFileSync(path.join(destinationPath, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
 fs.writeFileSync(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
 fs.writeFileSync(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
-fs.writeFileSync(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
-fs.writeFileSync(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
+fs.writeFileSync(path.join(destinationPath, ".ai", "runtime", "task-state.mjs"), "console.log('ok')\\n");
+fs.writeFileSync(path.join(destinationPath, ".ai", "runtime", "review-state.mjs"), "console.log('ok')\\n");
 fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slug: fixture\\n");
 `
     );
@@ -689,7 +690,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     const stopGuardPath = installStopGuard(repoRoot);
 
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "project.manifest.json"),
+      path.join(repoRoot, ".ai", "project.manifest.json"),
       JSON.stringify(
         {
           task: {
@@ -705,7 +706,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     );
 
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "runtime", "task-state.json"),
+      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
       JSON.stringify(
         {
           history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
@@ -718,12 +719,12 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     const initialGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(initialGuard.stopReason).toBe("review_missing");
 
-    runNodeScript(path.join(repoRoot, ".agents", "runtime", "review-state.mjs"), ["start"], repoRoot);
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["start"], repoRoot);
     const pendingGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(pendingGuard.stopReason).toBe("review_pending");
 
     runNodeScript(
-      path.join(repoRoot, ".agents", "runtime", "review-state.mjs"),
+      path.join(repoRoot, ".ai", "runtime", "review-state.mjs"),
       ["verdict", "clean", "review passed"],
       repoRoot
     );
@@ -744,7 +745,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     installCodexHookTemplates(repoRoot);
 
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "project.manifest.json"),
+      path.join(repoRoot, ".ai", "project.manifest.json"),
       JSON.stringify(
         {
           task: {
@@ -764,7 +765,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     );
 
     fs.writeFileSync(
-      path.join(repoRoot, ".agents", "runtime", "task-state.json"),
+      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
       JSON.stringify(
         {
           history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
@@ -781,7 +782,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(missingReviewGuard.stopReason).toBe("review_missing");
     expect(missingReviewGuard.systemMessage).toContain("Run just review");
 
-    runNodeScript(path.join(repoRoot, ".agents", "runtime", "review-state.mjs"), ["start"], repoRoot);
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["start"], repoRoot);
     const pendingReviewGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(pendingReviewGuard.stopReason).toBe("review_pending");
     expect(pendingReviewGuard.systemMessage).toContain("just review");

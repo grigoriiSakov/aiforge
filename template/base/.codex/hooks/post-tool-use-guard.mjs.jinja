@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 function readManifest() {
-  const manifestPath = path.join(process.cwd(), ".agents", "project.manifest.json");
+  const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
   if (!fs.existsSync(manifestPath)) {
     return null;
   }
@@ -56,7 +56,7 @@ process.stdin.on("end", () => {
         continue: true,
         systemMessage:
           typeof tasks.review === "string" && matchesCanonicalTask(command, taskCommand, tasks.review)
-          ? "Review task finished. Record the final verdict with `node .agents/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+          ? "Review task finished. Record the final verdict with `node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
           : "Task command finished. Re-check workflow state before stopping."
       },
       null,

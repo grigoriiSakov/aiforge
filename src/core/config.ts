@@ -7,7 +7,7 @@ import { getProfileDefinition } from "./profiles/definitions.js";
 import type { DetectionResult, ProjectConfig, ProjectProfileId } from "./types.js";
 
 export const CONFIG_FILE_NAME = "ai.config.yaml";
-export const MACHINE_MANIFEST_PATH = path.join(".agents", "project.manifest.json");
+export const MACHINE_MANIFEST_PATH = path.join(".ai", "project.manifest.json");
 
 export function createConfig(params: {
   repoRoot: string;

@@ -4,45 +4,45 @@ tasks:
   {{ task_build_name }}:
     desc: Canonical build task
     cmds:
-      - node .agents/runtime/task-state.mjs pre {{ task_build_name }}
+      - node .ai/runtime/task-state.mjs pre {{ task_build_name }}
 {% for command in commands.build -%}
       - {{ command }}
 {% endfor -%}
-      - node .agents/runtime/task-state.mjs post {{ task_build_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_build_name }}
 
   {{ task_test_name }}:
     desc: Canonical test task
     cmds:
-      - node .agents/runtime/task-state.mjs pre {{ task_test_name }}
+      - node .ai/runtime/task-state.mjs pre {{ task_test_name }}
 {% for command in commands.test -%}
       - {{ command }}
 {% endfor -%}
-      - node .agents/runtime/task-state.mjs post {{ task_test_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_test_name }}
 
   {{ task_lint_name }}:
     desc: Canonical lint task
     cmds:
-      - node .agents/runtime/task-state.mjs pre {{ task_lint_name }}
+      - node .ai/runtime/task-state.mjs pre {{ task_lint_name }}
 {% for command in commands.lint -%}
       - {{ command }}
 {% endfor -%}
-      - node .agents/runtime/task-state.mjs post {{ task_lint_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_lint_name }}
 
   {{ task_verify_name }}:
     desc: Canonical verify task
     cmds:
-      - node .agents/runtime/task-state.mjs pre {{ task_verify_name }}
+      - node .ai/runtime/task-state.mjs pre {{ task_verify_name }}
 {% for command in commands.verify -%}
       - {{ command }}
 {% endfor -%}
-      - node .agents/runtime/task-state.mjs post {{ task_verify_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_verify_name }}
 
   {{ task_review_name }}:
     desc: Canonical review task
     cmds:
-      - node .agents/runtime/task-state.mjs pre {{ task_review_name }}
-      - node .agents/runtime/review-state.mjs start
+      - node .ai/runtime/task-state.mjs pre {{ task_review_name }}
+      - node .ai/runtime/review-state.mjs start
 {% for command in commands.review -%}
       - {{ command }}
 {% endfor -%}
-      - node .agents/runtime/task-state.mjs post {{ task_review_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_review_name }}
