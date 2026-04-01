@@ -28,7 +28,12 @@ export function createConfig(params: {
     workflow: {
       tracker: profile.trackerDefault,
       phases: ["issue", "plan", "build", "test", "review"],
-      language: profile.languageDefault
+      language: profile.languageDefault,
+      trackerStates: {
+        planReady: "Todo",
+        active: "In Progress",
+        review: "In Review"
+      }
     },
     linear: {
       enabled: profile.linearDefaults.enabled,
@@ -38,6 +43,11 @@ export function createConfig(params: {
     profile: {
       id: params.profileId,
       ...(params.detectionResult?.reasons ? { detectedFrom: params.detectionResult.reasons } : {})
+    },
+    orchestrator: {
+      worktreeRoot: `~/worktrees/${params.projectSlug}`,
+      branchPrefix: "agent/",
+      maxReviewIterations: 3
     },
     runtimes: {
       cursor: true,
@@ -129,10 +139,16 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     main_branch: config.project.mainBranch,
     workflow_tracker: config.workflow.tracker,
     workflow_language: config.workflow.language,
+    tracker_status_plan_ready: config.workflow.trackerStates.planReady,
+    tracker_status_active: config.workflow.trackerStates.active,
+    tracker_status_review: config.workflow.trackerStates.review,
     linear_enabled: config.linear.enabled,
     linear_require_tracker: config.linear.requireTrackerForIssueFlow,
     linear_scopes: config.linear.scopes,
     profile_id: config.profile.id,
+    orchestrator_worktree_root: config.orchestrator.worktreeRoot,
+    orchestrator_branch_prefix: config.orchestrator.branchPrefix,
+    orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
     enable_cursor: config.runtimes.cursor,
     enable_codex: config.runtimes.codex,
     enable_agent: config.runtimes.agent,
@@ -167,6 +183,25 @@ function validateConfig(config: ProjectConfig): void {
 
   if (!config.profile.id) {
     throw new Error("Config profile.id is required");
+  }
+
+  if (
+    !config.workflow?.trackerStates?.planReady ||
+    !config.workflow?.trackerStates?.active ||
+    !config.workflow?.trackerStates?.review
+  ) {
+    throw new Error("Config workflow.trackerStates.{planReady,active,review} are required");
+  }
+
+  if (!config.orchestrator?.worktreeRoot || !config.orchestrator?.branchPrefix) {
+    throw new Error("Config orchestrator.worktreeRoot and orchestrator.branchPrefix are required");
+  }
+
+  if (
+    !Number.isInteger(config.orchestrator.maxReviewIterations) ||
+    config.orchestrator.maxReviewIterations < 1
+  ) {
+    throw new Error("Config orchestrator.maxReviewIterations must be an integer >= 1");
   }
 
   if (!config.manifesto?.path || !config.manifesto?.title) {
@@ -246,7 +281,11 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     },
     workflow: {
       ...defaults.workflow,
-      ...config.workflow
+      ...config.workflow,
+      trackerStates: {
+        ...defaults.workflow.trackerStates,
+        ...config.workflow?.trackerStates
+      }
     },
     linear: {
       ...defaults.linear,
@@ -255,6 +294,10 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     profile: {
       ...defaults.profile,
       ...config.profile
+    },
+    orchestrator: {
+      ...defaults.orchestrator,
+      ...config.orchestrator
     },
     runtimes: {
       ...defaults.runtimes,

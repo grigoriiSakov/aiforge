@@ -1,0 +1,788 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const DEFAULT_BASE_BRANCH = "{{ main_branch }}";
+const DEFAULT_WORKTREE_ROOT = "{{ orchestrator_worktree_root }}";
+const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
+const MAX_REVIEW_ITERATIONS = {{ orchestrator_max_review_iterations }};
+
+const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
+  "reserved",
+  "building",
+  "testing",
+  "reviewing",
+  "fix-loop",
+  "awaiting-finalize"
+]);
+const PENDING_STATUSES = new Set(["queued", "blocked-by-conflict"]);
+const FLOW_COMPLETE_STATUSES = new Set(["awaiting-finalize", "done"]);
+const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
+const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".agent/", ".agents/"];
+const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.md", "Taskfile.yml"]);
+const ALLOWED_STATUS_TRANSITIONS = {
+  submitted: new Set(["reserved", "queued", "blocked-by-conflict", "aborted"]),
+  reserved: new Set(["building", "testing", "aborted"]),
+  building: new Set(["building", "testing", "fix-loop", "aborted"]),
+  testing: new Set(["testing", "reviewing", "fix-loop", "aborted"]),
+  reviewing: new Set(["reviewing", "fix-loop", "awaiting-finalize", "aborted"]),
+  "fix-loop": new Set(["fix-loop", "testing", "aborted"]),
+  "awaiting-finalize": new Set(["fix-loop", "awaiting-finalize", "done", "aborted"]),
+  queued: new Set(["queued", "reserved", "blocked-by-conflict", "aborted"]),
+  "blocked-by-conflict": new Set(["blocked-by-conflict", "queued", "reserved", "aborted"]),
+  done: new Set(["done"]),
+  aborted: new Set(["aborted"])
+};
+
+function utcNow() {
+  return new Date().toISOString();
+}
+
+function repoRoot() {
+  return process.cwd();
+}
+
+function expandHome(targetPath) {
+  if (!targetPath.startsWith("~/")) {
+    return targetPath;
+  }
+  return path.join(os.homedir(), targetPath.slice(2));
+}
+
+function orchestratorRoot() {
+  return path.join(repoRoot(), ".agents", "runtime", "orchestrator");
+}
+
+function runsDir() {
+  return path.join(orchestratorRoot(), "runs");
+}
+
+function registryPath() {
+  return path.join(orchestratorRoot(), "registry.json");
+}
+
+function ensureStateDirs() {
+  fs.mkdirSync(runsDir(), { recursive: true });
+}
+
+function defaultRegistry() {
+  return {
+    version: 1,
+    updatedAt: utcNow(),
+    worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT),
+    branchPrefix: DEFAULT_BRANCH_PREFIX,
+    activeReservations: {},
+    queue: [],
+    blocked: {},
+    runs: {}
+  };
+}
+
+function readJson(filePath, fallback) {
+  if (!fs.existsSync(filePath)) {
+    return fallback;
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeJson(filePath, payload) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function loadRegistry() {
+  ensureStateDirs();
+  if (!fs.existsSync(registryPath())) {
+    const registry = defaultRegistry();
+    writeJson(registryPath(), registry);
+    return registry;
+  }
+  return readJson(registryPath(), defaultRegistry());
+}
+
+function saveRegistry(registry) {
+  registry.updatedAt = utcNow();
+  writeJson(registryPath(), registry);
+}
+
+function runPath(issueId) {
+  return path.join(runsDir(), `${issueId}.json`);
+}
+
+function loadRun(issueId) {
+  return readJson(runPath(issueId), null);
+}
+
+function saveRun(run) {
+  run.updatedAt = utcNow();
+  writeJson(runPath(run.issueId), run);
+}
+
+function normalizePath(rawPath) {
+  return rawPath.replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "").trim();
+}
+
+function dedupe(values) {
+  return [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
+}
+
+function isFileLevelClaim(claimPath) {
+  const normalized = normalizePath(claimPath);
+  if (!normalized) {
+    return false;
+  }
+  const absolutePath = path.join(repoRoot(), normalized);
+  if (fs.existsSync(absolutePath)) {
+    return fs.statSync(absolutePath).isFile();
+  }
+  const baseName = path.posix.basename(normalized);
+  return baseName.includes(".") || PROCESS_LAYER_FILES.has(baseName);
+}
+
+function isProcessLayerPath(claimPath) {
+  const normalized = normalizePath(claimPath);
+  return PROCESS_LAYER_FILES.has(normalized) || PROCESS_LAYER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function parseScope(raw) {
+  const scope = {
+    areas: dedupe(Array.isArray(raw?.areas) ? raw.areas : []),
+    paths: dedupe(Array.isArray(raw?.paths) ? raw.paths.map(normalizePath) : []),
+    sharedSurfaces: dedupe(
+      Array.isArray(raw?.shared_surfaces) ? raw.shared_surfaces.map(normalizePath) : []
+    ),
+    relatedIssues: dedupe(
+      Array.isArray(raw?.related_issues) ? raw.related_issues : []
+    ),
+    touchesProcessLayer: Boolean(raw?.touches_process_layer)
+  };
+
+  if (scope.paths.length === 0 && scope.sharedSurfaces.length === 0) {
+    throw new Error("claimed_write_scope must include at least one file in paths or shared_surfaces");
+  }
+
+  const invalidClaims = [...scope.paths, ...scope.sharedSurfaces].filter((claimPath) => !isFileLevelClaim(claimPath));
+  if (invalidClaims.length > 0) {
+    throw new Error(
+      `claimed_write_scope paths/shared_surfaces must be exact files, not directories: ${invalidClaims.join(", ")}`
+    );
+  }
+
+  if (scope.touchesProcessLayer) {
+    const processClaims = [...scope.paths, ...scope.sharedSurfaces].filter(isProcessLayerPath);
+    if (processClaims.length === 0) {
+      throw new Error(
+        "touches_process_layer=true requires at least one claimed file in .ai/.cursor/.codex/.agent/.agents or root process files"
+      );
+    }
+  }
+
+  return scope;
+}
+
+function scopeToJson(scope) {
+  return {
+    areas: scope.areas,
+    paths: scope.paths,
+    shared_surfaces: scope.sharedSurfaces,
+    related_issues: scope.relatedIssues,
+    touches_process_layer: scope.touchesProcessLayer
+  };
+}
+
+function pathOverlap(left, right) {
+  const leftPath = normalizePath(left);
+  const rightPath = normalizePath(right);
+  return leftPath === rightPath;
+}
+
+function collectConflicts(issueId, incomingScope, registry) {
+  const activeIssues = Object.keys(registry.activeReservations ?? {});
+  const conflicts = [];
+
+  for (const otherIssueId of activeIssues) {
+    if (otherIssueId === issueId) {
+      continue;
+    }
+
+    const otherRun = loadRun(otherIssueId);
+    if (!otherRun) {
+      continue;
+    }
+
+    const otherScope = parseScope(otherRun.claimedWriteScope);
+    const explicitRelation =
+      incomingScope.relatedIssues.includes(otherIssueId) || otherScope.relatedIssues.includes(issueId);
+    const fileOverlap =
+      incomingScope.paths.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
+      incomingScope.paths.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right))) ||
+      incomingScope.sharedSurfaces.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
+      incomingScope.sharedSurfaces.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right)));
+
+    if (fileOverlap) {
+      conflicts.push({ issueId: otherIssueId, relation: "hard-conflict" });
+      continue;
+    }
+
+    if (explicitRelation) {
+      conflicts.push({ issueId: otherIssueId, relation: "related-conflict" });
+    }
+  }
+
+  return conflicts;
+}
+
+function buildRun(issueId, scope, existingRun, overrides = {}) {
+  return {
+    issueId,
+    status: overrides.status ?? existingRun?.status ?? "submitted",
+    branch: overrides.branch ?? existingRun?.branch ?? `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`,
+    baseBranch: overrides.baseBranch ?? existingRun?.baseBranch ?? DEFAULT_BASE_BRANCH,
+    worktreePath: overrides.worktreePath ?? existingRun?.worktreePath ?? null,
+    claimedWriteScope: scopeToJson(scope),
+    currentStep: overrides.currentStep ?? existingRun?.currentStep ?? "awaiting-admission",
+    conflictsWith: overrides.conflictsWith ?? existingRun?.conflictsWith ?? [],
+    reviewIteration: overrides.reviewIteration ?? existingRun?.reviewIteration ?? 0,
+    lastTestResult: overrides.lastTestResult ?? existingRun?.lastTestResult ?? null,
+    lastTestFingerprint: overrides.lastTestFingerprint ?? existingRun?.lastTestFingerprint ?? null,
+    lastReviewResult: overrides.lastReviewResult ?? existingRun?.lastReviewResult ?? null,
+    lastReviewFingerprint: overrides.lastReviewFingerprint ?? existingRun?.lastReviewFingerprint ?? null,
+    submittedAt: existingRun?.submittedAt ?? utcNow(),
+    updatedAt: utcNow()
+  };
+}
+
+function updateRegistryForRun(registry, run) {
+  registry.runs[run.issueId] = {
+    status: run.status,
+    branch: run.branch,
+    worktreePath: run.worktreePath,
+    currentStep: run.currentStep,
+    conflictsWith: run.conflictsWith,
+    updatedAt: run.updatedAt
+  };
+}
+
+function requireTransition(currentStatus, nextStatus) {
+  const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? new Set([nextStatus]);
+  if (!allowed.has(nextStatus)) {
+    throw new Error(`invalid orchestrator transition: ${currentStatus} -> ${nextStatus}`);
+  }
+}
+
+function runGit(args, cwd = repoRoot(), allowFailure = false) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8"
+  });
+  if (!allowFailure && result.status !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args.join(" ")} failed`);
+  }
+  return result;
+}
+
+function gitOutput(args, cwd = repoRoot(), allowFailure = false) {
+  const result = runGit(args, cwd, allowFailure);
+  return (result.stdout ?? "").trim();
+}
+
+function resolveStartPoint(baseBranch) {
+  const remoteBranch = `origin/${baseBranch}`;
+  const remoteCheck = runGit(["rev-parse", "--verify", remoteBranch], repoRoot(), true);
+  if (remoteCheck.status === 0) {
+    return remoteBranch;
+  }
+
+  const localCheck = runGit(["rev-parse", "--verify", baseBranch], repoRoot(), true);
+  if (localCheck.status === 0) {
+    return baseBranch;
+  }
+
+  return "HEAD";
+}
+
+function currentWorkspaceFingerprint(run) {
+  if (!run.worktreePath) {
+    throw new Error("worktree is required for this orchestrator step");
+  }
+  const worktreePath = run.worktreePath;
+  if (!fs.existsSync(worktreePath)) {
+    throw new Error(`worktree not found: ${worktreePath}`);
+  }
+
+  const head = gitOutput(["rev-parse", "HEAD"], worktreePath);
+  const status = gitOutput(["status", "--short"], worktreePath, true);
+  const diff = gitOutput(["diff", "--binary", "HEAD", "--"], worktreePath, true);
+  return JSON.stringify({ head, status, diff });
+}
+
+function requirePassingTest(run) {
+  if (run.lastTestResult !== "pass") {
+    throw new Error("cannot move to review without passing test evidence for current worktree");
+  }
+  const currentFingerprint = currentWorkspaceFingerprint(run);
+  if (run.lastTestFingerprint !== currentFingerprint) {
+    throw new Error("worktree changed after the last passing test; rerun testing before review");
+  }
+}
+
+function requireCleanReview(run) {
+  if (!["clean", "low"].includes(run.lastReviewResult)) {
+    throw new Error("cannot finalize without clean or low review result");
+  }
+  const currentFingerprint = currentWorkspaceFingerprint(run);
+  if (run.lastReviewFingerprint !== currentFingerprint) {
+    throw new Error("worktree changed after the last clean review; rerun review");
+  }
+}
+
+function reconcilePendingRuns(registry) {
+  const candidates = [
+    ...(registry.queue ?? []),
+    ...Object.keys(registry.blocked ?? {}).filter((issueId) => !(registry.queue ?? []).includes(issueId))
+  ];
+  const promoted = [];
+  const nextQueue = [];
+  const nextBlocked = {};
+
+  for (const issueId of candidates) {
+    const run = loadRun(issueId);
+    if (!run) {
+      continue;
+    }
+    const scope = parseScope(run.claimedWriteScope);
+    const conflicts = collectConflicts(issueId, scope, registry);
+    run.conflictsWith = conflicts.map((entry) => entry.issueId);
+
+    if (conflicts.some((entry) => entry.relation === "hard-conflict")) {
+      run.status = "blocked-by-conflict";
+      nextBlocked[issueId] = run.conflictsWith;
+    } else if (conflicts.length > 0) {
+      run.status = "queued";
+      nextQueue.push(issueId);
+    } else {
+      run.status = "reserved";
+      registry.activeReservations[issueId] = scopeToJson(scope);
+      promoted.push(issueId);
+    }
+
+    saveRun(run);
+    updateRegistryForRun(registry, run);
+  }
+
+  registry.queue = nextQueue;
+  registry.blocked = nextBlocked;
+  return promoted;
+}
+
+function commandInit() {
+  ensureStateDirs();
+  const registry = loadRegistry();
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(registry, null, 2)}\n`);
+}
+
+function commandSubmit(args) {
+  const issueId = requireOption(args, "--issue");
+  const scopeJson = requireOption(args, "--scope-json");
+  const scope = parseScope(JSON.parse(scopeJson));
+  const baseBranch = getOption(args, "--base-branch", DEFAULT_BASE_BRANCH);
+  const branch = getOption(args, "--branch", `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`);
+
+  const registry = loadRegistry();
+  const run = buildRun(issueId, scope, loadRun(issueId), {
+    status: "submitted",
+    branch,
+    baseBranch,
+    currentStep: "awaiting-admission"
+  });
+
+  delete registry.activeReservations[issueId];
+  registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
+  delete registry.blocked[issueId];
+
+  const conflicts = collectConflicts(issueId, scope, registry);
+  run.conflictsWith = conflicts.map((entry) => entry.issueId);
+
+  if (conflicts.some((entry) => entry.relation === "hard-conflict")) {
+    run.status = "blocked-by-conflict";
+    registry.blocked[issueId] = run.conflictsWith;
+  } else if (conflicts.length > 0) {
+    run.status = "queued";
+    registry.queue.push(issueId);
+  } else {
+    run.status = "reserved";
+    registry.activeReservations[issueId] = scopeToJson(scope);
+  }
+
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandRelease(args) {
+  const issueId = requireOption(args, "--issue");
+  const status = getOption(args, "--status", "aborted");
+  const currentStep = getOption(args, "--current-step", "released");
+  const removeWorktree = args.includes("--remove-worktree");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+
+  delete registry.activeReservations[issueId];
+  registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
+  delete registry.blocked[issueId];
+
+  if (removeWorktree && run.worktreePath && fs.existsSync(run.worktreePath)) {
+    runGit(["worktree", "remove", "--force", run.worktreePath], repoRoot(), true);
+    run.worktreePath = null;
+  }
+
+  run.status = status;
+  run.currentStep = currentStep;
+  run.conflictsWith = [];
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  const promoted = reconcilePendingRuns(registry);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify({ released: issueId, promoted }, null, 2)}\n`);
+}
+
+function commandSetStatus(args) {
+  const issueId = requireOption(args, "--issue");
+  const nextStatus = requireOption(args, "--status");
+  const currentStep = getOption(args, "--current-step", null);
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+
+  requireTransition(run.status, nextStatus);
+  if (nextStatus === "reviewing") {
+    requirePassingTest(run);
+  }
+  if (nextStatus === "awaiting-finalize") {
+    requirePassingTest(run);
+    requireCleanReview(run);
+  }
+  if (["building", "testing", "fix-loop"].includes(nextStatus)) {
+    run.lastReviewResult = null;
+    run.lastReviewFingerprint = null;
+  }
+
+  run.status = nextStatus;
+  if (currentStep) {
+    run.currentStep = currentStep;
+  }
+  saveRun(run);
+
+  if (ACTIVE_SCOPE_HOLDER_STATUSES.has(run.status)) {
+    registry.activeReservations[issueId] = run.claimedWriteScope;
+  } else {
+    delete registry.activeReservations[issueId];
+    registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
+    delete registry.blocked[issueId];
+    reconcilePendingRuns(registry);
+  }
+
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandRecordTest(args) {
+  const issueId = requireOption(args, "--issue");
+  const result = requireOption(args, "--result");
+  const currentStep = getOption(args, "--current-step", null);
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (!["pass", "fail"].includes(result)) {
+    throw new Error("record-test result must be pass or fail");
+  }
+
+  const fingerprint = currentWorkspaceFingerprint(run);
+  run.lastTestResult = result;
+  run.lastTestFingerprint = fingerprint;
+  run.lastReviewResult = null;
+  run.lastReviewFingerprint = null;
+
+  if (result === "fail") {
+    run.status = "fix-loop";
+    run.currentStep = currentStep ?? "tests failed";
+  } else if (currentStep) {
+    run.currentStep = currentStep;
+  }
+
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandRecordReview(args) {
+  const issueId = requireOption(args, "--issue");
+  const result = requireOption(args, "--result");
+  const currentStep = getOption(args, "--current-step", null);
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (run.status !== "reviewing") {
+    throw new Error(`cannot record review in status ${run.status}; move run to reviewing first`);
+  }
+  if (!REVIEW_RESULTS.has(result)) {
+    throw new Error(`unknown review result: ${result}`);
+  }
+
+  requirePassingTest(run);
+  const fingerprint = currentWorkspaceFingerprint(run);
+  run.lastReviewResult = result;
+  run.lastReviewFingerprint = fingerprint;
+
+  if (["clean", "low"].includes(result)) {
+    run.status = "awaiting-finalize";
+    run.currentStep = currentStep ?? "awaiting-user-finalize";
+  } else {
+    run.reviewIteration = Number(run.reviewIteration ?? 0) + 1;
+    if (run.reviewIteration > MAX_REVIEW_ITERATIONS) {
+      throw new Error(
+        `review fix-loop exceeded limit (${String(MAX_REVIEW_ITERATIONS)}); re-plan before continuing`
+      );
+    }
+    run.status = "fix-loop";
+    run.currentStep = currentStep ?? `review-fix-${String(run.reviewIteration)}`;
+  }
+
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandStartWorktree(args) {
+  const issueId = requireOption(args, "--issue");
+  const currentStep = getOption(args, "--current-step", "worktree-created");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (PENDING_STATUSES.has(run.status)) {
+    throw new Error(`issue ${issueId} is not reserved yet (status=${run.status})`);
+  }
+  if (!ACTIVE_SCOPE_HOLDER_STATUSES.has(run.status)) {
+    throw new Error(`issue ${issueId} is in status ${run.status}; worktree startup is not allowed`);
+  }
+  if (run.worktreePath) {
+    throw new Error(`worktree already exists for ${issueId}: ${run.worktreePath}`);
+  }
+
+  const worktreeRoot = expandHome(registry.worktreeRoot || DEFAULT_WORKTREE_ROOT);
+  const worktreePath = path.join(worktreeRoot, issueId);
+  fs.mkdirSync(worktreeRoot, { recursive: true });
+  if (fs.existsSync(worktreePath)) {
+    throw new Error(`worktree path already exists: ${worktreePath}`);
+  }
+
+  const startPoint = resolveStartPoint(run.baseBranch || DEFAULT_BASE_BRANCH);
+  const branch = run.branch || `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`;
+  const branchExists = runGit(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot(), true).status === 0;
+
+  if (branchExists) {
+    runGit(["worktree", "add", worktreePath, branch], repoRoot());
+  } else {
+    runGit(["worktree", "add", "-b", branch, worktreePath, startPoint], repoRoot());
+  }
+
+  run.worktreePath = worktreePath;
+  run.status = "building";
+  run.currentStep = currentStep;
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandStatus(args) {
+  const issueId = getOption(args, "--issue", null);
+  if (issueId) {
+    const run = loadRun(issueId);
+    if (!run) {
+      throw new Error(`unknown issue: ${issueId}`);
+    }
+    process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+    return;
+  }
+
+  process.stdout.write(`${JSON.stringify(loadRegistry(), null, 2)}\n`);
+}
+
+function commandGraphNext(args) {
+  const issueId = positionalArg(args, 2);
+  if (!issueId) {
+    throw new Error("graph next requires ISSUE-ID");
+  }
+
+  const run = loadRun(issueId);
+  if (!run) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          step: "pending",
+          action: "run_plan",
+          issue: issueId,
+          message: "No orchestrator run exists yet. Create a plan with Claimed Write Scope first."
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  let payload;
+  if (run.status === "reserved" && !run.worktreePath) {
+    payload = {
+      step: "pending",
+      action: "start_worktree",
+      issue: issueId,
+      worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT)
+    };
+  } else if (["reserved", "building", "testing", "fix-loop"].includes(run.status)) {
+    payload = {
+      step: "pending",
+      action: "run_build",
+      issue: issueId,
+      worktreePath: run.worktreePath
+    };
+  } else if (run.status === "reviewing") {
+    payload = {
+      step: "pending",
+      action: "run_review",
+      issue: issueId,
+      worktreePath: run.worktreePath
+    };
+  } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
+    payload = {
+      step: "waiting_conflict",
+      issue: issueId,
+      status: run.status,
+      conflictsWith: run.conflictsWith
+    };
+  } else if (FLOW_COMPLETE_STATUSES.has(run.status)) {
+    payload = {
+      step: "flow_complete",
+      issue: issueId,
+      status: run.status,
+      worktreePath: run.worktreePath
+    };
+  } else {
+    payload = {
+      step: "blocked",
+      issue: issueId,
+      status: run.status,
+      currentStep: run.currentStep
+    };
+  }
+
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function commandWorktreeEnv(args) {
+  const issueId = requireOption(args, "--issue");
+  const run = loadRun(issueId);
+  if (!run?.worktreePath) {
+    throw new Error(`issue ${issueId} does not have an orchestrator worktree yet`);
+  }
+  process.stdout.write(`export AIFORGE_WORKTREE_PATH=${JSON.stringify(run.worktreePath)}\n`);
+}
+
+function requireOption(args, name) {
+  const value = getOption(args, name, null);
+  if (!value) {
+    throw new Error(`missing required option: ${name}`);
+  }
+  return value;
+}
+
+function getOption(args, name, fallback) {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return fallback;
+  }
+  return args[index + 1] ?? fallback;
+}
+
+function positionalArg(args, index) {
+  return args[index] ?? null;
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  if (!command) {
+    throw new Error("expected orchestrator command");
+  }
+
+  switch (command) {
+    case "init":
+      commandInit();
+      return;
+    case "submit":
+      commandSubmit(args);
+      return;
+    case "release":
+      commandRelease(args);
+      return;
+    case "set-status":
+      commandSetStatus(args);
+      return;
+    case "record-test":
+      commandRecordTest(args);
+      return;
+    case "record-review":
+      commandRecordReview(args);
+      return;
+    case "start-worktree":
+      commandStartWorktree(args);
+      return;
+    case "status":
+      commandStatus(args);
+      return;
+    case "worktree-env":
+      commandWorktreeEnv(args);
+      return;
+    case "graph":
+      if (args[1] !== "next") {
+        throw new Error("supported graph subcommand: next");
+      }
+      commandGraphNext(args);
+      return;
+    default:
+      throw new Error(`unknown orchestrator command: ${command}`);
+  }
+}
+
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(2);
+}

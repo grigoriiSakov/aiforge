@@ -52,9 +52,11 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "linear-scope.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "orchestrator-claimed-scope-template.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".agents", "runtime", "orchestrator-state.mjs"))).toBe(true);
     const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
     expect(answersContent).toContain("_src_path:");
     expect(answersContent).not.toContain("_commit:");
@@ -102,6 +104,103 @@ describe("command flow", () => {
       fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
     );
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("orchestrator runtime serializes related issues and direct conflicts", () => {
+    const repoRoot = makeTempRepo("ai-simple-orchestrator-runtime-");
+    const runtimeDir = path.join(repoRoot, ".agents", "runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+
+    const templatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".agents",
+      "runtime",
+      "orchestrator-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(templatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ orchestrator_worktree_root }}", path.join(repoRoot, "worktrees"))
+      .replaceAll("{{ orchestrator_branch_prefix }}", "agent/")
+      .replaceAll("{{ orchestrator_max_review_iterations }}", "3");
+    const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
+    fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+
+    const registry = JSON.parse(runNodeScript(runtimePath, ["init"], repoRoot));
+    expect(registry.activeReservations).toEqual({});
+
+    const firstRun = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "submit",
+          "--issue",
+          "APP-1",
+          "--scope-json",
+          JSON.stringify({
+            areas: ["api"],
+            paths: ["src/api/handler.ts"],
+            shared_surfaces: [],
+            related_issues: [],
+            touches_process_layer: false
+          })
+        ],
+        repoRoot
+      )
+    );
+    expect(firstRun.status).toBe("reserved");
+
+    const relatedRun = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "submit",
+          "--issue",
+          "APP-2",
+          "--scope-json",
+          JSON.stringify({
+            areas: ["worker"],
+            paths: ["src/worker/job.ts"],
+            shared_surfaces: [],
+            related_issues: ["APP-1"],
+            touches_process_layer: false
+          })
+        ],
+        repoRoot
+      )
+    );
+    expect(relatedRun.status).toBe("queued");
+
+    const conflictingRun = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "submit",
+          "--issue",
+          "APP-3",
+          "--scope-json",
+          JSON.stringify({
+            areas: ["api"],
+            paths: ["src/api/handler.ts"],
+            shared_surfaces: [],
+            related_issues: [],
+            touches_process_layer: false
+          })
+        ],
+        repoRoot
+      )
+    );
+    expect(conflictingRun.status).toBe("blocked-by-conflict");
+
+    const releaseResult = JSON.parse(
+      runNodeScript(runtimePath, ["release", "--issue", "APP-1", "--status", "done"], repoRoot)
+    );
+    expect(releaseResult.promoted).toContain("APP-2");
+
+    const promotedRun = JSON.parse(runNodeScript(runtimePath, ["status", "--issue", "APP-2"], repoRoot));
+    expect(promotedRun.status).toBe("reserved");
   });
 
   test("dry-run init does not write config", async () => {
@@ -177,12 +276,20 @@ describe("command flow", () => {
       "  phases:",
       ...legacyConfig.workflow.phases.map((phase) => `    - ${phase}`),
       `  language: ${legacyConfig.workflow.language}`,
+      "  trackerStates:",
+      `    planReady: ${legacyConfig.workflow.trackerStates.planReady}`,
+      `    active: ${legacyConfig.workflow.trackerStates.active}`,
+      `    review: ${legacyConfig.workflow.trackerStates.review}`,
       "linear:",
       `  enabled: ${legacyConfig.linear.enabled}`,
       `  requireTrackerForIssueFlow: ${legacyConfig.linear.requireTrackerForIssueFlow}`,
       "  scopes: []",
       "profile:",
       `  id: ${legacyConfig.profile.id}`,
+      "orchestrator:",
+      `  worktreeRoot: ${legacyConfig.orchestrator.worktreeRoot}`,
+      `  branchPrefix: "${legacyConfig.orchestrator.branchPrefix}"`,
+      `  maxReviewIterations: ${legacyConfig.orchestrator.maxReviewIterations}`,
       "runtimes:",
       `  cursor: ${legacyConfig.runtimes.cursor}`,
       `  codex: ${legacyConfig.runtimes.codex}`,
@@ -238,6 +345,8 @@ describe("command flow", () => {
     expect(syncedConfig).toContain("\nmanifesto:\n");
     expect(syncedConfig).toContain("\n  markdown: \"\"");
     expect(syncedConfig).toContain("- path: .ai");
+    expect(syncedConfig).toContain("\n  trackerStates:\n");
+    expect(syncedConfig).toContain("\norchestrator:\n");
   });
 
   test("sync and update regenerate project profile from config markdown", async () => {

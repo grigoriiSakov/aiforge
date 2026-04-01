@@ -18,6 +18,7 @@ Turn the current request or issue into an execution artifact that is specific en
    - `.ai/reference/plan-template.md`
    - `.ai/reference/plan-progress-template.md`
    - `.ai/reference/context-artifacts.md`
+   - `.ai/reference/orchestrator-claimed-scope-template.md`
 3. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
 4. Build the plan around canonical tasks only:
    - `{{ task_command }} {{ task_build_name }}`
@@ -36,10 +37,13 @@ Turn the current request or issue into an execution artifact that is specific en
    - `Spec Coverage Matrix`
    - `Do Not Break`
    - `Acceptance Traceability`
+   - `Claimed Write Scope`
    - `Step Plan`
    - `Risk Registry`
    - `Open Questions / Blockers`
 7. If requirements are ambiguous, stop and ask focused clarification before coding.
+8. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
+9. If tracker is available and phase states are supported, planning should leave the issue in `{{ tracker_status_plan_ready }}` when the plan becomes build-ready.
 
 ## Storage contract
 

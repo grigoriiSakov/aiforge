@@ -13,22 +13,60 @@ Pipeline owner for:
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Treat `.ai/reference/plan-template.md` and `.ai/reference/plan-progress-template.md` as required runtime contracts.
-3. Ensure the workflow keeps a single source of truth for:
+3. Read `.ai/reference/orchestrator-claimed-scope-template.md`.
+4. Use `node .agents/runtime/orchestrator-state.mjs` as the source of truth for:
+   - reservation
+   - queue / conflict state
+   - worktree assignment
+   - build / test / review transitions
+   - terminal release
+5. Accept exactly one issue ID per orchestrator run.
+6. Do not start build until the current plan contains machine-readable `Claimed Write Scope`.
+7. Ensure the workflow keeps a single source of truth for:
    - plan memory: `PLAN::ISSUE-ID`
    - execution memory: `PROGRESS::ISSUE-ID`
-4. Use canonical task names from `ai.config.yaml`.
-5. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
-6. A phase is not complete without evidence:
+   - orchestration memory: `.agents/runtime/orchestrator/runs/ISSUE-ID.json`
+8. Register orchestrator admission through:
+   - `node .agents/runtime/orchestrator-state.mjs init`
+   - `node .agents/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
+9. Interpret submit result strictly:
+   - `reserved` -> create the isolated worktree
+   - `queued` -> stop; a related issue is still active
+   - `blocked-by-conflict` -> stop; direct file/shared-surface overlap exists
+10. Create the isolated worktree only through:
+    - `node .agents/runtime/orchestrator-state.mjs start-worktree --issue ISSUE-ID`
+11. After every side effect, re-check the next machine action through:
+    - `node .agents/runtime/orchestrator-state.mjs graph next ISSUE-ID`
+12. Use canonical task names from `ai.config.yaml`.
+13. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
+14. A phase is not complete without evidence:
    - `plan` -> complete plan artifact
    - `build` -> code changes aligned with plan
    - `test` -> canonical task evidence
    - `review` -> findings-first output plus recorded clean review verdict
-7. Re-check managed runtime state before stopping the turn.
+15. Record test/review evidence through the runtime helper:
+    - `node .agents/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
+    - `node .agents/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
+16. Re-check managed runtime state before stopping the turn.
+17. If tracker is enabled, keep issue states aligned with the workflow:
+    - plan-ready -> `{{ tracker_status_plan_ready }}`
+    - active execution -> `{{ tracker_status_active }}`
+    - review-ready -> `{{ tracker_status_review }}`
+
+## Conflict policy
+
+- Direct overlap in `paths` or `shared_surfaces` is a hard conflict.
+- Explicit `related_issues` also serialize execution, even without path overlap.
+- Directory claims are invalid; scope must be file-level exact.
+- Process-layer changes must be serialized unless the claimed files are explicitly non-overlapping.
 
 ## Stop conditions
 
 - No source request / issue contract
 - No valid plan artifact for non-trivial work
+- Missing or invalid `Claimed Write Scope`
 - Drift between source request, plan, and implementation
+- Attempt to build outside the assigned orchestrator worktree
+- Runtime state is `queued` or `blocked-by-conflict`
 - Missing verify evidence
 - Missing clean review verdict

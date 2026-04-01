@@ -16,6 +16,7 @@ alwaysApply: true
   - `Spec Coverage Matrix`
   - `Do Not Break`
   - `Acceptance Traceability`
+  - `Claimed Write Scope`
   - `Open Questions / Blockers`
 - `Open Questions / Blockers` must be empty before `/build`.
 - Reuse existing canonical surfaces before introducing new files or helpers.
@@ -36,6 +37,7 @@ alwaysApply: true
 - Do not grow god-files; decompose on touch when the file already mixes unrelated scenarios.
 - Cross-module or cross-package shortcuts that bypass declared boundaries are architecture defects.
 - Project-specific architecture laws belong in profile-specific rules on top of this generic gate file.
+- If an issue is orchestrator-managed, build must happen only inside the assigned worktree, never in the main checkout.
 
 ## Gate 3: Data / Computation
 
@@ -63,6 +65,7 @@ alwaysApply: true
   - reuse vs duplicate implementation
   - test adequacy
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.
+- For orchestrated work, review must confirm the run is still aligned with the current worktree fingerprint before marking it review-ready.
 
 ## Gate 6: Docs / Process Artifacts
 
@@ -70,3 +73,4 @@ alwaysApply: true
 - Process docs must reference only skills, rules, hooks, and runtime surfaces that actually exist.
 - If tracker/runtime process changed, keep `.ai`, `.cursor`, `.codex`, `.agent`, and `.agents` surfaces in sync.
 - Profile-specific docs/export pipelines belong in profile overlays or project-specific customization.
+- If `/orchestrator` is used, the process docs must describe `Claimed Write Scope`, conflict serialization, and external worktree ownership consistently.

@@ -86,6 +86,7 @@ if (mode === "copy") {
   writeFile(path.join(destinationPath, ".ai", "rules", "project-profile.mdc"), projectProfileLines.join("\\n") + "\\n");
   writeFile(path.join(destinationPath, ".ai", "reference", "context-budget.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"), "# generated\\n");
+  writeFile(path.join(destinationPath, ".ai", "reference", "orchestrator-claimed-scope-template.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".ai", "context", "README.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".ai", "linear-scope.json"), "[]\\n");
   writeFile(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
@@ -95,6 +96,7 @@ if (mode === "copy") {
   writeFile(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agents", "runtime", "task-state.mjs"), "console.log('ok')\\n");
   writeFile(path.join(destinationPath, ".agents", "runtime", "review-state.mjs"), "console.log('ok')\\n");
+  writeFile(path.join(destinationPath, ".agents", "runtime", "orchestrator-state.mjs"), "console.log('ok')\\n");
   writeFile(
     path.join(destinationPath, ".copier-answers.yml"),
     "_src_path: " + templatePath + "\\nproject_slug: fixture\\n"

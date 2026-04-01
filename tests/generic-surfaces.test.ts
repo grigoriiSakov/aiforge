@@ -19,6 +19,7 @@ describe("generic reusable surfaces", () => {
       ".ai/reference/context-artifacts.md.jinja",
       ".ai/reference/issue-spec-template.md.jinja",
       ".ai/reference/PROMPT_OPTIMIZATION_STRATEGY.md.jinja",
+      ".ai/reference/orchestrator-claimed-scope-template.md.jinja",
       ".ai/reference/plan-progress-template.md.jinja",
       ".ai/reference/plan-template.md.jinja",
       ".ai/reference/tracker-degraded-mode.md.jinja",
@@ -35,7 +36,8 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/check/SKILL.md.jinja",
       ".ai/skills/debug/SKILL.md.jinja",
       ".ai/skills/docs/SKILL.md.jinja",
-      ".ai/skills/tracker/SKILL.md.jinja"
+      ".ai/skills/tracker/SKILL.md.jinja",
+      ".agents/runtime/orchestrator-state.mjs.jinja"
     ];
 
     for (const relativePath of expectedPaths) {

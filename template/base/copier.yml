@@ -26,6 +26,18 @@ workflow_language:
   type: str
   default: ru
 
+tracker_status_plan_ready:
+  type: str
+  default: Todo
+
+tracker_status_active:
+  type: str
+  default: In Progress
+
+tracker_status_review:
+  type: str
+  default: In Review
+
 profile_id:
   type: str
   default: python-fastapi-docker
@@ -49,6 +61,18 @@ enable_agent:
 enable_agents:
   type: bool
   default: true
+
+orchestrator_worktree_root:
+  type: str
+  default: ~/worktrees/project
+
+orchestrator_branch_prefix:
+  type: str
+  default: agent/
+
+orchestrator_max_review_iterations:
+  type: int
+  default: 3
 
 manifesto_title:
   type: str

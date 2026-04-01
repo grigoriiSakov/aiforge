@@ -42,5 +42,12 @@ describe("config lifecycle", () => {
     expect(config.linear.enabled).toBe(true);
     expect(config.linear.requireTrackerForIssueFlow).toBe(true);
     expect(config.linear.scopes[0]?.defaultLabels).toEqual(["frontend"]);
+    expect(config.workflow.trackerStates).toEqual({
+      planReady: "Todo",
+      active: "In Progress",
+      review: "In Review"
+    });
+    expect(config.orchestrator.branchPrefix).toBe("agent/");
+    expect(config.orchestrator.maxReviewIterations).toBe(3);
   });
 });

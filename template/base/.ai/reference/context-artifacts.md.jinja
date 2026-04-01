@@ -13,6 +13,8 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 - `.ai/context/current.md`
 - `.ai/context/runtime/plan.md`
 - `.ai/context/runtime/progress.md`
+- `.agents/runtime/orchestrator/registry.json`
+- `.agents/runtime/orchestrator/runs/ISSUE-ID.json`
 
 ## `current.md`
 
@@ -34,3 +36,10 @@ If tracker-backed `PLAN::` / `PROGRESS::` artifacts are unavailable, mirror them
 - `.ai/context/runtime/progress.md`
 
 These mirrors should keep the same structure as the tracker artifacts.
+
+## Orchestrator runtime
+
+If work is coordinated through `/orchestrator`, the source of truth for reservation, queueing, and worktree ownership is:
+
+- `.agents/runtime/orchestrator/registry.json`
+- `.agents/runtime/orchestrator/runs/ISSUE-ID.json`

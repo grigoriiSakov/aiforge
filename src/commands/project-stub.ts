@@ -16,7 +16,9 @@ Please analyze this project and produce only the project-specific additions I st
 
 - Profile: \`${config.profile.id}\`
 - Tracker: \`${config.workflow.tracker}\`
+- Tracker states: \`plan-ready=${config.workflow.trackerStates.planReady}\`, \`active=${config.workflow.trackerStates.active}\`, \`review=${config.workflow.trackerStates.review}\`
 - Main branch: \`${config.project.mainBranch}\`
+- Orchestrator worktree root: \`${config.orchestrator.worktreeRoot}\`
 - Canonical tasks:
   - build: \`${config.task.command} ${config.task.tasks.build}\`
   - test: \`${config.task.command} ${config.task.tasks.test}\`
@@ -69,6 +71,8 @@ Examples:
 
 - architecture constraints specific to this repo
 - stack-specific test/lint/build commands
+- tracker phase state names if the team does not use Todo / In Progress / In Review
+- orchestrator worktree location / branch naming rules
 - docker/container names
 - package manager details
 - module/layout conventions

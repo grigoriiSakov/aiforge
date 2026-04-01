@@ -18,11 +18,13 @@ export function generateManifesto(repoRoot: string): string {
 - Profile: ${config.profile.id}
 - Main branch: ${config.project.mainBranch}
 - Tracker: ${config.workflow.tracker}
+- Tracker states: plan-ready=${config.workflow.trackerStates.planReady}, active=${config.workflow.trackerStates.active}, review=${config.workflow.trackerStates.review}
 
 ## Workflow
 
 - Canonical phases: ${config.workflow.phases.join(" -> ")}
 - Runtime surfaces: ${enabledRuntimes(config)}
+- Orchestrator worktree root: ${config.orchestrator.worktreeRoot}
 
 ## Command Contract
 

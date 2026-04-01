@@ -32,6 +32,8 @@ Findings first.
      - `node .agents/runtime/review-state.mjs verdict clean "short summary"`
    - review with findings:
      - `node .agents/runtime/review-state.mjs verdict issues-found "short summary"`
+7. If the issue is orchestrator-managed, record review evidence through `node .agents/runtime/orchestrator-state.mjs record-review ...`.
+8. If tracker is available and the implementation is review-ready, move the issue to `{{ tracker_status_review }}`.
 
 ## Output contract
 

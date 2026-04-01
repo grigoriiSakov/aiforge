@@ -13,3 +13,4 @@ Use this skill to resolve or create the task context before planning.
 2. If tracker is enabled, use `.ai/linear-scope.json` and `.ai/rules/linear-mcp.mdc`.
 3. Ensure the issue/spec has enough detail for `/plan`.
 4. If details are missing, route to `/clarify`.
+5. If this issue is expected to run via `/orchestrator`, collect related issue IDs early so `Claimed Write Scope.related_issues` can serialize risky work.

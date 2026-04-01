@@ -39,6 +39,11 @@ export interface ProjectConfig {
     tracker: TrackerType;
     phases: string[];
     language: string;
+    trackerStates: {
+      planReady: string;
+      active: string;
+      review: string;
+    };
   };
   linear: {
     enabled: boolean;
@@ -48,6 +53,11 @@ export interface ProjectConfig {
   profile: {
     id: ProjectProfileId;
     detectedFrom?: string[];
+  };
+  orchestrator: {
+    worktreeRoot: string;
+    branchPrefix: string;
+    maxReviewIterations: number;
   };
   runtimes: RuntimeFlags;
   task: {
