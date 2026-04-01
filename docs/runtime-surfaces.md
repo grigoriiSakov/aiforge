@@ -6,19 +6,20 @@
 - `.cursor/` — runtime-specific config, hooks, and symlinked views into `.ai/`
 - `.codex/` — config, hooks, and symlinked views into `.ai/`
 - `.agent/` — Antigravity-facing surface with symlinked views into `.ai/`
-- `.agents/` — Codex agent-mode surface plus project manifest and symlinked skills
+- `.agents/` — thin Codex agent-mode surface
 
-## Important distinction
+## What stays in `.agents`
 
-`.agents/` is not only a presentation surface.
+- `.agents/skills -> ../.ai/skills`
+- `.agents/README.md`
 
-In MVP it also stores:
+Everything shared or machine-readable now lives in `.ai`:
 
 - `.ai/project.manifest.json`
-- `.agents/skills -> ../.ai/skills`
-- `.ai/runtime/task-state.mjs`
-- `.ai/runtime/task-state.json`
-- `.ai/runtime/review-state.mjs`
-- `.ai/runtime/orchestrator-state.mjs`
+- `.ai/runtime/*`
+- `.ai/rules/*`
+- `.ai/skills/*`
+- `.ai/reference/*`
+- `.ai/context/*`
 
-Shared runtime scripts/state now live in `.ai/runtime`, because they must work across Cursor, Codex, `.agent`, and `.agents` equally. `.agents/` remains only the Codex agent-mode specific surface.
+So `.agents/` is now just an optional Codex agent-mode compatibility surface, not a shared source of truth.

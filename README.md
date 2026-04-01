@@ -17,7 +17,7 @@ MVP CLI-конфигуратор для стандартизации AI-facing e
 - `.cursor/settings.json`
 - `.codex/**`
 - `.agent/**`
-- `.agents/**`
+- `.agents/**` if Codex agent mode surface is enabled
 - `Taskfile.yml`
 - `llms.txt`
 - `llms/**`
@@ -55,7 +55,7 @@ npx tsx src/cli/index.ts llms build --repo /path/to/repo
 - `.agent/rules -> .ai/rules`
 - `.codex/skills -> .ai/skills`
 - `.codex/rules -> .ai/rules`
-- `.agents/skills -> .ai/skills`
+- `.agents/skills -> .ai/skills` when Codex agent mode compatibility is enabled
 
 Это generic слой. Он не должен знать твой конкретный стек глубоко.
 Например, `workflow-gates.mdc` тащит общие plan/build/test/review/docs gate'ы, а profile-specific ограничения докручиваются отдельными rules поверх него.
