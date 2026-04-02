@@ -7,6 +7,18 @@ description: Rerun the last failed or incomplete workflow step with updated cont
 
 Use this skill to rerun the last failed or incomplete workflow step with updated context.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with the retry until this preflight read is complete.
+
 ## Protocol
 
 1. Read `.ai/context/current.md`.

@@ -7,6 +7,18 @@ description: Improve structure without changing intended behavior. Use when the 
 
 Use this skill for structure improvements without changing intended behavior.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with refactoring until this preflight read is complete.
+
 ## Protocol
 
 1. Define invariants before edits.

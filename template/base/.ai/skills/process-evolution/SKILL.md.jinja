@@ -7,6 +7,18 @@ description: Evolve shared rules, shared skills, hooks, and process surfaces wit
 
 Evolve rules, hooks, and skills without drifting from actual workflow.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with process changes until this preflight read is complete.
+
 ## Rules
 
 - update source-of-truth process files first

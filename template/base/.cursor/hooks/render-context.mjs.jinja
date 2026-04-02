@@ -2,12 +2,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const [, , eventName = "manual", eventFilePath = ""] = process.argv;
 const projectDir = process.cwd();
 const manifestPath = path.join(projectDir, ".ai", "project.manifest.json");
 const taskStatePath = path.join(projectDir, ".ai", "runtime", "task-state.json");
 const reviewStatePath = path.join(projectDir, ".ai", "runtime", "review-verdict.json");
+const orchestratorRegistryPath = path.join(projectDir, ".ai", "runtime", "orchestrator", "registry.json");
+const orchestratorRunsDir = path.join(projectDir, ".ai", "runtime", "orchestrator", "runs");
 const contextDir = path.join(projectDir, ".ai", "context");
 const currentPath = path.join(contextDir, "current.md");
 
@@ -37,6 +40,71 @@ function loadEvent(filePath) {
   }
 }
 
+function loadRun(issueId) {
+  return readJson(path.join(orchestratorRunsDir, `${issueId}.json`));
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
+}
+
+function currentBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isRunBoundToCurrentContext(run, branchName) {
+  const cwd = normalizePath(process.cwd());
+  const worktreePath = normalizePath(run.worktreePath);
+  if (worktreePath && (cwd === worktreePath || cwd.startsWith(`${worktreePath}/`))) {
+    return true;
+  }
+  return Boolean(branchName && run.branch && branchName === String(run.branch));
+}
+
+function getCurrentOrchestratorRun() {
+  const registry = readJson(orchestratorRegistryPath);
+  if (!registry) {
+    return null;
+  }
+
+  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const branchName = currentBranch();
+  const orderedIssueIds = [
+    ...Object.keys(registry.activeReservations ?? {}),
+    ...Object.keys(registry.runs ?? {})
+  ];
+
+  for (const issueId of orderedIssueIds) {
+    const run = loadRun(issueId);
+    if (!run || !activeStatuses.has(run.status) || !isRunBoundToCurrentContext(run, branchName)) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function nextActionForRun(run) {
+  if (!run) {
+    return "none";
+  }
+  if (run.status === "reserved" && !run.worktreePath) {
+    return "start_worktree";
+  }
+  if (run.status === "reviewing") {
+    return "run_review";
+  }
+  return "run_build";
+}
+
 const manifest = readJson(manifestPath);
 if (!manifest) {
   process.exit(0);
@@ -44,6 +112,7 @@ if (!manifest) {
 
 const taskState = readJson(taskStatePath) ?? { history: [] };
 const reviewState = readJson(reviewStatePath);
+const orchestratorRun = getCurrentOrchestratorRun();
 const eventPayload = loadEvent(eventFilePath);
 const recentTasks = Array.isArray(taskState.history) ? taskState.history.slice(-5).reverse() : [];
 const llmsGlobs = Array.isArray(manifest.llms?.sourceGlobs) ? manifest.llms.sourceGlobs : [];
@@ -61,6 +130,16 @@ const lines = [
   `- Verify task: ${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.verify ?? "verify"}`,
   `- Review task: ${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.review ?? "review"}`,
   `- Review verdict: ${reviewState?.status ?? "missing"}`,
+  "",
+  "## Orchestrator",
+  orchestratorRun
+    ? `- Active issue: ${orchestratorRun.issueId}
+- Status: ${orchestratorRun.status}
+- Current step: ${orchestratorRun.currentStep ?? "unknown"}
+- Worktree: ${orchestratorRun.worktreePath ?? "missing"}
+- Next action: ${nextActionForRun(orchestratorRun)}
+- Rule: do not stop until orchestrator reaches flow_complete.`
+    : "- No active orchestrator run.",
   "",
   "## Recent Task Evidence",
   recentTasks.length > 0

@@ -7,6 +7,18 @@ description: Ask only the focused questions needed to unblock safe planning. Use
 
 Use this skill when the current request is too ambiguous for safe planning or build.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with clarification until this preflight read is complete.
+
 ## Protocol
 
 1. List exact ambiguities.

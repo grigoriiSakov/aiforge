@@ -809,6 +809,175 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(unmatchedLegacyCommand.systemMessage).toBeUndefined();
   });
 
+  test("codex stop guard blocks unfinished orchestrator flow", async () => {
+    const repoRoot = makeTempRepo("ai-simple-codex-orchestrator-guard-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Codex Orchestrator Guard Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    installCodexHookTemplates(repoRoot);
+
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "registry.json"),
+      JSON.stringify(
+        {
+          activeReservations: {
+            "APP-17": {
+              paths: ["src/service.ts"],
+              shared_surfaces: []
+            }
+          },
+          runs: {
+            "APP-17": {
+              status: "building"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-17.json"),
+      JSON.stringify(
+        {
+          issueId: "APP-17",
+          status: "building",
+          currentStep: "implementing",
+          worktreePath: repoRoot
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
+    const postToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "post-tool-use-guard.mjs");
+
+    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(stopGuard.stopReason).toBe("orchestrator_incomplete");
+    expect(stopGuard.systemMessage).toContain("APP-17");
+    expect(stopGuard.systemMessage).toContain("run_build");
+
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "project.manifest.json"),
+      JSON.stringify(
+        {
+          task: {
+            command: "just",
+            tasks: {
+              verify: "verify",
+              review: "review",
+              test: "test",
+              lint: "lint",
+              build: "build"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const postToolUse = JSON.parse(
+      runNodeScriptWithInput(
+        postToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_input: { command: "just build" } })
+      ).stdout
+    );
+    expect(postToolUse.continue).toBe(true);
+    expect(postToolUse.systemMessage).toContain("APP-17");
+    expect(postToolUse.systemMessage).toContain("flow_complete");
+  });
+
+  test("codex stop guard ignores orchestrator runs from another worktree", async () => {
+    const repoRoot = makeTempRepo("ai-simple-codex-orchestrator-unrelated-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Codex Unrelated Guard Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    installCodexHookTemplates(repoRoot);
+    installReviewRuntime(repoRoot);
+
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "registry.json"),
+      JSON.stringify(
+        {
+          activeReservations: {
+            "APP-99": {
+              paths: ["src/other.ts"],
+              shared_surfaces: []
+            }
+          },
+          runs: {
+            "APP-99": {
+              status: "building"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-99.json"),
+      JSON.stringify(
+        {
+          issueId: "APP-99",
+          status: "building",
+          currentStep: "implementing",
+          worktreePath: "/tmp/worktrees/APP-99"
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "project.manifest.json"),
+      JSON.stringify(
+        {
+          task: {
+            command: "just",
+            tasks: {
+              verify: "verify",
+              review: "review"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
+      JSON.stringify(
+        {
+          history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["verdict", "clean"], repoRoot);
+
+    const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
+    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+
+    expect(stopGuard.continue).toBe(true);
+    expect(stopGuard.stopReason).not.toBe("orchestrator_incomplete");
+  });
+
   test("cursor hooks build current context and block destructive commands", async () => {
     const repoRoot = makeTempRepo("ai-simple-cursor-hooks-");
     await runInitCommand({
@@ -819,6 +988,41 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     });
 
     installCursorHookTemplates(repoRoot);
+
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "registry.json"),
+      JSON.stringify(
+        {
+          activeReservations: {
+            "APP-42": {
+              paths: ["src/app.ts"],
+              shared_surfaces: []
+            }
+          },
+          runs: {
+            "APP-42": {
+              status: "building"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-42.json"),
+      JSON.stringify(
+        {
+          issueId: "APP-42",
+          status: "building",
+          currentStep: "implementing",
+          worktreePath: repoRoot
+        },
+        null,
+        2
+      ) + "\n"
+    );
 
     const sessionInitPath = path.join(repoRoot, ".cursor", "hooks", "session-init.mjs");
     const auditPath = path.join(repoRoot, ".cursor", "hooks", "audit.mjs");
@@ -842,6 +1046,9 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     );
     expect(currentContent).toContain("Cursor Hook Demo");
     expect(currentContent).toContain("vue-quasar-capacitor");
+    expect(currentContent).toContain("Active issue: APP-42");
+    expect(currentContent).toContain("Next action: run_build");
+    expect(currentContent).toContain("do not stop until orchestrator reaches flow_complete");
 
     const safeResult = runNodeScriptWithInput(blockDangerPath, [], repoRoot, "git status");
     expect(safeResult.status).toBe(0);
@@ -856,6 +1063,61 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(blockedResult.status).toBe(2);
     expect(blockedResult.stdout).toContain("\"permission\": \"deny\"");
     expect(blockedResult.stdout).toContain("destructive command");
+  });
+
+  test("cursor context ignores orchestrator runs from another worktree", async () => {
+    const repoRoot = makeTempRepo("ai-simple-cursor-orchestrator-unrelated-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Cursor Unrelated Demo",
+      profileId: "vue-quasar-capacitor",
+      dryRun: false
+    });
+
+    installCursorHookTemplates(repoRoot);
+
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "registry.json"),
+      JSON.stringify(
+        {
+          activeReservations: {
+            "APP-77": {
+              paths: ["src/app.ts"],
+              shared_surfaces: []
+            }
+          },
+          runs: {
+            "APP-77": {
+              status: "building"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-77.json"),
+      JSON.stringify(
+        {
+          issueId: "APP-77",
+          status: "building",
+          currentStep: "implementing",
+          worktreePath: "/tmp/worktrees/APP-77"
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const sessionInitPath = path.join(repoRoot, ".cursor", "hooks", "session-init.mjs");
+    runNodeScript(sessionInitPath, [], repoRoot);
+
+    const currentContent = fs.readFileSync(path.join(repoRoot, ".ai", "context", "current.md"), "utf8");
+    expect(currentContent).toContain("## Orchestrator");
+    expect(currentContent).toContain("No active orchestrator run.");
+    expect(currentContent).not.toContain("Active issue: APP-77");
   });
 
   test("project-stub prints a copyable project-specific customization prompt", async () => {

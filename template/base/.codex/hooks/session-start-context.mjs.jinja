@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 function readManifest() {
   const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
@@ -9,6 +10,75 @@ function readManifest() {
     return null;
   }
   return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+}
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
+}
+
+function currentBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isRunBoundToCurrentContext(run, branchName) {
+  const cwd = normalizePath(process.cwd());
+  const worktreePath = normalizePath(run.worktreePath);
+  if (worktreePath && (cwd === worktreePath || cwd.startsWith(`${worktreePath}/`))) {
+    return true;
+  }
+  return Boolean(branchName && run.branch && branchName === String(run.branch));
+}
+
+function getCurrentOrchestratorSummary() {
+  const registryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
+  const runsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
+  const registry = readJson(registryPath);
+  if (!registry) {
+    return null;
+  }
+
+  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const branchName = currentBranch();
+  const orderedIssueIds = [
+    ...Object.keys(registry.activeReservations ?? {}),
+    ...Object.keys(registry.runs ?? {})
+  ];
+
+  for (const issueId of orderedIssueIds) {
+    const run = readJson(path.join(runsDir, `${issueId}.json`));
+    if (!run || !activeStatuses.has(run.status) || !isRunBoundToCurrentContext(run, branchName)) {
+      continue;
+    }
+
+    const nextAction =
+      run.status === "reserved" && !run.worktreePath
+        ? "start_worktree"
+        : run.status === "reviewing"
+          ? "run_review"
+          : "run_build";
+
+    return `${run.issueId}:${run.status}:${nextAction}`;
+  }
+
+  return null;
 }
 
 const manifest = readManifest();
@@ -22,7 +92,10 @@ const additionalContext = [
   `Project: ${manifest.project.name}`,
   `Profile: ${manifest.profile.id}`,
   `Tracker: ${manifest.workflow.tracker}`,
-  `Canonical verify task: ${manifest.task.command} ${manifest.task.tasks.verify}`
+  `Canonical verify task: ${manifest.task.command} ${manifest.task.tasks.verify}`,
+  getCurrentOrchestratorSummary()
+    ? `Active orchestrator run: ${getCurrentOrchestratorSummary()}`
+    : "Active orchestrator run: none"
 ].join(" ");
 
 process.stdout.write(

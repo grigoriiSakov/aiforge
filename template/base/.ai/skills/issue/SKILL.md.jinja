@@ -7,6 +7,18 @@ description: Resolve or create task context before planning. Use when the user a
 
 Use this skill to resolve or create the task context before planning.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with issue setup until this preflight read is complete.
+
 ## Protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.

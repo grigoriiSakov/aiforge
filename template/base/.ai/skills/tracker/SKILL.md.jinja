@@ -7,6 +7,19 @@ description: Use the configured tracker as the source of issue state when tracke
 
 Use the configured tracker as the source of issue state when tracker-first workflow is enabled.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+  - `.ai/rules/linear-mcp.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with tracker work until this preflight read is complete.
+
 ## Must use
 
 - `.ai/linear-scope.json`

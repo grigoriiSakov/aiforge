@@ -7,6 +7,18 @@ description: Troubleshoot with reproduce-first discipline. Use when the user ask
 
 Use this skill for reproduce-first troubleshooting.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with debugging until this preflight read is complete.
+
 ## Protocol
 
 1. Establish the failing behavior with evidence.

@@ -9,6 +9,8 @@ alwaysApply: true
 - Generic execution gates live in `.ai/rules/workflow-gates.mdc`.
 - Shared rule and skill sources are projected into provider runtimes via symlinks; update `.ai/*` first.
 - Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
+- `.ai/rules/project-profile.mdc` is the canonical repo-local rule layer generated from `ai.config.yaml`; always read it before executing any skill.
+- If `.ai/rules/project-profile.mdc` contains `## Project-Specific Rules`, treat them as mandatory repository overrides on top of the generic workflow rules.
 - Use canonical tasks only:
   - `{{ task_command }} {{ task_build_name }}`
   - `{{ task_command }} {{ task_test_name }}`

@@ -7,6 +7,17 @@ description: Run a quick verification of the current implementation state. Use w
 
 Use this skill for quick verification of the current implementation state.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with the check until this preflight read is complete.
+
 ## Protocol
 
 1. Read `ai.config.yaml`.

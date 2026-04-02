@@ -4,6 +4,14 @@
 - Tracker: `{{ workflow_tracker }}`
 - Language: `{{ workflow_language }}`
 
+## Interpretation
+
+- This file is the repo-local rule layer generated from `ai.config.yaml`.
+- The `## Project-Specific Rules` section below is the canonical place for repository-specific constraints.
+- These rules refine and tighten the generic workflow rules for this repository.
+- They must not weaken manifesto-level non-negotiables or generic workflow completion gates.
+- Provider runtimes consume this same file through shared `.ai/rules` links; do not maintain separate provider-specific copies of the same project rule.
+
 ## Workflow Language Contract
 
 - All workflow reasoning, planning notes, progress updates, review outputs, and user-facing workflow dialogue must use `{{ workflow_language }}` unless the user explicitly asks for another language.

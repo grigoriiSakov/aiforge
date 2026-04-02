@@ -2,10 +2,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
 const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
 const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
+const orchestratorRegistryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
+const orchestratorRunsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -14,9 +17,96 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function loadRun(issueId) {
+  return readJson(path.join(orchestratorRunsDir, `${issueId}.json`));
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
+}
+
+function currentBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isRunBoundToCurrentContext(run, branchName) {
+  const cwd = normalizePath(process.cwd());
+  const worktreePath = normalizePath(run.worktreePath);
+  if (worktreePath && (cwd === worktreePath || cwd.startsWith(`${worktreePath}/`))) {
+    return true;
+  }
+  return Boolean(branchName && run.branch && branchName === String(run.branch));
+}
+
+function getCurrentOrchestratorRun() {
+  const registry = readJson(orchestratorRegistryPath);
+  if (!registry) {
+    return null;
+  }
+
+  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const branchName = currentBranch();
+  const orderedIssueIds = [
+    ...Object.keys(registry.activeReservations ?? {}),
+    ...Object.keys(registry.runs ?? {})
+  ];
+
+  for (const issueId of orderedIssueIds) {
+    const run = loadRun(issueId);
+    if (!run || !activeStatuses.has(run.status) || !isRunBoundToCurrentContext(run, branchName)) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function nextActionForRun(run) {
+  if (run.status === "reserved" && !run.worktreePath) {
+    return "start_worktree";
+  }
+  if (run.status === "reviewing") {
+    return "run_review";
+  }
+  return "run_build";
+}
+
 const manifest = readJson(manifestPath);
 const state = readJson(taskStatePath);
 const reviewState = readJson(reviewStatePath);
+const activeRun = getCurrentOrchestratorRun();
+
+if (activeRun) {
+  const nextAction = nextActionForRun(activeRun);
+  const actionMessage =
+    nextAction === "start_worktree"
+      ? "create the orchestrator worktree and continue the flow"
+      : nextAction === "run_review"
+        ? "run review, record the verdict, and continue the flow"
+        : "continue build/test/verify until review is complete";
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "orchestrator_incomplete",
+        systemMessage:
+          `Orchestrator run ${activeRun.issueId} is still active (status=${activeRun.status}, step=${activeRun.currentStep ?? "unknown"}). ` +
+          `Do not stop. Next action: ${nextAction}. You must ${actionMessage} until the orchestrator reaches flow_complete.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
 
 if (!manifest || !state) {
   process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);

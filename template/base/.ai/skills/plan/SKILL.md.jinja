@@ -7,6 +7,18 @@ description: Build a deterministic implementation plan before code changes. Use 
 
 Use this skill to produce a build-ready implementation plan before code changes.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with planning until this preflight read is complete.
+
 ## Goal
 
 Turn the current request or issue into an execution artifact that is specific enough for `/build`.

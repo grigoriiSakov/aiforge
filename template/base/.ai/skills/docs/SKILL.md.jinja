@@ -7,6 +7,18 @@ description: Update behavior, API, setup, and process documentation to match the
 
 Use this skill when behavior, API, process, or setup documentation changed.
 
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with docs updates until this preflight read is complete.
+
 ## Protocol
 
 1. Read `{{ manifesto_path }}` and current generated process surfaces.

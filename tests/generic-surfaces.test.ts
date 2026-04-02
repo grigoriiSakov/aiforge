@@ -46,4 +46,35 @@ describe("generic reusable surfaces", () => {
       expect(fs.existsSync(path.join(root, relativePath))).toBe(true);
     }
   });
+
+  test("all shared skills require reading workflow rules first", () => {
+    const root = path.join(process.cwd(), "template", "base", ".ai", "skills");
+    const skillPaths = [
+      "audit/SKILL.md.jinja",
+      "build/SKILL.md.jinja",
+      "check/SKILL.md.jinja",
+      "clarify/SKILL.md.jinja",
+      "debug/SKILL.md.jinja",
+      "docs/SKILL.md.jinja",
+      "investigate/SKILL.md.jinja",
+      "issue/SKILL.md.jinja",
+      "orchestrator/SKILL.md.jinja",
+      "plan/SKILL.md.jinja",
+      "process-evolution/SKILL.md.jinja",
+      "refactor/SKILL.md.jinja",
+      "repeat/SKILL.md.jinja",
+      "review/SKILL.md.jinja",
+      "tracker/SKILL.md.jinja"
+    ];
+
+    for (const relativePath of skillPaths) {
+      const content = fs.readFileSync(path.join(root, relativePath), "utf8");
+      expect(content).toContain("## Rule preflight");
+      expect(content).toContain(".ai/rules/workflow.mdc");
+      expect(content).toContain(".ai/rules/workflow-gates.mdc");
+      expect(content).toContain(".ai/rules/project-profile.mdc");
+      expect(content).toContain(".ai/context/current.md");
+      expect(content).toContain("Treat those files as hard constraints");
+    }
+  });
 });
