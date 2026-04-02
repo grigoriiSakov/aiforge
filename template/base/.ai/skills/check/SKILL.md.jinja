@@ -25,7 +25,9 @@ Use this skill for quick verification of the current implementation state.
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-3. If the user is asking whether the task is actually done, a quick check is not enough:
+3. Default to the smallest credible verification scope for the touched behavior.
+4. Do not assume the full project test suite is required unless the user explicitly asks for it or repository rules require it.
+5. If the user is asking whether the task is actually done, a quick check is not enough:
    - run or require the full review phase
    - confirm 100% completion against the source spec and plan
-4. Return concrete failures or a clean verdict.
+6. Return concrete failures or a clean verdict.

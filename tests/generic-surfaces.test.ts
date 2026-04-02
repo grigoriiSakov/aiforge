@@ -77,4 +77,18 @@ describe("generic reusable surfaces", () => {
       expect(content).toContain("Treat those files as hard constraints");
     }
   });
+
+  test("testing policy defaults to touched scope, not full suite", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const workflowGates = fs.readFileSync(path.join(root, ".ai", "rules", "workflow-gates.mdc.jinja"), "utf8");
+    const buildSkill = fs.readFileSync(path.join(root, ".ai", "skills", "build", "SKILL.md.jinja"), "utf8");
+    const reviewSkill = fs.readFileSync(path.join(root, ".ai", "skills", "review", "SKILL.md.jinja"), "utf8");
+    const checkSkill = fs.readFileSync(path.join(root, ".ai", "skills", "check", "SKILL.md.jinja"), "utf8");
+
+    expect(workflowGates).toContain("By default, test only the touched behavior/scope");
+    expect(workflowGates).toContain("Do not run the full project test suite unless");
+    expect(buildSkill).toContain("default to the smallest credible test scope");
+    expect(reviewSkill).toContain("default expectation is scoped tests for the behavior that changed");
+    expect(checkSkill).toContain("Do not assume the full project test suite is required");
+  });
 });

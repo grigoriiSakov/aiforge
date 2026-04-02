@@ -1,4 +1,4 @@
-import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig } from "../core/config.js";
+import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
 import {
   cleanupTemporaryAnswersFile,
   ensureCopierAnswersFile,
@@ -49,7 +49,11 @@ export async function runSyncCommand(
 
   const snapshot = createManagedSnapshot(repoRoot, config);
   try {
-    saveConfig(repoRoot, config);
+    if (profileId) {
+      saveConfig(repoRoot, config);
+    } else {
+      writeMachineManifest(repoRoot, config);
+    }
     runCopierCopy({
       templatePath: resolveTemplatePath(),
       destinationPath: repoRoot,
@@ -80,6 +84,6 @@ export async function runSyncCommand(
     ok: true,
     code: 0,
     message: "Managed surfaces synchronized",
-    details: { profileId: config.profile.id }
+    details: { profileId: config.profile.id, configWritten: Boolean(profileId) }
   };
 }

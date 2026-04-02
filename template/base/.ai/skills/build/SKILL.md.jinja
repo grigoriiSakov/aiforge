@@ -58,22 +58,26 @@ Use this skill to implement the planned change step by step.
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-12. If implementation drifts from source request or plan:
+12. Testing policy:
+   - default to the smallest credible test scope that covers the touched behavior
+   - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
+   - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
+13. If implementation drifts from source request or plan:
    - either fix the code
    - or update the plan first
    - otherwise stop
-13. If `.ai/runtime/orchestrator-state.mjs` has an active run for the issue:
+14. If `.ai/runtime/orchestrator-state.mjs` has an active run for the issue:
    - use only the assigned orchestrator worktree
    - do not create a second branch/worktree
    - update run state through the orchestrator runtime helper
-14. All reasoning, progress notes, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-15. If the latest review produced `high` or `medium` findings, build must resume from those findings and continue the loop:
+15. All reasoning, progress notes, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+16. If the latest review produced `high` or `medium` findings, build must resume from those findings and continue the loop:
    - fix the findings
    - run `{{ task_command }} {{ task_test_name }}`
    - run `{{ task_command }} {{ task_verify_name }}`
    - run `/review` again
    - do not consider the task complete until review no longer reports `high` or `medium`
-16. If tracker is available and phase states are supported, move the issue to `{{ tracker_status_active }}` when execution starts.
+17. If tracker is available and phase states are supported, move the issue to `{{ tracker_status_active }}` when execution starts.
 
 ## Do not do this
 

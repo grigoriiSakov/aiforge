@@ -5,7 +5,7 @@ import {
   runCopierCopy,
   writeTemporaryAnswersFile
 } from "../core/copier.js";
-import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig } from "../core/config.js";
+import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
 import { buildLlms } from "../core/llms.js";
 import { generateManifesto } from "../core/manifesto.js";
 import { scaffoldMcp } from "../core/mcp.js";
@@ -46,7 +46,11 @@ export async function runUpdateCommand(
 
   const snapshot = createManagedSnapshot(repoRoot, config);
   try {
-    saveConfig(repoRoot, config);
+    if (profileId) {
+      saveConfig(repoRoot, config);
+    } else {
+      writeMachineManifest(repoRoot, config);
+    }
     ensureCopierAnswersFile({
       destinationPath: repoRoot,
       templatePath: resolveTemplatePath(),
@@ -76,6 +80,7 @@ export async function runUpdateCommand(
   return {
     ok: true,
     code: 0,
-    message: "Template update completed"
+    message: "Template update completed",
+    details: { profileId: config.profile.id, configWritten: Boolean(profileId) }
   };
 }

@@ -27,24 +27,27 @@ Findings first.
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-4. Review not only the diff, but also:
+4. Testing evidence must match the touched scope:
+   - default expectation is scoped tests for the behavior that changed
+   - do not require a full project run unless the user explicitly asked for it, repository rules require it, or the change is too broad for scoped evidence
+5. Review not only the diff, but also:
    - `Spec Coverage Matrix`
    - `Execution Contract`
    - `Do Not Break`
    - `Acceptance Traceability`
    - `Spec Conformance`
-5. Review for completion, not just local code quality:
+6. Review for completion, not just local code quality:
    - confirm every requirement in the spec is implemented or explicitly marked as non-goal/follow-up
    - confirm every planned item that should be done in this task is actually done
    - confirm there is no hidden partial implementation behind green tests
    - the task is not complete while any required spec/plan point remains open
-6. Report:
+7. Report:
    - bugs
    - regressions
    - architecture drift
    - missing tests
    - missing or false plan coverage
-7. Severity loop is mandatory:
+8. Severity loop is mandatory:
    - if findings include `high` or `medium`, the current task is not done
    - return to `build`, fix the findings, then rerun the full cycle:
      - `{{ task_command }} {{ task_build_name }}` when applicable to the project flow
@@ -52,14 +55,14 @@ Findings first.
      - `{{ task_command }} {{ task_verify_name }}`
      - `/review`
    - repeat until no `high` or `medium` findings remain
-8. After producing the review result, record a machine-readable verdict:
+9. After producing the review result, record a machine-readable verdict:
    - clean review:
     - `node .ai/runtime/review-state.mjs verdict clean "short summary"`
    - review with findings:
     - `node .ai/runtime/review-state.mjs verdict issues-found "short summary"`
-9. If the issue is orchestrator-managed, record review evidence through `node .ai/runtime/orchestrator-state.mjs record-review ...`.
-10. All review notes, findings, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-11. If tracker is available and the implementation is review-ready, move the issue to `{{ tracker_status_review }}` only after there are no `high` or `medium` findings left.
+10. If the issue is orchestrator-managed, record review evidence through `node .ai/runtime/orchestrator-state.mjs record-review ...`.
+11. All review notes, findings, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+12. If tracker is available and the implementation is review-ready, move the issue to `{{ tracker_status_review }}` only after there are no `high` or `medium` findings left.
 
 ## Output contract
 

@@ -56,6 +56,11 @@ alwaysApply: true
 ## Gate 4: Test
 
 - Changed behavior requires relevant tests or explicit justification for why tests are not valuable.
+- By default, test only the touched behavior/scope needed to validate the current change.
+- Do not run the full project test suite unless:
+  - the user explicitly asks for a full run
+  - the repository-specific rules require it
+  - the affected surface is broad enough that scoped verification is not credible
 - Automated tests must not call real third-party services by default; use mocks/stubs/fakes at the boundary.
 - Verify through canonical tasks from `ai.config.yaml`, not ad-hoc stack guesses.
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.

@@ -251,7 +251,7 @@ describe("command flow", () => {
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
-  test("sync backfills new config sections for older projects", async () => {
+  test("sync backfills machine manifest for older projects without rewriting ai.config.yaml", async () => {
     const repoRoot = makeTempRepo("ai-simple-config-backfill-");
     await runInitCommand({
       repoRoot,
@@ -340,13 +340,80 @@ describe("command flow", () => {
     expect(result.ok).toBe(true);
 
     const syncedConfig = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
-    expect(syncedConfig).toContain("\nprojectRules:\n");
-    expect(syncedConfig).toContain("\nagents:\n  markdown: \"\"");
-    expect(syncedConfig).toContain("\nmanifesto:\n");
-    expect(syncedConfig).toContain("\n  markdown: \"\"");
-    expect(syncedConfig).toContain("- path: .ai");
-    expect(syncedConfig).toContain("\n  trackerStates:\n");
-    expect(syncedConfig).toContain("\norchestrator:\n");
+    expect(syncedConfig).toBe(rawLegacyConfig);
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, ".ai", "project.manifest.json"), "utf8"));
+    expect(manifest.projectRules).toEqual({ markdown: "" });
+    expect(manifest.agents).toEqual({ markdown: "" });
+    expect(manifest.manifesto.markdown).toBe("");
+    expect(manifest.managedSurfaces.some((entry: { path: string }) => entry.path === ".ai")).toBe(true);
+    expect(manifest.workflow.trackerStates).toBeTruthy();
+    expect(manifest.orchestrator).toBeTruthy();
+    expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("sync and update preserve durable ai.config.yaml without profile override", async () => {
+    const repoRoot = makeTempRepo("ai-simple-preserve-config-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Preserve Config Demo",
+      profileId: "laravel-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.commands.test = ["bash scripts/task-test.sh"];
+    config.commands.lint = ["bash scripts/task-lint.sh"];
+    config.projectRules = {
+      markdown: [
+        "## Orchestrator external worktree execution",
+        "- Use `AIFORGE_WORKTREE_PATH` for orchestrator-owned task execution.",
+        "- Canonical tasks choose exec vs compose run automatically."
+      ].join("\n")
+    };
+    saveConfig(repoRoot, config);
+
+    const configBeforeSync = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    const syncResult = await runSyncCommand(repoRoot, false);
+    expect(syncResult.ok).toBe(true);
+    expect(syncResult.details?.configWritten).toBe(false);
+    expect(fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8")).toBe(configBeforeSync);
+
+    fs.writeFileSync(path.join(repoRoot, ".ai", "project.manifest.json"), JSON.stringify({ stale: true }, null, 2) + "\n");
+
+    const configBeforeUpdate = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    const updateResult = await runUpdateCommand(repoRoot, false);
+    expect(updateResult.ok).toBe(true);
+    expect(updateResult.details?.configWritten).toBe(false);
+    expect(fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8")).toBe(configBeforeUpdate);
+
+    const projectProfilePath = path.join(repoRoot, ".ai", "rules", "project-profile.mdc");
+    const projectProfile = fs.readFileSync(projectProfilePath, "utf8");
+    expect(projectProfile).toContain("## Orchestrator external worktree execution");
+    expect(projectProfile).toContain("AIFORGE_WORKTREE_PATH");
+    expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("sync rewrites ai.config.yaml only when profile override is requested", async () => {
+    const repoRoot = makeTempRepo("ai-simple-sync-profile-override-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Profile Override Demo",
+      profileId: "laravel-docker",
+      dryRun: false
+    });
+
+    const configBefore = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    const result = await runSyncCommand(repoRoot, false, "vue-quasar-capacitor");
+    expect(result.ok).toBe(true);
+    expect(result.details?.configWritten).toBe(true);
+
+    const configAfter = fs.readFileSync(path.join(repoRoot, CONFIG_FILE_NAME), "utf8");
+    expect(configAfter).not.toBe(configBefore);
+
+    const syncedConfig = loadConfig(repoRoot);
+    expect(syncedConfig.profile.id).toBe("vue-quasar-capacitor");
+    expect(syncedConfig.commands.build).toEqual(["yarn build"]);
   });
 
   test("sync and update regenerate project profile from config markdown", async () => {

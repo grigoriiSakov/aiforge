@@ -126,10 +126,17 @@ export function saveConfig(repoRoot: string, config: ProjectConfig): string {
   validateConfig(normalized);
   const configPath = path.join(repoRoot, CONFIG_FILE_NAME);
   writeTextFile(configPath, YAML.stringify(normalized));
+  writeMachineManifest(repoRoot, normalized);
+  return configPath;
+}
+
+export function writeMachineManifest(repoRoot: string, config: ProjectConfig): string {
+  const normalized = normalizeConfig(config);
+  validateConfig(normalized);
   const manifestPath = path.join(repoRoot, MACHINE_MANIFEST_PATH);
   ensureDir(path.dirname(manifestPath));
   writeTextFile(manifestPath, `${JSON.stringify(normalized, null, 2)}\n`);
-  return configPath;
+  return manifestPath;
 }
 
 export function buildCopierAnswers(config: ProjectConfig): Record<string, unknown> {
