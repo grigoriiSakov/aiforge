@@ -78,3 +78,4 @@ Minimal structure:
 - If `.ai/runtime/orchestrator-state.mjs` manages the issue, progress updates must stay aligned with orchestrator run state.
 - Progress must be updated at every step transition, not only at the end.
 - `Do Not Break` invariants come from the plan, not from improvisation during coding.
+- If review returns `high` or `medium` findings, update progress immediately and move the active step back into the build/test/verify/review loop.

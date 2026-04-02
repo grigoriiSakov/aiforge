@@ -27,6 +27,7 @@ alwaysApply: true
 
 - Implementation must follow the approved plan and source request exactly.
 - Builder must not silently reinterpret requirements during coding.
+- Builder must study relevant existing code and `llms` context first, then reuse or extend canonical implementation instead of cloning logic into a new branch/path.
 - Before and after coding, compare implementation against:
   - source request/spec
   - `Execution Contract`
@@ -34,6 +35,8 @@ alwaysApply: true
   - `Acceptance Traceability`
 - Any drift between code, plan, and spec must be fixed or escalated back to `/clarify` or `/plan`.
 - Prefer extending existing canonical implementation over creating duplicate parallel logic.
+- Prefer explicit abstractions, composition, strategy-style decomposition, and data-driven dispatch over sprawling `if/else` chains.
+- Large conditional trees are a design smell; extract an abstraction before the branching becomes the architecture.
 - Do not grow god-files; decompose on touch when the file already mixes unrelated scenarios.
 - Cross-module or cross-package shortcuts that bypass declared boundaries are architecture defects.
 - Project-specific architecture laws belong in profile-specific rules on top of this generic gate file.
@@ -45,6 +48,8 @@ alwaysApply: true
 - Avoid N+1 style lookup patterns in application logic.
 - Filtering, sorting, pagination, and heavy aggregation should happen in the query/storage layer where possible.
 - Return the minimal dataset needed by the caller, not the whole raw source.
+- Avoid loading oversized result sets and then fixing the shape with loops in application code.
+- Treat data access as production-grade for high-load systems: shape the query early, project only required fields, and keep expensive computation close to the storage/query layer.
 
 ## Gate 4: Test
 
@@ -52,6 +57,8 @@ alwaysApply: true
 - Automated tests must not call real third-party services by default; use mocks/stubs/fakes at the boundary.
 - Verify through canonical tasks from `ai.config.yaml`, not ad-hoc stack guesses.
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.
+- Verification is not complete without review; green checks alone do not mean the task is done.
+- If review reports `high` or `medium` findings, verification is failed and the task must re-enter the build loop.
 
 ## Gate 5: Review
 
@@ -64,6 +71,9 @@ alwaysApply: true
   - `Spec Coverage Matrix`
   - reuse vs duplicate implementation
   - test adequacy
+- Review must confirm 100% completion against the source spec and the approved plan.
+- The task is not complete while any required acceptance point, plan step, or mandatory follow-through item is still open.
+- `high` or `medium` findings force a mandatory loop: `build -> test -> verify -> review` until those severity levels are gone.
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.
 - For orchestrated work, review must confirm the run is still aligned with the current worktree fingerprint before marking it review-ready.
 

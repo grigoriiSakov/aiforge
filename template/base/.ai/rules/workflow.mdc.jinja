@@ -33,3 +33,6 @@ alwaysApply: true
   - `Spec Conformance`
   - `Решения по ходу`
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
+- Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
+- Completion means all required spec, plan, verification, and review points are done; partial completion is not completion.
+- If review produces `high` or `medium` findings, the workflow must loop back through `build -> test -> verify -> review` until those severities are eliminated.

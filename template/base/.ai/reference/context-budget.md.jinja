@@ -17,3 +17,5 @@ Keep process context lean, current, and non-contradictory.
 - Do not duplicate the whole manifesto into runtime artifacts.
 - Prefer pointers to files, globs, and steps over long narrative summaries.
 - Move stack-specific behavior into profile rules and config, not into generic artifacts.
+- Load relevant `llms` context and nearby canonical code before inventing new implementation paths.
+- Keep reasoning and workflow dialogue in `{{ workflow_language }}` unless the user explicitly requests another language.

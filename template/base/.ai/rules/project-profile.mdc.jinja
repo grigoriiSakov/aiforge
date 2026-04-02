@@ -4,6 +4,10 @@
 - Tracker: `{{ workflow_tracker }}`
 - Language: `{{ workflow_language }}`
 
+## Workflow Language Contract
+
+- All workflow reasoning, planning notes, progress updates, review outputs, and user-facing workflow dialogue must use `{{ workflow_language }}` unless the user explicitly asks for another language.
+
 ## Profile Notes
 {% for note in profile_notes -%}
 - {{ note }}

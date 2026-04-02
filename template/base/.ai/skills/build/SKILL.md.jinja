@@ -14,37 +14,59 @@ Use this skill to implement the planned change step by step.
    - `.ai/reference/plan-template.md`
    - `.ai/reference/plan-progress-template.md`
    - `.ai/reference/context-artifacts.md`
-3. Find the current `PLAN::ISSUE-ID` artifact or its local fallback mirror.
-4. Do not start medium/large work without a plan artifact.
-5. Before changing code, extract from the plan:
+3. Before changing code, load the relevant context and existing implementation surfaces:
+   - `.ai/context/current.md`
+   - relevant `llms` artifacts declared by `ai.config.yaml`
+   - nearby canonical code that can be reused instead of reimplemented
+4. Find the current `PLAN::ISSUE-ID` artifact or its local fallback mirror.
+5. Do not start medium/large work without a plan artifact.
+6. Before changing code, extract from the plan:
    - `Execution Contract`
    - `Spec Coverage Matrix`
    - `Do Not Break`
    - `Acceptance Traceability`
    - current step boundaries
-6. Create or update a `PROGRESS::ISSUE-ID` artifact before the first code change.
-7. Execute strictly step by step. On every step transition:
+7. Create or update a `PROGRESS::ISSUE-ID` artifact before the first code change.
+8. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
    - update `## Текущий шаг`
    - update `## Дальше`
    - update `## Spec Conformance`
    - append short decisions to `## Решения по ходу`
-8. Use canonical tasks instead of stack-specific guesses:
+9. Build abstraction-first:
+   - prefer extending existing abstractions over introducing parallel branches
+   - prefer strategy/polymorphism/composition/data-driven dispatch over long `if/else` ladders
+   - if branching starts growing, extract an explicit abstraction instead of stacking conditionals
+10. For database or query-heavy paths, keep the implementation production-grade:
+   - avoid N+1 lookups
+   - avoid fetch-all + filter/map/reduce loops when the storage/query layer can do the work
+   - return only the fields and rows actually required
+   - avoid in-memory post-processing of oversized datasets
+11. Use canonical tasks instead of stack-specific guesses:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-9. If implementation drifts from source request or plan:
+12. If implementation drifts from source request or plan:
    - either fix the code
    - or update the plan first
    - otherwise stop
-10. If `.ai/runtime/orchestrator-state.mjs` has an active run for the issue:
+13. If `.ai/runtime/orchestrator-state.mjs` has an active run for the issue:
    - use only the assigned orchestrator worktree
    - do not create a second branch/worktree
    - update run state through the orchestrator runtime helper
-11. If tracker is available and phase states are supported, move the issue to `{{ tracker_status_active }}` when execution starts.
+14. All reasoning, progress notes, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+15. If the latest review produced `high` or `medium` findings, build must resume from those findings and continue the loop:
+   - fix the findings
+   - run `{{ task_command }} {{ task_test_name }}`
+   - run `{{ task_command }} {{ task_verify_name }}`
+   - run `/review` again
+   - do not consider the task complete until review no longer reports `high` or `medium`
+16. If tracker is available and phase states are supported, move the issue to `{{ tracker_status_active }}` when execution starts.
 
 ## Do not do this
 
 - Do not silently invent extra scope.
 - Do not write a long diary instead of a progress artifact.
 - Do not bypass canonical tasks with direct stack commands in prompts or status updates.
+- Do not ignore reusable code that was already discoverable through `llms` and local code reading.
+- Do not solve growing complexity with another layer of ad-hoc `if/else`.

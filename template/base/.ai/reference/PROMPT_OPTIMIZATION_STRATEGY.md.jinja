@@ -32,6 +32,7 @@
 - profile-specific task -> profile source globs from `ai.config.yaml`
 - architecture/process question -> `.ai/reference/*` and `{{ manifesto_path }}`
 - tracker-driven workflow -> `.ai/linear-scope.json`, `.ai/rules/linear-mcp.mdc`
+- implementation/review work -> load relevant `llms` context and inspect existing code for reuse before introducing new logic
 
 ## Process Integrity Checks
 
@@ -48,3 +49,4 @@ Before finishing process-related changes:
 - stale references to removed commands or tools
 - tracker-first workflows without tracker setup instructions
 - generic guidance with no concrete next commands
+- silent fallback to English when workflow language is `{{ workflow_language }}`

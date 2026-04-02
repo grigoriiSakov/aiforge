@@ -19,19 +19,20 @@ Turn the current request or issue into an execution artifact that is specific en
    - `.ai/reference/plan-progress-template.md`
    - `.ai/reference/context-artifacts.md`
    - `.ai/reference/orchestrator-claimed-scope-template.md`
-3. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
-4. Build the plan around canonical tasks only:
+3. Load relevant `llms` artifacts and existing code surfaces before planning so the plan reuses the current system instead of reinventing it.
+4. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
+5. Build the plan around canonical tasks only:
    - `{{ task_command }} {{ task_build_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
    - `{{ task_command }} {{ task_review_name }}`
-5. Before writing the plan, extract:
+6. Before writing the plan, extract:
    - source request / issue requirements
    - explicit non-goals
    - adjacent behavior that must remain stable
    - existing reusable surfaces
-6. The plan is invalid if it does not contain:
+7. The plan is invalid if it does not contain:
    - `Execution Contract`
    - `Current State Snapshot`
    - `Spec Coverage Matrix`
@@ -41,9 +42,15 @@ Turn the current request or issue into an execution artifact that is specific en
    - `Step Plan`
    - `Risk Registry`
    - `Open Questions / Blockers`
-7. If requirements are ambiguous, stop and ask focused clarification before coding.
-8. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
-9. If tracker is available and phase states are supported, planning should leave the issue in `{{ tracker_status_plan_ready }}` when the plan becomes build-ready.
+8. The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.
+9. The plan must call out query/storage-heavy steps that need industrial handling:
+   - no N+1
+   - no oversized reads
+   - no avoidable in-memory loops over raw datasets
+10. If requirements are ambiguous, stop and ask focused clarification before coding.
+11. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
+12. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+13. If tracker is available and phase states are supported, planning should leave the issue in `{{ tracker_status_plan_ready }}` when the plan becomes build-ready.
 
 ## Storage contract
 
