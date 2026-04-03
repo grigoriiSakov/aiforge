@@ -49,6 +49,9 @@ export function createConfig(params: {
       branchPrefix: "agent/",
       maxReviewIterations: 3
     },
+    artifacts: {
+      planProgressRoot: ".ai/context/runtime"
+    },
     runtimes: {
       cursor: true,
       codex: true,
@@ -156,6 +159,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     orchestrator_worktree_root: config.orchestrator.worktreeRoot,
     orchestrator_branch_prefix: config.orchestrator.branchPrefix,
     orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
+    plan_progress_runtime_root: config.artifacts.planProgressRoot,
     enable_cursor: config.runtimes.cursor,
     enable_codex: config.runtimes.codex,
     enable_agent: config.runtimes.agent,
@@ -209,6 +213,10 @@ function validateConfig(config: ProjectConfig): void {
     config.orchestrator.maxReviewIterations < 1
   ) {
     throw new Error("Config orchestrator.maxReviewIterations must be an integer >= 1");
+  }
+
+  if (!config.artifacts?.planProgressRoot?.trim()) {
+    throw new Error("Config artifacts.planProgressRoot is required");
   }
 
   if (!config.manifesto?.path || !config.manifesto?.title) {
@@ -305,6 +313,10 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     orchestrator: {
       ...defaults.orchestrator,
       ...config.orchestrator
+    },
+    artifacts: {
+      ...defaults.artifacts,
+      ...config.artifacts
     },
     runtimes: {
       ...defaults.runtimes,

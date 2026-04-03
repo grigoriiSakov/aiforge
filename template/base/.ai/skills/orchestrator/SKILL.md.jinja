@@ -35,8 +35,8 @@ Pipeline owner for:
 5. Accept exactly one issue ID per orchestrator run.
 6. Do not start build until the current plan contains machine-readable `Claimed Write Scope`.
 7. Ensure the workflow keeps a single source of truth for:
-   - plan memory: `PLAN::ISSUE-ID`
-   - execution memory: `PROGRESS::ISSUE-ID`
+   - plan memory: `PLAN::ISSUE-ID` (tracker) and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+   - execution memory: `PROGRESS::ISSUE-ID` (tracker) and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
    - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`

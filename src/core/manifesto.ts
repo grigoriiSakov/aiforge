@@ -25,6 +25,7 @@ export function generateManifesto(repoRoot: string): string {
 - Canonical phases: ${config.workflow.phases.join(" -> ")}
 - Runtime surfaces: ${enabledRuntimes(config)}
 - Orchestrator worktree root: ${config.orchestrator.worktreeRoot}
+- Plan/progress local root: \`${config.artifacts.planProgressRoot}\` (per issue: \`{root}/ISSUE-ID/plan.md\`, \`{root}/ISSUE-ID/progress.md\`)
 
 ## Command Contract
 

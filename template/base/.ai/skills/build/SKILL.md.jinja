@@ -30,7 +30,7 @@ Use this skill to implement the planned change step by step.
    - `.ai/context/current.md`
    - relevant `llms` artifacts declared by `ai.config.yaml`
    - nearby canonical code that can be reused instead of reimplemented
-4. Find the current `PLAN::ISSUE-ID` artifact or its local fallback mirror.
+4. Find the current `PLAN::ISSUE-ID` (tracker) or local mirror `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`.
 5. Do not start medium/large work without a plan artifact.
 6. Before changing code, extract from the plan:
    - `Execution Contract`
@@ -38,7 +38,7 @@ Use this skill to implement the planned change step by step.
    - `Do Not Break`
    - `Acceptance Traceability`
    - current step boundaries
-7. Create or update a `PROGRESS::ISSUE-ID` artifact before the first code change.
+7. Create or update `PROGRESS::ISSUE-ID` (tracker) and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` before the first code change.
 8. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
    - update `## Текущий шаг`

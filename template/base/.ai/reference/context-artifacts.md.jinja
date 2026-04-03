@@ -11,10 +11,12 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 ## Recommended local runtime files
 
 - `.ai/context/current.md`
-- `.ai/context/runtime/plan.md`
-- `.ai/context/runtime/progress.md`
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` mirror)
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` mirror)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+
+Configured in `ai.config.yaml` as `artifacts.planProgressRoot` (template default: `.ai/context/runtime`).
 
 ## `current.md`
 
@@ -30,12 +32,12 @@ Do not dump large research or full code excerpts into `current.md`.
 
 ## Runtime mirrors
 
-If tracker-backed `PLAN::` / `PROGRESS::` artifacts are unavailable, mirror them locally:
+If tracker-backed `PLAN::` / `PROGRESS::` artifacts are unavailable — or as a durable local copy while the tracker holds the live comment — write them under the configured root, **one directory per issue**:
 
-- `.ai/context/runtime/plan.md`
-- `.ai/context/runtime/progress.md`
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 
-These mirrors should keep the same structure as the tracker artifacts.
+Use the same markers and body structure as the tracker artifacts (see `.ai/reference/plan-progress-template.md`). Do not use repo-root `docs/ai/` for these; keep plan/progress under `.ai` only.
 
 ## Orchestrator runtime
 

@@ -66,8 +66,10 @@ Turn the current request or issue into an execution artifact that is specific en
 
 ## Storage contract
 
-- If `{{ workflow_tracker }}` is tracker-backed, keep one updatable `PLAN::ISSUE-ID` artifact in the tracker comment.
-- If tracker integration is unavailable, mirror the same structure into local runtime artifacts under `.ai/context/runtime/`.
+- Canonical local directory: `{{ plan_progress_runtime_root }}/ISSUE-ID/` (from `ai.config.yaml` -> `artifacts.planProgressRoot`).
+- Local plan file: `plan.md` (same body as `PLAN::ISSUE-ID`, including `<!-- AI_SIMPLE_PLAN:START/END -->` markers).
+- If `{{ workflow_tracker }}` is tracker-backed, keep one updatable `PLAN::ISSUE-ID` in the tracker comment **and** keep the local `plan.md` in sync when you rely on filesystem reads.
+- If tracker integration is unavailable, `plan.md` under that path is the source of truth.
 - Use wrappers from `.ai/reference/plan-template.md`.
 
 ## Quality bar

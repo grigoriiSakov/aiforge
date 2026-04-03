@@ -74,6 +74,11 @@ orchestrator_max_review_iterations:
   type: int
   default: 3
 
+plan_progress_runtime_root:
+  type: str
+  default: .ai/context/runtime
+  help: Directory (repo-relative) under which each ISSUE-ID gets plan.md and progress.md
+
 manifesto_title:
   type: str
   default: Project Workflow Manifesto

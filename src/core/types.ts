@@ -59,6 +59,10 @@ export interface ProjectConfig {
     branchPrefix: string;
     maxReviewIterations: number;
   };
+  /** Local PLAN:: / PROGRESS:: mirror layout; per-issue files live under `{planProgressRoot}/{ISSUE-ID}/`. */
+  artifacts: {
+    planProgressRoot: string;
+  };
   runtimes: RuntimeFlags;
   task: {
     command: string;

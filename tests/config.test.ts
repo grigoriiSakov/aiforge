@@ -49,5 +49,6 @@ describe("config lifecycle", () => {
     });
     expect(config.orchestrator.branchPrefix).toBe("agent/");
     expect(config.orchestrator.maxReviewIterations).toBe(3);
+    expect(config.artifacts.planProgressRoot).toBe(".ai/context/runtime");
   });
 });

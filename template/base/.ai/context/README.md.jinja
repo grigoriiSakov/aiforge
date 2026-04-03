@@ -2,10 +2,10 @@
 
 This directory stores short-lived local runtime artifacts for planning and execution memory.
 
-Recommended files:
+Recommended layout:
 
-- `current.md`
-- `runtime/plan.md`
-- `runtime/progress.md`
+- `current.md` — session digest
+- `runtime/ISSUE-ID/plan.md` — local mirror of `PLAN::ISSUE-ID` (root is `artifacts.planProgressRoot` in `ai.config.yaml`, default `.ai/context/runtime`)
+- `runtime/ISSUE-ID/progress.md` — local mirror of `PROGRESS::ISSUE-ID`
 
-If your tracker integration is active, these files may act as local mirrors of `PLAN::ISSUE-ID` and `PROGRESS::ISSUE-ID`.
+If your tracker integration is active, these per-issue files can mirror or supplement tracker comments.

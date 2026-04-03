@@ -30,7 +30,7 @@ alwaysApply: false
 
 {% if linear_enabled -%}
 - If Linear MCP is unavailable and issue flow requires tracker-first execution, stop and ask to restore MCP connectivity or prepare a local fallback artifact.
-- If degraded mode is used, mirror plan/progress artifacts locally under `.ai/context/runtime/`.
+- If degraded mode is used, mirror plan/progress under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md` (see `artifacts.planProgressRoot` in `ai.config.yaml`).
 {% else -%}
 - Linear is not enabled by default for this profile.
 - If the team wants Linear-first workflow, fill `.ai/linear-scope.json`, enable the plugin in `.cursor/settings.json`, and wire MCP locally.
