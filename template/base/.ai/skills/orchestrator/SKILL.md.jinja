@@ -47,29 +47,34 @@ Pipeline owner for:
    - `blocked-by-conflict` -> stop; direct file/shared-surface overlap exists
 10. Create the isolated worktree only through:
     - `node .ai/runtime/orchestrator-state.mjs start-worktree --issue ISSUE-ID`
-11. After every side effect, re-check the next machine action through:
+11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов и файлов из `Claimed Write Scope` выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
+12. After every side effect, re-check the next machine action through:
     - `node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID`
-12. Use canonical task names from `ai.config.yaml`.
-13. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
-14. A phase is not complete without evidence:
+13. Use canonical task names from `ai.config.yaml`.
+14. Before `task lint`, `task test`, or `task verify` against an orchestrator worktree, export
+    `AIFORGE_WORKTREE_PATH` via `node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID`
+    (for example `eval "$(... worktree-env ...)"` in shell); canonical tasks then pick exec vs `compose run`
+    automatically — do not hand-roll long `docker compose run` lines in prompts or artifacts.
+15. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
+16. A phase is not complete without evidence:
    - `plan` -> complete plan artifact
    - `build` -> code changes aligned with plan
    - `test` -> canonical task evidence
    - `review` -> findings-first output plus recorded clean review verdict
-15. Record test/review evidence through the runtime helper:
+17. Record test/review evidence through the runtime helper:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
     - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
-16. If review returns `medium` or `high`, the next mandatory action is another fix loop:
+18. If review returns `medium` or `high`, the next mandatory action is another fix loop:
     - go back to build
     - fix the findings
     - rerun test and verify evidence
     - rerun review
     - repeat until no `medium` or `high` findings remain
-17. Re-check managed runtime state before stopping the turn.
-18. If tracker is enabled, keep issue states aligned with the workflow:
-    - plan-ready -> `{{ tracker_status_plan_ready }}`
-    - active execution -> `{{ tracker_status_active }}`
-    - review-ready -> `{{ tracker_status_review }}`
+19. Re-check managed runtime state before stopping the turn.
+20. If tracker is enabled, keep issue states aligned with the workflow:
+    - plan-ready -> `Todo`
+    - active execution -> `In Progress`
+    - review-ready -> `In Review`
 
 ## Conflict policy
 
