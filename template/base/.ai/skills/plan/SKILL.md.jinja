@@ -62,15 +62,22 @@ Turn the current request or issue into an execution artifact that is specific en
 10. If requirements are ambiguous, stop and ask focused clarification before coding.
 11. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
 12. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-13. If tracker is available and phase states are supported, planning should leave the issue in `{{ tracker_status_plan_ready }}` when the plan becomes build-ready.
+{% if linear_enabled -%}
+13. When the plan is build-ready, move the Linear issue toward `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md` (if MCP is up).
+{% else -%}
+13. Do **not** use Linear MCP for planning. Persist the build-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` as the single source of truth for this mode.
+{% endif -%}
 
 ## Storage contract
 
 - Canonical local directory: `{{ plan_progress_runtime_root }}/ISSUE-ID/` (from `ai.config.yaml` -> `artifacts.planProgressRoot`).
-- Local plan file: `plan.md` (same body as `PLAN::ISSUE-ID`, including `<!-- AI_SIMPLE_PLAN:START/END -->` markers).
-- If `{{ workflow_tracker }}` is tracker-backed, keep one updatable `PLAN::ISSUE-ID` in the tracker comment **and** keep the local `plan.md` in sync when you rely on filesystem reads.
-- If tracker integration is unavailable, `plan.md` under that path is the source of truth.
-- Use wrappers from `.ai/reference/plan-template.md`.
+- Local plan file: `plan.md` (body must match the `PLAN::ISSUE-ID` comment when Linear is enabled), including `<!-- AI_SIMPLE_PLAN:START/END -->` markers from `.ai/reference/plan-template.md`.
+{% if linear_enabled -%}
+- Keep one updatable `PLAN::ISSUE-ID` in Linear and keep `plan.md` in sync whenever anything reads from disk.
+- If Linear MCP is temporarily unavailable, follow `.ai/reference/tracker-degraded-mode.md` and treat `plan.md` as source of truth until sync-back.
+{% else -%}
+- `plan.md` is the sole source of truth; do not create or update Linear plan comments via MCP.
+{% endif -%}
 
 ## Quality bar
 

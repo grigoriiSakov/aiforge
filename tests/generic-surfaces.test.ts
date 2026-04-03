@@ -57,6 +57,7 @@ describe("generic reusable surfaces", () => {
       "debug/SKILL.md.jinja",
       "docs/SKILL.md.jinja",
       "investigate/SKILL.md.jinja",
+      "initiative/SKILL.md.jinja",
       "issue/SKILL.md.jinja",
       "orchestrator/SKILL.md.jinja",
       "plan/SKILL.md.jinja",

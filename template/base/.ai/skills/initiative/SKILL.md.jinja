@@ -1,0 +1,123 @@
+---
+name: initiative
+description: Discovery-first planning for large multi-issue initiatives (research, PRD, tracker project structure, planning issue, atomic issues). Use for /initiative or equivalent; not a substitute for a single /issue.
+---
+
+# Initiative
+
+Full **pre-build** cycle for a large initiative when a correct project-level PRD + issue set does not exist yet.
+
+## When to use
+
+- Multi-issue / cross-surface / architecture-first work that needs research, a written PRD, and a **structured** breakdown in the tracker.
+- Not for a single ordinary task — use `issue` (and then `plan`) instead.
+
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue until this preflight read is complete.
+{% if linear_enabled -%}
+- Before Linear MCP operations, also read `.ai/skills/tracker/SKILL.md` and `.ai/rules/linear-mcp.mdc`.
+{% endif -%}
+
+## Related skills (follow their contracts)
+
+- `investigate` — codebase facts before committing to a design; reuse its discipline (evidence, separate current vs desired vs unknown).
+- `issue` — task context shape, `related_issues` / orchestrator serialization when relevant.
+- `plan` — plan artifact quality, `{{ plan_progress_runtime_root }}`, `PLAN::ISSUE-ID` wrappers from `.ai/reference/plan-template.md`.
+- `tracker` — scope from `.ai/linear-scope.json`, degraded-mode rules in `.ai/reference/tracker-degraded-mode.md`.
+
+## Mandatory reference reads
+
+- `.ai/reference/plan-template.md`
+- `.ai/reference/plan-progress-template.md`
+- `.ai/reference/context-artifacts.md`
+- `.ai/reference/issue-spec-template.md`
+- `.ai/reference/orchestrator-claimed-scope-template.md` (if issues may later run through `/orchestrator`)
+
+## Protocol
+
+1. **Anchor scope** — restate the initiative goal, in/out of scope, and stopping boundaries. If scope is too vague, stop and ask; do not invent a PRD on guesswork.
+
+2. **Refresh short context** — run `node .cursor/hooks/render-context.mjs manual` (optional second arg: path to a small JSON event file if you have one), then read `.ai/context/current.md`. Do not treat `current.md` as a dump for full research; keep it a digest per `context-artifacts.md`.
+
+3. **Load existing intent surfaces** — read `{{ manifesto_path }}`, `ai.config.yaml`, profile rules, and load `{{ llms_txt_path }}` / configured `llms` artifacts before deep discovery (same spirit as `plan`).
+
+4. **Discovery** — inspect the repo (and linked surfaces the user names). Use web research only when the user asks or when facts are unstable. Prefer reusable code paths over greenfield design.
+
+5. **PRD** — produce a PRD with at least:
+   - Executive summary
+   - Problem statement
+   - Goals / non-goals
+   - Existing surfaces to reuse
+   - Architecture / boundaries (as far as profile allows)
+   - Contracts / data / prompts strategy when relevant
+   - Rollout phases
+   - Epic breakdown
+   - Open questions
+   - Initial architecture decisions
+
+6. **Local PRD staging (no repo-root canon in `.ai/context/`)** — until the PRD is attached in Linear (when integration is on) or copied into the local initiative bundle below, keep drafts only under `.ai/context/prd-staging/`. After upload or handoff, delete or clearly mark leftovers as non-canonical.
+
+{% if linear_enabled %}
+7. **Linear (integration enabled in `ai.config.yaml` / project settings)** — follow `.ai/skills/tracker/SKILL.md` and `.ai/rules/linear-mcp.mdc`:
+   - Create or update a **Linear project** in scope (no duplicates); summary must reflect initiative scope.
+   - Attach the PRD as a **project-level** document / resource (canonical global context for later `issue` / `plan`). Name it consistently with an initiative slug.
+   - **Stop** if Linear MCP is unavailable while executing this path: do **not** silently pretend the tracker work succeeded; ask to restore MCP or switch off Linear in config and rerun for a **local** bundle instead.
+
+8. **Planning issue** — create a planning issue (title + description in `{{ workflow_language }}` unless the user overrides). Description must include a full **technical spec**: scope, contracts/API/data, migrations expectation, test plan (`{{ task_command }} {{ task_test_name }}` / `{{ task_command }} {{ task_verify_name }}` as appropriate), dependencies, out of scope, DoD, and a **link** to the PRD attachment.
+
+9. **`PLAN::ISSUE-ID`** — add a planning comment using the structure from `.ai/reference/plan-template.md`, adapted for initiative level: execution sequence, milestone order, dependency map, cross-surface blockers (e.g. backend before frontend adoption).
+
+10. **Atomic issues** — create an ordered set of issues:
+    - Each issue description must satisfy `.ai/reference/issue-spec-template.md` **and** include the technical-spec bullets above where they apply.
+    - Reference the PRD attachment as global context when the issue belongs to this project.
+    - Order work via milestones/phases, `blockedBy`, and the planning comment sequence.
+    - Frontend (or downstream) issues only when upstream contracts are clear; mark real backend blockers.
+    - If `/orchestrator` is likely, note `related_issues` early for risky overlap (see `issue` skill).
+
+11. **Planning issue status** — move to `{{ tracker_status_active }}` while structuring; when PRD + project + issue set + `PLAN::` are complete, move toward `{{ tracker_status_review }}` per tracker conventions.
+
+12. **Verification** — confirm PRD is visible on the project, planning issue has spec + `PLAN::`, atomic issues are build-ready, blockers and order are unambiguous.
+{% else %}
+7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier):
+
+   - `.ai/context/initiatives/<slug>/prd.md` — full PRD
+   - `.ai/context/initiatives/<slug>/planning-issue-spec.md` — technical spec + pointer to `prd.md` (paste into `{{ workflow_tracker }}` or any tracker the team uses)
+   - `.ai/context/initiatives/<slug>/plan-comment.md` — body for a `PLAN::...` style comment (use `.ai/reference/plan-template.md` markers where useful)
+   - `.ai/context/initiatives/<slug>/issues-breakdown.md` — ordered atomic issues with dependencies and DoD each
+
+   End with short instructions for importing or copying into the team’s tracker (`{{ workflow_tracker }}` in `ai.config.yaml` is informational here).
+{% endif %}
+
+## Language
+
+- PRD, issue bodies, plan comments, and user-facing initiative dialogue: **`{{ workflow_language }}`** unless the user explicitly requests another language.
+
+## Canonical tasks
+
+- Do not invent stack commands; reference only canonical tasks from `ai.config.yaml` (e.g. `{{ task_command }} {{ task_test_name }}`, `{{ task_command }} {{ task_verify_name }}`).
+
+## Stop conditions
+
+- Initiative scope insufficient → clarify before PRD.
+{% if linear_enabled %}
+- Linear MCP unavailable while on the Linear path → stop; do not fake tracker completion (user may disable Linear in config and rerun for a local bundle).
+- PRD not creatable or not attachable to the Linear project → stop; workflow not complete on that path.
+{% endif %}
+- PRD exists but atomic issues lack build-ready spec → extend issues until they match `issue-spec-template` + technical-spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` before handoff.
+
+## Outcome
+
+{% if linear_enabled %}
+- Linear project in scope, PRD attached at project level, planning issue with spec + `PLAN::`, ordered atomic issues with explicit dependencies.
+{% else %}
+- Local bundle under `.ai/context/initiatives/<slug>/` ready for manual import into the team tracker (`{{ workflow_tracker }}`).
+{% endif %}
