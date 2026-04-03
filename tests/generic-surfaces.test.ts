@@ -78,6 +78,15 @@ describe("generic reusable surfaces", () => {
     }
   });
 
+  test("Taskfile.yml.jinja must not use Jinja trim that eats YAML list indentation", () => {
+    const taskfilePath = path.join(process.cwd(), "template", "base", "Taskfile.yml.jinja");
+    const content = fs.readFileSync(taskfilePath, "utf8");
+    // `-%}` after `for` strips indent before `- {{ command }}` -> invalid cmds entries.
+    // `{% endfor -%}` strips indent before the following `post` line when loops are empty.
+    expect(content).not.toMatch(/\{%\s*for[^%]*-\s*%\}/);
+    expect(content).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
+  });
+
   test("testing policy defaults to touched scope, not full suite", () => {
     const root = path.join(process.cwd(), "template", "base");
     const workflowGates = fs.readFileSync(path.join(root, ".ai", "rules", "workflow-gates.mdc.jinja"), "utf8");

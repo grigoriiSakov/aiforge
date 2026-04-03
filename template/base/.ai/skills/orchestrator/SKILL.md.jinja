@@ -61,6 +61,8 @@ Pipeline owner for:
    - `build` -> code changes aligned with plan
    - `test` -> canonical task evidence
    - `review` -> findings-first output plus recorded clean review verdict
+   - **Quality bar for the current phase:** нельзя считать этап завершённым и переходить к следующему (в т.ч. через `graph next` / смену фазы в артефактах), пока по **каноническим** командам проекта (`task lint`, `task test`, `task verify` — что задано в `ai.config.yaml` и preflight rules) для объёма работы **этого** этапа и **Claimed Write Scope** не **зелёное** состояние. Падающие тесты и ошибки линта — блокер перехода.
+   - **«Старые» ошибки:** не оправдывают красный пайплайн. Если ошибка в файлах/области вашего скоупа или мешает честно зафиксировать evidence (`record-test`, verify) — её нужно устранить, сузить скоуп с явной правкой плана/scope, или получить **явное** человеческое исключение в issue/plan. Нельзя закрывать этап, полагаясь на «это было до меня».
 17. Record test/review evidence through the runtime helper:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
     - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
@@ -93,3 +95,4 @@ Pipeline owner for:
 - Runtime state is `queued` or `blocked-by-conflict`
 - Missing verify evidence
 - Missing clean review verdict
+- Advancing a phase while canonical lint/test/verify are still failing for the current stage scope (see mandatory item 16)

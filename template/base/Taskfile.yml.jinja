@@ -5,36 +5,36 @@ tasks:
     desc: Canonical build task
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_build_name }}
-{% for command in commands.build -%}
+{% for command in commands.build %}
       - {{ command }}
-{% endfor -%}
+{% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_build_name }}
 
   {{ task_test_name }}:
     desc: Canonical test task
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_test_name }}
-{% for command in commands.test -%}
+{% for command in commands.test %}
       - {{ command }}
-{% endfor -%}
+{% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_test_name }}
 
   {{ task_lint_name }}:
     desc: Canonical lint task
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_lint_name }}
-{% for command in commands.lint -%}
+{% for command in commands.lint %}
       - {{ command }}
-{% endfor -%}
+{% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_lint_name }}
 
   {{ task_verify_name }}:
     desc: Canonical verify task
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_verify_name }}
-{% for command in commands.verify -%}
+{% for command in commands.verify %}
       - {{ command }}
-{% endfor -%}
+{% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_verify_name }}
 
   {{ task_review_name }}:
@@ -42,7 +42,7 @@ tasks:
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_review_name }}
       - node .ai/runtime/review-state.mjs start
-{% for command in commands.review -%}
+{% for command in commands.review %}
       - {{ command }}
-{% endfor -%}
+{% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_review_name }}
