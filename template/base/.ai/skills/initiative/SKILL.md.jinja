@@ -1,6 +1,6 @@
 ---
 name: initiative
-description: Discovery-first planning for large multi-issue initiatives (research, PRD, tracker project structure, planning issue, atomic issues). Use for /initiative or equivalent; not a substitute for a single /issue.
+description: Discovery-first planning for large multi-issue initiatives (research, PRD, tracker project structure, execution map, atomic issues). Use for /initiative or equivalent; not a substitute for a single /issue.
 ---
 
 # Initiative
@@ -72,27 +72,26 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
    - Attach the PRD as a **project-level** document / resource (canonical global context for later `issue` / `plan`). Name it consistently with an initiative slug.
    - **Stop** if Linear MCP is unavailable while executing this path: do **not** silently pretend the tracker work succeeded; ask to restore MCP or switch off Linear in config and rerun for a **local** bundle instead.
 
-8. **Planning issue** — create a planning issue (title + description in `{{ workflow_language }}` unless the user overrides). Description must include a full **technical spec**: scope, contracts/API/data, migrations expectation, test plan (`{{ task_command }} {{ task_test_name }}` / `{{ task_command }} {{ task_verify_name }}` as appropriate), dependencies, out of scope, DoD, and a **link** to the PRD attachment.
+8. **Initiative spec + execution map on the project (no meta “planning issue”)** — do **not** create a separate tracker issue whose only job is to hold a plan for spawning other issues. Put initiative-level material on the **project** instead:
+   - **Technical spec** (scope, contracts/API/data, migrations expectation, test plan with `{{ task_command }} {{ task_test_name }}` / `{{ task_command }} {{ task_verify_name }}` where relevant, dependencies, out of scope, DoD, link to the PRD): project description and/or a **second project attachment** (e.g. `technical-spec.md`), in `{{ workflow_language }}` unless the user overrides.
+   - **Execution map** (sequence, milestones, dependency map, cross-surface blockers — same spirit as `.ai/reference/plan-template.md` at initiative level): same attachment, a dedicated project doc (`execution-map.md`), or a clearly marked section inside the PRD (e.g. rollout + epic breakdown) that you treat as canonical for ordering work.
 
-9. **`PLAN::ISSUE-ID`** — add a planning comment using the structure from `.ai/reference/plan-template.md`, adapted for initiative level: execution sequence, milestone order, dependency map, cross-surface blockers (e.g. backend before frontend adoption).
-
-10. **Atomic issues** — create an ordered set of issues:
-    - Each issue description must satisfy `.ai/reference/issue-spec-template.md` **and** include the technical-spec bullets above where they apply.
-    - Reference the PRD attachment as global context when the issue belongs to this project.
-    - Order work via milestones/phases, `blockedBy`, and the planning comment sequence.
+9. **Atomic issues** — create an ordered set of **work** issues (real deliverables), not a placeholder “planning” ticket:
+    - Each issue description must satisfy `.ai/reference/issue-spec-template.md` **and** carry the technical-spec bullets that apply to **that** slice (link back to project PRD + spec/execution doc; do not duplicate the whole initiative spec in every body).
+    - Order work via milestones/phases, `blockedBy`, and the execution map.
     - Frontend (or downstream) issues only when upstream contracts are clear; mark real backend blockers.
     - If `/orchestrator` is likely, note `related_issues` early for risky overlap (see `issue` skill).
 
-11. **Planning issue status** — move to `{{ tracker_status_active }}` while structuring; when PRD + project + issue set + `PLAN::` are complete, move toward `{{ tracker_status_review }}` per tracker conventions.
+10. **Project hygiene** — when PRD + project docs + atomic issue set are complete, set the **project** (and individual issues per tracker rules) to appropriate states; there is no dedicated planning issue to advance.
 
-12. **Verification** — confirm PRD is visible on the project, planning issue has spec + `PLAN::`, atomic issues are build-ready, blockers and order are unambiguous.
+11. **Verification** — confirm PRD and initiative spec/execution map are visible on the project, atomic issues are build-ready, blockers and order are unambiguous.
 {% else %}
-7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier):
+7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier). Do **not** model a fake “planning issue” that only exists to describe how you will open other issues — keep initiative-level narrative in files you attach to a **project** / wiki / epic, not as a standalone meta-ticket template:
 
-   - `.ai/context/initiatives/<slug>/prd.md` — full PRD
-   - `.ai/context/initiatives/<slug>/planning-issue-spec.md` — technical spec + pointer to `prd.md` (paste into `{{ workflow_tracker }}` or any tracker the team uses)
-   - `.ai/context/initiatives/<slug>/plan-comment.md` — body for a `PLAN::...` style comment (use `.ai/reference/plan-template.md` markers where useful)
-   - `.ai/context/initiatives/<slug>/issues-breakdown.md` — ordered atomic issues with dependencies and DoD each
+   - `.ai/context/initiatives/<slug>/prd.md` — full PRD (may include rollout + epic breakdown as the canonical execution map if you keep one file)
+   - `.ai/context/initiatives/<slug>/technical-spec.md` — initiative technical spec + pointer to `prd.md` (paste into project description, project doc, or first real work issue only if the team insists — not as a dedicated “create issues from this” ticket)
+   - `.ai/context/initiatives/<slug>/execution-map.md` — optional: sequence, dependencies, blockers (`.ai/reference/plan-template.md` style markers where useful); omit if fully covered inside `prd.md`
+   - `.ai/context/initiatives/<slug>/issues-breakdown.md` — ordered **work** issues with dependencies and DoD each (ready to paste as real issues)
 
    End with short instructions for importing or copying into the team’s tracker (`{{ workflow_tracker }}` in `ai.config.yaml` is informational here).
 {% endif %}
@@ -112,12 +111,12 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
 - Linear MCP unavailable while on the Linear path → stop; do not fake tracker completion (user may disable Linear in config and rerun for a local bundle).
 - PRD not creatable or not attachable to the Linear project → stop; workflow not complete on that path.
 {% endif %}
-- PRD exists but atomic issues lack build-ready spec → extend issues until they match `issue-spec-template` + technical-spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` before handoff.
+- PRD exists but atomic issues lack build-ready spec → extend issues until they match `issue-spec-template` + per-issue spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` / `technical-spec.md` before handoff.
 
 ## Outcome
 
 {% if linear_enabled %}
-- Linear project in scope, PRD attached at project level, planning issue with spec + `PLAN::`, ordered atomic issues with explicit dependencies.
+- Linear project in scope, PRD + initiative spec/execution map at **project** level (no meta planning-only issue), ordered atomic work issues with explicit dependencies.
 {% else %}
 - Local bundle under `.ai/context/initiatives/<slug>/` ready for manual import into the team tracker (`{{ workflow_tracker }}`).
 {% endif %}
