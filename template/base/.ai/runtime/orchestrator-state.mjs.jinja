@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const DEFAULT_BASE_BRANCH = "{{ main_branch }}";
 const DEFAULT_WORKTREE_ROOT = "{{ orchestrator_worktree_root }}";
 const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
 const MAX_REVIEW_ITERATIONS = {{ orchestrator_max_review_iterations }};
@@ -204,7 +203,8 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     issueId,
     status: overrides.status ?? existingRun?.status ?? "submitted",
     branch: overrides.branch ?? existingRun?.branch ?? `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`,
-    baseBranch: overrides.baseBranch ?? existingRun?.baseBranch ?? DEFAULT_BASE_BRANCH,
+    baseBranch:
+      overrides.baseBranch !== undefined ? overrides.baseBranch : (existingRun?.baseBranch ?? null),
     worktreePath: overrides.worktreePath ?? existingRun?.worktreePath ?? null,
     claimedWriteScope: scopeToJson(scope),
     currentStep: overrides.currentStep ?? existingRun?.currentStep ?? "awaiting-admission",
@@ -299,6 +299,12 @@ function resolveStartPoint(baseBranch) {
     return baseBranch;
   }
   return "HEAD";
+}
+
+/** Branch or symbolic ref name for the main checkout, or "HEAD" when detached. */
+function currentCheckoutStartName() {
+  const sym = gitOutput(["symbolic-ref", "-q", "--short", "HEAD"], repoRoot(), true);
+  return sym || "HEAD";
 }
 
 function currentWorkspaceFingerprint(run) {
@@ -399,7 +405,15 @@ function commandInit() {
 function commandSubmit(args) {
   const issueId = requireOption(args, "--issue");
   const scope = parseScope(JSON.parse(requireOption(args, "--scope-json")));
-  const baseBranch = getOption(args, "--base-branch", DEFAULT_BASE_BRANCH);
+  const baseBranchIdx = args.indexOf("--base-branch");
+  let baseBranchPatch = {};
+  if (baseBranchIdx !== -1) {
+    const value = args[baseBranchIdx + 1];
+    if (!value || String(value).startsWith("--")) {
+      throw new Error("missing value for --base-branch");
+    }
+    baseBranchPatch = { baseBranch: value };
+  }
   const branch = getOption(args, "--branch", `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`);
   const registry = loadRegistry();
 
@@ -411,7 +425,7 @@ function commandSubmit(args) {
   const run = buildRun(issueId, scope, loadRun(issueId), {
     status: "submitted",
     branch,
-    baseBranch,
+    ...baseBranchPatch,
     currentStep: "awaiting-admission",
     conflictsWith: conflicts.map((entry) => entry.issueId)
   });
@@ -606,7 +620,11 @@ function commandStartWorktree(args) {
   }
 
   const branch = run.branch || `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`;
-  const startPoint = resolveStartPoint(run.baseBranch || DEFAULT_BASE_BRANCH);
+  const startName =
+    run.baseBranch != null && String(run.baseBranch).trim() !== ""
+      ? run.baseBranch
+      : currentCheckoutStartName();
+  const startPoint = resolveStartPoint(startName);
   const branchExists = runGit(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], repoRoot(), true).status === 0;
 
   if (branchExists) {

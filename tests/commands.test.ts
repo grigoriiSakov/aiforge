@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -121,7 +122,6 @@ describe("command flow", () => {
     );
     const renderedRuntime = fs
       .readFileSync(templatePath, "utf8")
-      .replaceAll("{{ main_branch }}", "main")
       .replaceAll("{{ orchestrator_worktree_root }}", path.join(repoRoot, "worktrees"))
       .replaceAll("{{ orchestrator_branch_prefix }}", "agent/")
       .replaceAll("{{ orchestrator_max_review_iterations }}", "3");
@@ -201,6 +201,108 @@ describe("command flow", () => {
 
     const promotedRun = JSON.parse(runNodeScript(runtimePath, ["status", "--issue", "APP-2"], repoRoot));
     expect(promotedRun.status).toBe("reserved");
+  });
+
+  test("orchestrator start-worktree uses current branch as base unless --base-branch is set", () => {
+    const repoRoot = makeTempRepo("ai-simple-orchestrator-worktree-base-");
+    const git = (args: string[]) => {
+      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+      if (result.status !== 0) {
+        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
+      }
+      return result.stdout.trim();
+    };
+
+    git(["init"]);
+    git(["config", "user.email", "t@t.t"]);
+    git(["config", "user.name", "t"]);
+    fs.mkdirSync(path.join(repoRoot, "src", "api"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "src", "api", "handler.ts"), "// base\n");
+    git(["add", "."]);
+    git(["commit", "-m", "base"]);
+    git(["branch", "-M", "main"]);
+    git(["checkout", "-b", "feature/orch"]);
+    fs.appendFileSync(path.join(repoRoot, "src", "api", "handler.ts"), "// more\n");
+    git(["add", "."]);
+    git(["commit", "-m", "feature"]);
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    const templatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "orchestrator-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(templatePath, "utf8")
+      .replaceAll("{{ orchestrator_worktree_root }}", path.join(repoRoot, "worktrees"))
+      .replaceAll("{{ orchestrator_branch_prefix }}", "agent/")
+      .replaceAll("{{ orchestrator_max_review_iterations }}", "3");
+    const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
+    fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    runNodeScript(
+      runtimePath,
+      [
+        "submit",
+        "--issue",
+        "WT-1",
+        "--scope-json",
+        JSON.stringify({
+          areas: ["api"],
+          paths: ["src/api/handler.ts"],
+          shared_surfaces: [],
+          related_issues: [],
+          touches_process_layer: false
+        })
+      ],
+      repoRoot
+    );
+
+    const started = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-1"], repoRoot));
+    const worktreePath = started.worktreePath as string;
+    const mainCheckoutHead = git(["rev-parse", "HEAD"]);
+    const worktreeHead = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: worktreePath,
+      encoding: "utf8"
+    }).stdout.trim();
+    expect(worktreeHead).toBe(mainCheckoutHead);
+
+    runNodeScript(runtimePath, ["release", "--issue", "WT-1", "--remove-worktree", "--status", "done"], repoRoot);
+
+    runNodeScript(
+      runtimePath,
+      [
+        "submit",
+        "--issue",
+        "WT-2",
+        "--base-branch",
+        "main",
+        "--scope-json",
+        JSON.stringify({
+          areas: ["api"],
+          paths: ["src/api/handler.ts"],
+          shared_surfaces: [],
+          related_issues: [],
+          touches_process_layer: false
+        })
+      ],
+      repoRoot
+    );
+
+    const started2 = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-2"], repoRoot));
+    const worktreePath2 = started2.worktreePath as string;
+    const mainTip = git(["rev-parse", "main"]);
+    const worktreeHead2 = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: worktreePath2,
+      encoding: "utf8"
+    }).stdout.trim();
+    expect(worktreeHead2).toBe(mainTip);
+    expect(worktreeHead2).not.toBe(git(["rev-parse", "HEAD"]));
   });
 
   test("dry-run init does not write config", async () => {
