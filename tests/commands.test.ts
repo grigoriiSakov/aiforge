@@ -305,6 +305,385 @@ describe("command flow", () => {
     expect(worktreeHead2).not.toBe(git(["rev-parse", "HEAD"]));
   });
 
+  test("initiative supervisor runtime persists issue order, rework loop, and completion", () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-");
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", "billing-v2");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(initiativeDir, "issues-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          slug: "billing-v2",
+          baseBranch: "main",
+          managerBranch: "initiative/billing-v2",
+          maxAttemptsPerIssue: 3,
+          artifacts: {
+            prd: ".ai/context/initiatives/billing-v2/prd.md"
+          },
+          issues: [
+            {
+              id: "APP-1",
+              title: "Backend contract",
+              order: 10,
+              blockedBy: []
+            },
+            {
+              id: "APP-2",
+              title: "Frontend adoption",
+              order: 20,
+              blockedBy: ["APP-1"]
+            }
+          ]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const templatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(templatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    const runtimePath = path.join(runtimeDir, "initiative-supervisor-state.mjs");
+    fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+
+    const initial = JSON.parse(runNodeScript(runtimePath, ["init", "--slug", "billing-v2"], repoRoot));
+    expect(initial.managerBranch).toBe("initiative/billing-v2");
+
+    const firstNext = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)
+    );
+    expect(firstNext.action).toBe("launch_worker");
+    expect(firstNext.issue).toBe("APP-1");
+    expect(firstNext.attempt).toBe(1);
+
+    const promptInfo = JSON.parse(
+      runNodeScript(runtimePath, ["prepare-worker-prompt", "--slug", "billing-v2"], repoRoot)
+    );
+    expect(promptInfo.issue).toBe("APP-1");
+    expect(fs.existsSync(path.join(repoRoot, String(promptInfo.promptPath)))).toBe(true);
+
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--status",
+        "launched",
+        "--run-id",
+        "w1",
+        "--worktree-path",
+        "/tmp/worktrees/APP-1"
+      ],
+      repoRoot
+    );
+    const waiting = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot));
+    expect(waiting.action).toBe("wait_worker");
+
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--status",
+        "completed",
+        "--run-id",
+        "w1",
+        "--worktree-path",
+        "/tmp/worktrees/APP-1"
+      ],
+      repoRoot
+    );
+    const reviewStep = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot));
+    expect(reviewStep.action).toBe("run_manager_review");
+    expect(reviewStep.issue).toBe("APP-1");
+
+    const findingsInfo = JSON.parse(
+      runNodeScript(runtimePath, ["write-findings-stub", "--slug", "billing-v2", "--issue", "APP-1"], repoRoot)
+    );
+    expect(fs.existsSync(path.join(repoRoot, String(findingsInfo.findingsPath)))).toBe(true);
+
+    runNodeScript(
+      runtimePath,
+      [
+        "record-review",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--result",
+        "rework",
+        "--findings-path",
+        String(findingsInfo.findingsPath)
+      ],
+      repoRoot
+    );
+    const relaunch = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot));
+    expect(relaunch.action).toBe("launch_worker");
+    expect(relaunch.issue).toBe("APP-1");
+    expect(relaunch.attempt).toBe(2);
+    expect(relaunch.findingsPath).toBe(findingsInfo.findingsPath);
+
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--status",
+        "launched",
+        "--run-id",
+        "w2",
+        "--worktree-path",
+        "/tmp/worktrees/APP-1"
+      ],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--status",
+        "completed",
+        "--run-id",
+        "w2",
+        "--worktree-path",
+        "/tmp/worktrees/APP-1"
+      ],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      [
+        "record-review",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--result",
+        "accept",
+        "--summary",
+        "manager accepted"
+      ],
+      repoRoot
+    );
+    const finalizeFirst = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)
+    );
+    expect(finalizeFirst.action).toBe("finalize_issue");
+
+    runNodeScript(
+      runtimePath,
+      [
+        "mark-issue-done",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-1",
+        "--commit-sha",
+        "abc123"
+      ],
+      repoRoot
+    );
+    const secondNext = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)
+    );
+    expect(secondNext.action).toBe("launch_worker");
+    expect(secondNext.issue).toBe("APP-2");
+
+    runNodeScript(runtimePath, ["pause", "--slug", "billing-v2", "--reason", "manual"], repoRoot);
+    const pausedNext = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)
+    );
+    expect(pausedNext.action).toBe("wait_resume");
+
+    runNodeScript(runtimePath, ["resume", "--slug", "billing-v2"], repoRoot);
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-2",
+        "--status",
+        "launched",
+        "--run-id",
+        "w3",
+        "--worktree-path",
+        "/tmp/worktrees/APP-2"
+      ],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      [
+        "record-worker",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-2",
+        "--status",
+        "completed",
+        "--run-id",
+        "w3",
+        "--worktree-path",
+        "/tmp/worktrees/APP-2"
+      ],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      [
+        "record-review",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-2",
+        "--result",
+        "accept"
+      ],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      [
+        "mark-issue-done",
+        "--slug",
+        "billing-v2",
+        "--issue",
+        "APP-2",
+        "--commit-sha",
+        "def456"
+      ],
+      repoRoot
+    );
+
+    const finished = JSON.parse(runNodeScript(runtimePath, ["status", "--slug", "billing-v2"], repoRoot));
+    expect(finished.status).toBe("done");
+    expect(finished.issues["APP-1"].commitSha).toBe("abc123");
+    expect(finished.issues["APP-2"].commitSha).toBe("def456");
+    expect(
+      fs.existsSync(path.join(repoRoot, ".ai", "runtime", "initiative-supervisor", "current", "billing-v2.md"))
+    ).toBe(true);
+  });
+
+  test("codex guards block manager-mode edits when initiative supervisor is active", async () => {
+    const repoRoot = makeTempRepo("ai-simple-supervisor-guard-");
+    const git = (args: string[]) => {
+      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+      if (result.status !== 0) {
+        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
+      }
+      return result.stdout.trim();
+    };
+
+    git(["init"]);
+    git(["config", "user.email", "t@t.t"]);
+    git(["config", "user.name", "t"]);
+    fs.writeFileSync(path.join(repoRoot, "README.md"), "# demo\n");
+    git(["add", "."]);
+    git(["commit", "-m", "base"]);
+    git(["branch", "-M", "main"]);
+    git(["checkout", "-b", "initiative/demo"]);
+
+    await runInitCommand({
+      repoRoot,
+      projectName: "Supervisor Guard Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    installCodexHookTemplates(repoRoot);
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "initiative-supervisor", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "initiative-supervisor", "runs", "demo.json"),
+      JSON.stringify(
+        {
+          slug: "demo",
+          status: "running",
+          managerBranch: "initiative/demo",
+          currentIssueId: "APP-1",
+          issues: {
+            "APP-1": {
+              status: "worker-completed"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const preToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "pre-tool-use-guard.mjs");
+    const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
+    const postToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "post-tool-use-guard.mjs");
+
+    const deniedEdit = JSON.parse(
+      runNodeScriptWithInput(
+        preToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_name: "Edit", tool_input: { path: "src/app.ts" } })
+      ).stdout
+    );
+    expect(deniedEdit.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(deniedEdit.systemMessage).toContain("Manager mode");
+
+    const allowedRuntimeEdit = JSON.parse(
+      runNodeScriptWithInput(
+        preToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({
+          tool_name: "Edit",
+          tool_input: { path: ".ai/runtime/initiative-supervisor/findings/demo/APP-1-attempt-1.md" }
+        })
+      ).stdout
+    );
+    expect(allowedRuntimeEdit.continue).toBe(true);
+
+    const postToolUse = JSON.parse(
+      runNodeScriptWithInput(
+        postToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_input: { command: "git status" } })
+      ).stdout
+    );
+    expect(postToolUse.systemMessage).toContain("Initiative supervisor demo is still active");
+    expect(postToolUse.systemMessage).toContain("run_manager_review");
+
+    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(stopGuard.stopReason).toBe("initiative_supervisor_incomplete");
+    expect(stopGuard.systemMessage).toContain("run_manager_review");
+  });
+
   test("dry-run init does not write config", async () => {
     const repoRoot = makeTempRepo("ai-simple-dry-init-");
     const result = await runInitCommand({

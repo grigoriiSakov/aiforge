@@ -1,0 +1,183 @@
+---
+name: initiative-supervisor
+description: Durable manager for a multi-issue initiative. It reads the initiative manifest, launches one isolated orchestrator worker per issue, verifies the result independently, loops on findings, and only then advances / finalizes. Use for /initiative-supervisor or equivalent.
+---
+
+# Initiative Supervisor
+
+Manager-only durable loop for executing a prepared initiative issue-by-issue.
+
+This skill is **not** the implementation worker.
+It owns:
+
+- initiative order
+- persisted supervisor state
+- worker launch / re-launch
+- independent acceptance checks
+- finalization (commit / merge / cleanup / tracker done)
+
+It must **not** quietly turn into a coding agent in the main checkout.
+
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+  - `.ai/skills/orchestrator/SKILL.md`
+  - `.ai/skills/initiative/SKILL.md`
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue until this preflight read is complete.
+{% if linear_enabled -%}
+- Before tracker actions, also read `.ai/skills/tracker/SKILL.md` and `.ai/rules/linear-mcp.mdc`.
+{% endif -%}
+
+## Required durable artifacts
+
+- Initiative manifest: `.ai/context/initiatives/<slug>/issues-manifest.json`
+- Supervisor state: `.ai/runtime/initiative-supervisor/runs/<slug>.json`
+- Supervisor digest: `.ai/runtime/initiative-supervisor/current/<slug>.md`
+- Worker prompts: `.ai/runtime/initiative-supervisor/prompts/<slug>/...`
+- Findings / rework notes: `.ai/runtime/initiative-supervisor/findings/<slug>/...`
+- Per-issue orchestrator state: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+- Local plan/progress mirrors when present:
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+
+## Core operating model
+
+1. The **manager** operates in the main checkout / manager branch and does **not** edit product code there.
+2. Each issue is executed by a **separate worker run** that owns exactly one `/orchestrator` flow inside the issue worktree.
+3. The manager does **not** trust the worker's claims blindly.
+4. Every transition must be grounded in `.ai/runtime/initiative-supervisor-state.mjs`.
+5. If context gets long, reread the preflight files and the supervisor digest before the next action.
+
+## Mandatory protocol
+
+1. Read the initiative manifest `.ai/context/initiatives/<slug>/issues-manifest.json`.
+2. Start or resume the durable state through:
+   - `node .ai/runtime/initiative-supervisor-state.mjs init --slug <slug>` for a new run
+   - `node .ai/runtime/initiative-supervisor-state.mjs status --slug <slug>` for resume / inspection
+3. Treat `node .ai/runtime/initiative-supervisor-state.mjs graph next --slug <slug>` as the source of truth for the next machine action.
+4. Before each worker launch, generate a fresh prompt:
+   - `node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>`
+5. Launch the worker in an **isolated run** with that prompt and the current issue only.
+6. Immediately record worker lifecycle in supervisor state:
+   - `record-worker --status launched`
+   - after worker returns: `record-worker --status completed|failed`
+7. When the worker returns, run an **independent manager review** before accepting anything:
+   - inspect `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+   - inspect git diff / changed paths
+   - rerun the relevant canonical checks when needed
+   - confirm review/test fingerprints still match the current worktree
+8. If manager review finds issues:
+   - write concrete findings under `.ai/runtime/initiative-supervisor/findings/<slug>/...`
+   - `record-review --result rework`
+   - loop back to a fresh worker run
+9. If manager review accepts the issue:
+   - commit the issue result
+   - merge it into the manager branch
+   - remove the issue worktree
+{% if linear_enabled -%}
+   - move the issue to `Done` in Linear
+{% endif -%}
+   - `mark-issue-done`
+10. Repeat until `graph next` returns `flow_complete`.
+
+## Concrete loop skeleton
+
+```bash
+# 1. start or resume durable state
+node .ai/runtime/initiative-supervisor-state.mjs init --slug <slug>
+# or
+node .ai/runtime/initiative-supervisor-state.mjs status --slug <slug>
+
+# 2. inspect next machine action
+node .ai/runtime/initiative-supervisor-state.mjs graph next --slug <slug>
+
+# 3. before worker launch
+node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>
+node .ai/runtime/initiative-supervisor-state.mjs record-worker --slug <slug> --issue ISSUE-ID --status launched --run-id <run-id>
+
+# 4. after worker returns
+node .ai/runtime/initiative-supervisor-state.mjs record-worker --slug <slug> --issue ISSUE-ID --status completed --run-id <run-id> --worktree-path <abs-path>
+
+# 5a. if manager review fails
+node .ai/runtime/initiative-supervisor-state.mjs write-findings-stub --slug <slug> --issue ISSUE-ID
+node .ai/runtime/initiative-supervisor-state.mjs record-review --slug <slug> --issue ISSUE-ID --result rework --findings-path .ai/runtime/initiative-supervisor/findings/<slug>/...
+
+# 5b. if manager review accepts
+node .ai/runtime/initiative-supervisor-state.mjs record-review --slug <slug> --issue ISSUE-ID --result accept
+node .ai/runtime/initiative-supervisor-state.mjs mark-issue-done --slug <slug> --issue ISSUE-ID --commit-sha <sha>
+```
+
+## Manager branch discipline
+
+- The manager branch is the initiative integration branch, usually `initiative/<slug>`.
+- Before the loop, ensure the main checkout is on that branch and is clean.
+- Do not implement feature code directly on the manager branch.
+- Acceptable manager-side changes are limited to runtime state, findings, prompts, commit/merge actions, and tracker transitions.
+
+## Manager review bar
+
+The manager must verify at least:
+
+- orchestrator state reached `awaiting-finalize` or equivalent ready-to-finalize condition
+- `lastTestResult == pass`
+- `lastReviewResult` is `clean` or `low`
+- test / review fingerprints still match the current worktree contents
+- changed paths stay within the claimed scope (except explicitly justified process-layer files)
+- canonical task evidence is real, not asserted from prose
+- any repo-wide red outside scope is documented honestly and does not leak into claimed paths
+
+If any of those fail, the worker is **not** accepted.
+
+## Concrete manager verification checklist
+
+- Read `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
+- Read `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md` when they exist.
+- Check changed files with git in the worker worktree.
+- Export the canonical worktree env:
+  - `eval "$(node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID)"`
+- Re-run the relevant canonical checks, typically:
+  - `{{ task_command }} {{ task_test_name }}`
+  - `{{ task_command }} {{ task_verify_name }}`
+  - `{{ task_command }} {{ task_review_name }}` when it adds signal
+- If scope is clean, finalize. If not, write findings and send the issue back through another worker attempt.
+
+## Worker launch contract
+
+- The worker handles **one** issue only.
+- The worker follows `.ai/skills/orchestrator/SKILL.md`.
+- The worker must not reorder initiative work.
+- The worker must return only after the issue is truly ready for manager verification or blocked by a real hard blocker.
+
+## Pause / resume
+
+- To pause safely:
+  - `node .ai/runtime/initiative-supervisor-state.mjs pause --slug <slug> --reason "..."`
+- To resume:
+  - reread the preflight files
+  - reread `.ai/runtime/initiative-supervisor/current/<slug>.md`
+  - `node .ai/runtime/initiative-supervisor-state.mjs resume --slug <slug>`
+  - continue from `graph next`
+- Do not rely on chat memory for resume.
+
+## Stop conditions
+
+- Missing initiative manifest
+- No machine-readable ordered issue list
+- Manager starts editing product code in the main checkout instead of using a worker
+- Worker returns without honest test / review evidence
+- Manager review finds scope drift or unverifiable claims
+- Max attempts for an issue are exhausted
+- Initiative state is `paused`, `failed`, or `aborted`
+
+## Outcome
+
+- Every issue in the initiative is either:
+  - completed, committed, merged into the manager branch, cleaned up, tracker-updated
+  - or explicitly failed / paused with durable state and findings on disk

@@ -9,6 +9,7 @@ const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdi
 const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
 const orchestratorRegistryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
 const orchestratorRunsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
+const supervisorRunsDir = path.join(process.cwd(), ".ai", "runtime", "initiative-supervisor", "runs");
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -69,6 +70,33 @@ function getCurrentOrchestratorRun() {
   return null;
 }
 
+function getCurrentSupervisorRun() {
+  if (!fs.existsSync(supervisorRunsDir)) {
+    return null;
+  }
+
+  const branchName = currentBranch();
+  if (!branchName) {
+    return null;
+  }
+
+  for (const entry of fs.readdirSync(supervisorRunsDir)) {
+    if (!entry.endsWith(".json")) {
+      continue;
+    }
+    const run = readJson(path.join(supervisorRunsDir, entry));
+    if (!run || String(run.status ?? "") !== "running") {
+      continue;
+    }
+    if (branchName !== String(run.managerBranch ?? "")) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
 function nextActionForRun(run) {
   if (run.status === "reserved" && !run.worktreePath) {
     return "start_worktree";
@@ -79,10 +107,47 @@ function nextActionForRun(run) {
   return "run_build";
 }
 
+function nextActionForSupervisor(run) {
+  const currentIssueId = run.currentIssueId ?? null;
+  const issue = currentIssueId ? run.issues?.[currentIssueId] : null;
+  if (!issue) {
+    return "launch_worker";
+  }
+  if (issue.status === "worker-running") {
+    return "wait_worker";
+  }
+  if (issue.status === "worker-completed") {
+    return "run_manager_review";
+  }
+  if (issue.status === "manager-accepted") {
+    return "finalize_issue";
+  }
+  return "launch_worker";
+}
+
 const manifest = readJson(manifestPath);
 const state = readJson(taskStatePath);
 const reviewState = readJson(reviewStatePath);
 const activeRun = getCurrentOrchestratorRun();
+const activeSupervisor = getCurrentSupervisorRun();
+
+if (activeSupervisor) {
+  const nextAction = nextActionForSupervisor(activeSupervisor);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "initiative_supervisor_incomplete",
+        systemMessage:
+          `Initiative supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
+          `Do not stop. Next action: ${nextAction}. Keep the manager loop running until the supervisor reaches done/paused/failed explicitly in its runtime state.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
 
 if (activeRun) {
   const nextAction = nextActionForRun(activeRun);

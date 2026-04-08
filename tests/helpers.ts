@@ -266,6 +266,7 @@ export function installCodexHookTemplates(repoRoot: string): void {
   const templateRoot = path.join(process.cwd(), "template", "base", ".codex");
   const hookFiles = [
     "hooks.json.jinja",
+    path.join("hooks", "pre-tool-use-guard.mjs.jinja"),
     path.join("hooks", "post-tool-use-guard.mjs.jinja"),
     path.join("hooks", "stop-delivery-guard.mjs.jinja")
   ];

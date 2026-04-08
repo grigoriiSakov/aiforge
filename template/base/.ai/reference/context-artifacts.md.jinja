@@ -11,10 +11,13 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 ## Recommended local runtime files
 
 - `.ai/context/current.md`
+- `.ai/context/initiatives/<slug>/issues-manifest.json`
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` mirror)
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` mirror)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+- `.ai/runtime/initiative-supervisor/runs/<slug>.json`
+- `.ai/runtime/initiative-supervisor/current/<slug>.md`
 
 Configured in `ai.config.yaml` as `artifacts.planProgressRoot` (template default: `.ai/context/runtime`).
 
@@ -45,3 +48,11 @@ If work is coordinated through `/orchestrator`, the source of truth for reservat
 
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+
+## Initiative supervisor runtime
+
+If a multi-issue initiative is being executed through `initiative-supervisor`, the source of truth is:
+
+- `.ai/context/initiatives/<slug>/issues-manifest.json`
+- `.ai/runtime/initiative-supervisor/runs/<slug>.json`
+- `.ai/runtime/initiative-supervisor/current/<slug>.md`
