@@ -15,6 +15,7 @@ import {
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
+  runInitiativeSupervisorSetRunnerCommand,
   runInitiativeSupervisorStartCommand,
   runInitiativeSupervisorStatusCommand
 } from "../src/commands/initiative-supervisor.js";
@@ -950,6 +951,78 @@ printf "%s\\n%s\\n%s\\n" "$1" "$2" "$3" > "$3"
 
     const startDetails = ((result.details as Record<string, unknown>).start ?? {}) as Record<string, unknown>;
     expect((startDetails.next as Record<string, unknown>).action).toBe("await_worker_launch");
+  });
+
+  test("initiative supervisor can switch runner while paused", async () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-runner-switch-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Supervisor Runner Switch Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", "kernel");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(initiativeDir, "issues-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          slug: "kernel",
+          baseBranch: "main",
+          managerBranch: "initiative/kernel",
+          issues: [{ id: "APP-77", title: "Refactor kernel", team: "backend", order: 10, blockedBy: [] }]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const runtimeTemplatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(runtimeTemplatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    fs.writeFileSync(path.join(runtimeDir, "initiative-supervisor-state.mjs"), renderedRuntime, { mode: 0o755 });
+
+    const initialized = runInitiativeSupervisorInitCommand(repoRoot, {
+      slug: "kernel",
+      teams: ["backend"],
+      runnerProvider: "claude",
+      runnerCommand: 'claude "{{prompt_file}}"'
+    });
+    expect(initialized.ok).toBe(true);
+
+    const updated = runInitiativeSupervisorSetRunnerCommand(repoRoot, {
+      slug: "kernel",
+      runnerProvider: "codex",
+      clearRunnerCommand: true
+    });
+    expect(updated.ok).toBe(true);
+    expect(((updated.details as Record<string, unknown>).runner as Record<string, unknown>).provider).toBe("codex");
+    expect(((updated.details as Record<string, unknown>).runner as Record<string, unknown>).commandTemplate).toBeNull();
+
+    const status = runInitiativeSupervisorStatusCommand(repoRoot, "kernel");
+    expect((((status.details as Record<string, unknown>).runner ?? {}) as Record<string, unknown>).provider).toBe(
+      "codex"
+    );
+
+    const started = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
+    expect(started.ok).toBe(true);
+    expect((((started.details as Record<string, unknown>).next ?? {}) as Record<string, unknown>).provider).toBe(
+      "codex"
+    );
   });
 
   test("codex guards block manager-mode edits when initiative supervisor is active", async () => {

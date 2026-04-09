@@ -632,6 +632,51 @@ function commandResume(args) {
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 }
 
+function commandSetRunner(args) {
+  ensureStateDirs();
+  const slug = requireOption(args, "--slug");
+  const state = requireState(slug);
+  const provider = getOption(args, "--runner-provider", null);
+  const commandTemplate = getOption(args, "--runner-command", null);
+  const clearCommand = args.includes("--clear-runner-command");
+
+  if (state.status !== "paused") {
+    throw new Error(`cannot change runner in status ${state.status}; pause the supervisor first`);
+  }
+  if (provider == null && commandTemplate == null && !clearCommand) {
+    throw new Error("set-runner requires --runner-provider, --runner-command, or --clear-runner-command");
+  }
+
+  if (!state.runner || typeof state.runner !== "object") {
+    state.runner = {
+      provider: "auto",
+      commandTemplate: null,
+      detectedProvider: null,
+      lastLaunch: null
+    };
+  }
+
+  if (provider != null) {
+    state.runner.provider = provider;
+    state.runner.detectedProvider = null;
+  }
+  if (clearCommand) {
+    state.runner.commandTemplate = null;
+  }
+  if (commandTemplate != null) {
+    state.runner.commandTemplate = commandTemplate;
+  }
+
+  saveState(state);
+  appendEvent(slug, {
+    type: "set_runner",
+    provider: state.runner.provider,
+    commandTemplate: state.runner.commandTemplate,
+    clearCommand
+  });
+  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+}
+
 function commandAbort(args) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
@@ -890,6 +935,9 @@ function main() {
       return;
     case "resume":
       commandResume(args);
+      return;
+    case "set-runner":
+      commandSetRunner(args);
       return;
     case "abort":
       commandAbort(args);

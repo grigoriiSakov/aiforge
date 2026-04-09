@@ -48,6 +48,7 @@ aiforge initiative-supervisor next --slug <slug>
 
 # 4. pause / continue when needed
 aiforge initiative-supervisor pause --slug <slug> --reason "manual stop"
+aiforge initiative-supervisor set-runner --slug <slug> --runner-provider codex --clear-runner-command
 aiforge initiative-supervisor resume --slug <slug>
 ```
 
@@ -65,6 +66,7 @@ Expected precondition:
 - selection is durable for that supervisor run
 - if `--runner-command` (or env `AIFORGE_RUNNER_COMMAND`) is configured, `start` attempts to spawn the worker immediately
 - otherwise `start` prepares the worker prompt and the state machine moves to `await_worker_launch`
+- if you need to switch worker runtime mid-initiative, pause first, then use `set-runner`
 
 ## Rule preflight
 
@@ -116,23 +118,27 @@ Expected precondition:
    - `aiforge initiative-supervisor start --slug <slug>`
    - if a runner command exists, `start` spawns a worker and records `record-worker --status launched`
    - otherwise `start` leaves the run in `await_worker_launch` with a concrete prompt path for manual handoff
-4. Treat `aiforge initiative-supervisor next --slug <slug>` (backed by `.ai/runtime/initiative-supervisor-state.mjs graph next`) as the source of truth for the next machine action.
-4. Before each worker launch, generate a fresh prompt:
+4. To change worker runtime durably for future launches:
+   - `aiforge initiative-supervisor pause --slug <slug> --reason "..."`
+   - `aiforge initiative-supervisor set-runner --slug <slug> --runner-provider codex --clear-runner-command`
+   - `aiforge initiative-supervisor start --slug <slug>` or `resume`
+5. Treat `aiforge initiative-supervisor next --slug <slug>` (backed by `.ai/runtime/initiative-supervisor-state.mjs graph next`) as the source of truth for the next machine action.
+6. Before each worker launch, generate a fresh prompt:
    - `node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>`
-5. Launch the worker in an **isolated run** with that prompt and the current issue only.
-6. Immediately record worker lifecycle in supervisor state:
+7. Launch the worker in an **isolated run** with that prompt and the current issue only.
+8. Immediately record worker lifecycle in supervisor state:
    - `record-worker --status launched`
    - after worker returns: `record-worker --status completed|failed`
-7. When the worker returns, run an **independent manager review** before accepting anything:
+9. When the worker returns, run an **independent manager review** before accepting anything:
    - inspect `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
    - inspect git diff / changed paths
    - rerun the relevant canonical checks when needed
    - confirm review/test fingerprints still match the current worktree
-8. If manager review finds issues:
+10. If manager review finds issues:
    - write concrete findings under `.ai/runtime/initiative-supervisor/findings/<slug>/...`
    - `record-review --result rework`
    - loop back to a fresh worker run
-9. If manager review accepts the issue:
+11. If manager review accepts the issue:
    - commit the issue result
    - merge it into the manager branch
    - remove the issue worktree
@@ -140,7 +146,7 @@ Expected precondition:
    - move the issue to `Done` in Linear
 {% endif -%}
    - `mark-issue-done`
-10. Repeat until `graph next` returns `flow_complete`.
+12. Repeat until `graph next` returns `flow_complete`.
 
 ## Concrete loop skeleton
 

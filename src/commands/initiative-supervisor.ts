@@ -703,6 +703,34 @@ export function runInitiativeSupervisorResumeCommand(repoRoot: string, slug: str
   };
 }
 
+export function runInitiativeSupervisorSetRunnerCommand(
+  repoRoot: string,
+  options: {
+    slug: string;
+    runnerProvider?: string;
+    runnerCommand?: string;
+    clearRunnerCommand?: boolean;
+  }
+): CommandResult {
+  const args = ["set-runner", "--slug", options.slug];
+  if (options.runnerProvider) {
+    args.push("--runner-provider", options.runnerProvider);
+  }
+  if (options.runnerCommand) {
+    args.push("--runner-command", options.runnerCommand);
+  }
+  if (options.clearRunnerCommand) {
+    args.push("--clear-runner-command");
+  }
+  const payload = invokeSupervisorRuntime(repoRoot, args);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor runner updated for ${options.slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+
 export function runInitiativeSupervisorAbortCommand(
   repoRoot: string,
   options: { slug: string; reason?: string }

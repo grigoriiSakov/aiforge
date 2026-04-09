@@ -15,6 +15,7 @@ import {
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
+  runInitiativeSupervisorSetRunnerCommand,
   runInitiativeSupervisorStartCommand,
   runInitiativeSupervisorStatusCommand
 } from "../commands/initiative-supervisor.js";
@@ -315,6 +316,37 @@ async function main(): Promise<void> {
       printResult(result, options.json);
       process.exit(result.code);
     });
+
+  initiativeSupervisor
+    .command("set-runner")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--runner-provider <provider>", "Worker runner provider: auto|manual|claude|codex|cursor")
+    .option(
+      "--runner-command <template>",
+      "Shell template used to launch a worker. Placeholders: {{repo_root}}, {{slug}}, {{issue_id}}, {{prompt_file}}, {{provider}}"
+    )
+    .option("--clear-runner-command", "Clear stored runner command and fall back to env/provider resolution", false)
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action(
+      (options: {
+        slug: string;
+        runnerProvider?: string;
+        runnerCommand?: string;
+        clearRunnerCommand: boolean;
+        repo: string;
+        json: boolean;
+      }) => {
+        const result = runInitiativeSupervisorSetRunnerCommand(options.repo, {
+          slug: options.slug,
+          ...(options.runnerProvider ? { runnerProvider: options.runnerProvider } : {}),
+          ...(options.runnerCommand ? { runnerCommand: options.runnerCommand } : {}),
+          ...(options.clearRunnerCommand ? { clearRunnerCommand: true } : {})
+        });
+        printResult(result, options.json);
+        process.exit(result.code);
+      }
+    );
 
   initiativeSupervisor
     .command("abort")

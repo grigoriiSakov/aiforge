@@ -189,6 +189,7 @@ aiforge initiative-supervisor start --slug billing-v2
 aiforge initiative-supervisor status --slug billing-v2
 aiforge initiative-supervisor next --slug billing-v2
 aiforge initiative-supervisor pause --slug billing-v2 --reason "waiting for manual review"
+aiforge initiative-supervisor set-runner --slug billing-v2 --runner-provider codex --clear-runner-command
 aiforge initiative-supervisor resume --slug billing-v2
 ```
 
@@ -204,6 +205,8 @@ aiforge initiative-supervisor resume --slug billing-v2
 - `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
 - `init --start` делает init и сразу запускает supervisor
 - если run уже существует и находится в `paused`, `start` запускает его дальше
+- если надо переключить worker runtime, ставишь supervisor на паузу и делаешь `set-runner`
+- `set-runner --clear-runner-command` полезен при переключении, например, с `claude` на `codex`, чтобы старый command template не остался висеть в state
 - если настроен `--runner-command` или env `AIFORGE_RUNNER_COMMAND`, `start` сразу пытается стартовать worker
 - если runner command не настроен, `start` подготавливает prompt и честно переводит loop в состояние ожидания запуска worker (`await_worker_launch`)
 - для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest, затем сделать `init`
