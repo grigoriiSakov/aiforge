@@ -10,6 +10,7 @@ import { runDoctorCommand } from "../commands/doctor.js";
 import { runInitCommand } from "../commands/init.js";
 import {
   runInitiativeSupervisorAbortCommand,
+  runInitiativeSupervisorInitCommand,
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
@@ -159,9 +160,12 @@ async function main(): Promise<void> {
 
   const initiativeSupervisor = program.command("initiative-supervisor").description("Initiative supervisor runtime");
   initiativeSupervisor
-    .command("start")
+    .command("init")
     .requiredOption("--slug <slug>", "Initiative slug")
     .option("--manifest <path>", "Path to issues-manifest.json")
+    .option("--project <name>", "Tracker project name")
+    .option("--project-id <id>", "Tracker project id")
+    .option("--tracker <name>", "Tracker type override for project metadata")
     .option("--base-branch <name>", "Base branch for the initiative manager branch")
     .option("--manager-branch <name>", "Manager branch name")
     .option("--max-attempts <count>", "Max worker attempts per issue")
@@ -171,6 +175,9 @@ async function main(): Promise<void> {
       (options: {
         slug: string;
         manifest?: string;
+        project?: string;
+        projectId?: string;
+        tracker?: string;
         baseBranch?: string;
         managerBranch?: string;
         maxAttempts?: string;
@@ -180,9 +187,12 @@ async function main(): Promise<void> {
         const parsedMaxAttempts =
           options.maxAttempts !== undefined ? Number.parseInt(options.maxAttempts, 10) : undefined;
         const hasMaxAttempts = typeof parsedMaxAttempts === "number" && Number.isFinite(parsedMaxAttempts);
-        const result = runInitiativeSupervisorStartCommand(options.repo, {
+        const result = runInitiativeSupervisorInitCommand(options.repo, {
           slug: options.slug,
           ...(options.manifest ? { manifest: options.manifest } : {}),
+          ...(options.project ? { project: options.project } : {}),
+          ...(options.projectId ? { projectId: options.projectId } : {}),
+          ...(options.tracker ? { tracker: options.tracker } : {}),
           ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
           ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
           ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
@@ -191,6 +201,19 @@ async function main(): Promise<void> {
         process.exit(result.code);
       }
     );
+
+  initiativeSupervisor
+    .command("start")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorStartCommand(options.repo, {
+        slug: options.slug
+      });
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
 
   initiativeSupervisor
     .command("status")

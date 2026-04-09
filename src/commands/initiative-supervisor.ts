@@ -23,6 +23,10 @@ function runStatePath(repoRoot: string, slug: string): string {
   return path.join(repoRoot, SUPERVISOR_RUNS_DIR, `${slug}.json`);
 }
 
+function defaultManifestPath(repoRoot: string, slug: string): string {
+  return path.join(repoRoot, ".ai", "context", "initiatives", slug, "issues-manifest.json");
+}
+
 function requireRuntime(repoRoot: string): string {
   const targetPath = runtimePath(repoRoot);
   if (!fs.existsSync(targetPath)) {
@@ -39,6 +43,63 @@ function readExistingState(repoRoot: string, slug: string): SupervisorState | nu
     return null;
   }
   return JSON.parse(fs.readFileSync(targetPath, "utf8")) as SupervisorState;
+}
+
+function requireManifest(
+  repoRoot: string,
+  options: {
+    slug: string;
+    manifest?: string;
+  }
+): string {
+  const targetPath = path.resolve(options.manifest ? options.manifest : defaultManifestPath(repoRoot, options.slug));
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(
+      `Missing initiative manifest: ${targetPath}. Create/sync .ai/context/initiatives/${options.slug}/issues-manifest.json first.`
+    );
+  }
+  return targetPath;
+}
+
+function patchManifest(repoRoot: string, options: {
+  slug: string;
+  manifest?: string;
+  baseBranch?: string;
+  managerBranch?: string;
+  maxAttempts?: number;
+  project?: string;
+  projectId?: string;
+  tracker?: string;
+}): { manifestPath: string; manifest: Record<string, unknown> } {
+  const manifestPath = requireManifest(repoRoot, options);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+
+  if (options.baseBranch) {
+    manifest.baseBranch = options.baseBranch;
+  }
+  if (options.managerBranch) {
+    manifest.managerBranch = options.managerBranch;
+  }
+  if (typeof options.maxAttempts === "number") {
+    manifest.maxAttemptsPerIssue = options.maxAttempts;
+  }
+
+  const project = isRecord(manifest.project) ? { ...manifest.project } : {};
+  if (options.project) {
+    project.project = options.project;
+  }
+  if (options.projectId) {
+    project.projectId = options.projectId;
+  }
+  if (options.tracker) {
+    project.tracker = options.tracker;
+  }
+  if (Object.keys(project).length > 0) {
+    manifest.project = project;
+  }
+
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return { manifestPath, manifest };
 }
 
 function invokeSupervisorRuntime(repoRoot: string, args: string[]): unknown {
@@ -68,37 +129,64 @@ export function runInitiativeSupervisorStartCommand(
   repoRoot: string,
   options: {
     slug: string;
-    manifest?: string;
-    baseBranch?: string;
-    managerBranch?: string;
-    maxAttempts?: number;
   }
 ): CommandResult {
   const existing = readExistingState(repoRoot, options.slug);
+  if (!existing) {
+    throw new Error(
+      `Initiative supervisor ${options.slug} is not initialized. Run \`aiforge initiative-supervisor init --slug ${options.slug}\` first.`
+    );
+  }
 
-  if (existing) {
-    if (existing.status === "paused") {
-      const resumed = invokeSupervisorRuntime(repoRoot, ["resume", "--slug", options.slug]);
-      return {
-        ok: true,
-        code: 0,
-        message: `Initiative supervisor resumed for ${options.slug}`,
-        details: resumed as Record<string, unknown>
-      };
-    }
-
+  if (existing.status === "paused") {
+    const resumed = invokeSupervisorRuntime(repoRoot, ["resume", "--slug", options.slug]);
     return {
       ok: true,
       code: 0,
-      message: `Initiative supervisor already exists for ${options.slug}`,
+      message: `Initiative supervisor started for ${options.slug}`,
+      details: resumed as Record<string, unknown>
+    };
+  }
+
+  if (existing.status === "running") {
+    return {
+      ok: true,
+      code: 0,
+      message: `Initiative supervisor already running for ${options.slug}`,
       details: existing as Record<string, unknown>
     };
   }
 
-  const args = ["init", "--slug", options.slug];
-  if (options.manifest) {
-    args.push("--manifest", options.manifest);
+  throw new Error(
+    `Initiative supervisor ${options.slug} is in status ${existing.status}. Re-init or inspect status before starting.`
+  );
+}
+
+export function runInitiativeSupervisorInitCommand(
+  repoRoot: string,
+  options: {
+    slug: string;
+    manifest?: string;
+    baseBranch?: string;
+    managerBranch?: string;
+    maxAttempts?: number;
+    project?: string;
+    projectId?: string;
+    tracker?: string;
   }
+): CommandResult {
+  const existing = readExistingState(repoRoot, options.slug);
+  if (existing) {
+    return {
+      ok: true,
+      code: 0,
+      message: `Initiative supervisor already initialized for ${options.slug}`,
+      details: existing as Record<string, unknown>
+    };
+  }
+
+  const { manifestPath, manifest } = patchManifest(repoRoot, options);
+  const args = ["init", "--slug", options.slug, "--manifest", manifestPath];
   if (options.baseBranch) {
     args.push("--base-branch", options.baseBranch);
   }
@@ -109,12 +197,25 @@ export function runInitiativeSupervisorStartCommand(
     args.push("--max-attempts", String(options.maxAttempts));
   }
 
-  const created = invokeSupervisorRuntime(repoRoot, args);
+  const created = invokeSupervisorRuntime(repoRoot, args) as Record<string, unknown>;
+  const paused = invokeSupervisorRuntime(repoRoot, [
+    "pause",
+    "--slug",
+    options.slug,
+    "--reason",
+    "initialized; run start to begin execution"
+  ]);
+
   return {
     ok: true,
     code: 0,
-    message: `Initiative supervisor started for ${options.slug}`,
-    details: created as Record<string, unknown>
+    message: `Initiative supervisor initialized for ${options.slug}`,
+    details: {
+      manifestPath,
+      manifestProject: isRecord(manifest.project) ? manifest.project : {},
+      created,
+      state: paused
+    }
   };
 }
 
@@ -180,5 +281,9 @@ export function runInitiativeSupervisorAbortCommand(
     message: `Initiative supervisor aborted for ${options.slug}`,
     details: payload as Record<string, unknown>
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

@@ -9,6 +9,7 @@ import { runDoctorCommand } from "../src/commands/doctor.js";
 import { runInitCommand } from "../src/commands/init.js";
 import {
   runInitiativeSupervisorAbortCommand,
+  runInitiativeSupervisorInitCommand,
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
@@ -611,7 +612,7 @@ describe("command flow", () => {
     ).toBe(true);
   });
 
-  test("initiative supervisor command wrappers start, inspect, pause, resume, and abort existing initiatives", async () => {
+  test("initiative supervisor command wrappers init, start, inspect, pause, resume, and abort existing initiatives", async () => {
     const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-cli-");
     await runInitCommand({
       repoRoot,
@@ -654,14 +655,34 @@ describe("command flow", () => {
       .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
     fs.writeFileSync(path.join(runtimeDir, "initiative-supervisor-state.mjs"), renderedRuntime, { mode: 0o755 });
 
-    const started = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
-    expect(started.ok).toBe(true);
-    expect(started.message).toContain("started");
-    expect((started.details as Record<string, unknown>).managerBranch).toBe("initiative/kernel");
+    expect(() => runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" })).toThrow(
+      /Run `aiforge initiative-supervisor init --slug kernel` first/
+    );
+
+    const initialized = runInitiativeSupervisorInitCommand(repoRoot, {
+      slug: "kernel",
+      project: "Kernel",
+      projectId: "project-123",
+      tracker: "linear",
+      managerBranch: "initiative/kernel"
+    });
+    expect(initialized.ok).toBe(true);
+    expect(initialized.message).toContain("initialized");
+    expect(
+      ((initialized.details as Record<string, unknown>).manifestProject as Record<string, unknown>).project
+    ).toBe("Kernel");
+    expect(
+      ((initialized.details as Record<string, unknown>).state as Record<string, unknown>).status
+    ).toBe("paused");
 
     const status = runInitiativeSupervisorStatusCommand(repoRoot, "kernel");
     expect(status.ok).toBe(true);
-    expect((status.details as Record<string, unknown>).status).toBe("running");
+    expect((status.details as Record<string, unknown>).status).toBe("paused");
+
+    const started = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
+    expect(started.ok).toBe(true);
+    expect(started.message).toContain("started");
+    expect((started.details as Record<string, unknown>).status).toBe("running");
 
     const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
     expect((next.details as Record<string, unknown>).action).toBe("launch_worker");
@@ -670,7 +691,7 @@ describe("command flow", () => {
     expect((paused.details as Record<string, unknown>).status).toBe("paused");
 
     const resumedViaStart = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
-    expect(resumedViaStart.message).toContain("resumed");
+    expect(resumedViaStart.message).toContain("started");
     expect((resumedViaStart.details as Record<string, unknown>).status).toBe("running");
 
     const resumed = runInitiativeSupervisorResumeCommand(repoRoot, "kernel");

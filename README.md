@@ -33,6 +33,7 @@ npx tsx src/cli/index.ts adopt --repo /path/to/existing-repo
 npx tsx src/cli/index.ts sync --repo /path/to/repo
 npx tsx src/cli/index.ts update --repo /path/to/repo
 npx tsx src/cli/index.ts doctor --repo /path/to/repo
+npx tsx src/cli/index.ts initiative-supervisor init --repo /path/to/repo --slug my-initiative
 npx tsx src/cli/index.ts initiative-supervisor start --repo /path/to/repo --slug my-initiative
 npx tsx src/cli/index.ts initiative-supervisor status --repo /path/to/repo --slug my-initiative
 npx tsx src/cli/index.ts initiative-supervisor next --repo /path/to/repo --slug my-initiative
@@ -171,6 +172,7 @@ aiforge linear scope set \
 `.ai/context/initiatives/<slug>/issues-manifest.json`, можно запускать supervisor loop:
 
 ```bash
+aiforge initiative-supervisor init --slug billing-v2 --project "Billing V2" --project-id proj_123 --tracker linear
 aiforge initiative-supervisor start --slug billing-v2
 aiforge initiative-supervisor status --slug billing-v2
 aiforge initiative-supervisor next --slug billing-v2
@@ -180,9 +182,10 @@ aiforge initiative-supervisor resume --slug billing-v2
 
 Важно:
 
-- `start` использует уже существующий `issues-manifest.json`; он не создаёт Linear project/issues заново
-- если run уже существует и находится в `paused`, `start` ведёт себя как `resume`
-- для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest
+- `init` использует уже существующий `issues-manifest.json`, при необходимости дописывает туда metadata проекта (`project`, `projectId`, `tracker`) и готовит supervisor run без запуска worker loop
+- `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
+- если run уже существует и находится в `paused`, `start` запускает его дальше
+- для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest, затем сделать `init`
 
 ## Установка CLI как глобальной команды
 
