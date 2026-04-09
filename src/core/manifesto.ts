@@ -35,6 +35,15 @@ export function generateManifesto(repoRoot: string): string {
 - Verify: \`${config.task.command} ${config.task.tasks.verify}\`
 - Review: \`${config.task.command} ${config.task.tasks.review}\`
 
+## Execution Contract
+
+- Canonical task root: \`${config.execution.canonicalRoot}\`
+- Worktree env var: \`${config.execution.worktreeEnvVar}\`
+- Worktree strategy: \`${config.execution.worktreeStrategy}\`
+- Lint entrypoint: \`${config.execution.entrypoints.lint}\`
+- Test entrypoint: \`${config.execution.entrypoints.test}\`
+- Verify entrypoint: \`${config.execution.entrypoints.verify}\`
+
 ## Profile Notes
 
 ${profile.notes.map((entry) => `- ${entry}`).join("\n")}

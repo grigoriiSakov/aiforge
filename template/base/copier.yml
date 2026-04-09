@@ -127,6 +127,38 @@ task_review_name:
   type: str
   default: review
 
+execution_canonical_root:
+  type: str
+  default: .
+
+execution_worktree_env_var:
+  type: str
+  default: AIFORGE_WORKTREE_PATH
+
+execution_worktree_strategy:
+  type: str
+  default: direct
+
+execution_build_entrypoint:
+  type: str
+  default: .ai/bin/go-task build
+
+execution_test_entrypoint:
+  type: str
+  default: .ai/bin/go-task test
+
+execution_lint_entrypoint:
+  type: str
+  default: .ai/bin/go-task lint
+
+execution_verify_entrypoint:
+  type: str
+  default: .ai/bin/go-task verify
+
+execution_review_entrypoint:
+  type: str
+  default: .ai/bin/go-task review
+
 commands:
   type: yaml
   default:

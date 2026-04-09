@@ -9,6 +9,9 @@ import type { DetectionResult, ProjectConfig, ProjectProfileId } from "./types.j
 
 export const CONFIG_FILE_NAME = "ai.config.yaml";
 export const MACHINE_MANIFEST_PATH = path.join(".ai", "project.manifest.json");
+const DEFAULT_WORKTREE_ENV_VAR = "AIFORGE_WORKTREE_PATH";
+const DEFAULT_EXECUTION_ROOT = ".";
+const DEFAULT_WORKTREE_STRATEGY = "direct";
 
 export function createConfig(params: {
   repoRoot: string;
@@ -19,6 +22,16 @@ export function createConfig(params: {
 }): ProjectConfig {
   const profile = getProfileDefinition(params.profileId);
   const taskCommand = DEFAULT_TASK_COMMAND;
+  const task = {
+    command: taskCommand,
+    tasks: {
+      build: "build",
+      test: "test",
+      lint: "lint",
+      verify: "verify",
+      review: "review"
+    }
+  };
 
   return {
     schemaVersion: 1,
@@ -51,6 +64,7 @@ export function createConfig(params: {
       branchPrefix: "agent/",
       maxReviewIterations: 3
     },
+    execution: createDefaultExecutionConfig(task),
     artifacts: {
       planProgressRoot: ".ai/context/runtime"
     },
@@ -61,16 +75,7 @@ export function createConfig(params: {
       agent: true,
       agents: true
     },
-    task: {
-      command: taskCommand,
-      tasks: {
-        build: "build",
-        test: "test",
-        lint: "lint",
-        verify: "verify",
-        review: "review"
-      }
-    },
+    task,
     commands: renderTaskCommands(profile.taskCommands, taskCommand),
     manifesto: {
       path: "MANIFESTO.md",
@@ -163,6 +168,14 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     orchestrator_worktree_root: config.orchestrator.worktreeRoot,
     orchestrator_branch_prefix: config.orchestrator.branchPrefix,
     orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
+    execution_canonical_root: config.execution.canonicalRoot,
+    execution_worktree_env_var: config.execution.worktreeEnvVar,
+    execution_worktree_strategy: config.execution.worktreeStrategy,
+    execution_build_entrypoint: config.execution.entrypoints.build,
+    execution_test_entrypoint: config.execution.entrypoints.test,
+    execution_lint_entrypoint: config.execution.entrypoints.lint,
+    execution_verify_entrypoint: config.execution.entrypoints.verify,
+    execution_review_entrypoint: config.execution.entrypoints.review,
     plan_progress_runtime_root: config.artifacts.planProgressRoot,
     enable_cursor: config.runtimes.cursor,
     enable_codex: config.runtimes.codex,
@@ -220,6 +233,28 @@ function validateConfig(config: ProjectConfig): void {
     throw new Error("Config orchestrator.maxReviewIterations must be an integer >= 1");
   }
 
+  if (!config.execution?.canonicalRoot?.trim()) {
+    throw new Error("Config execution.canonicalRoot is required");
+  }
+
+  if (!config.execution?.worktreeEnvVar?.trim()) {
+    throw new Error("Config execution.worktreeEnvVar is required");
+  }
+
+  if (!["direct", "overlay"].includes(config.execution?.worktreeStrategy ?? "")) {
+    throw new Error("Config execution.worktreeStrategy must be one of: direct, overlay");
+  }
+
+  if (
+    !config.execution?.entrypoints?.build?.trim() ||
+    !config.execution?.entrypoints?.test?.trim() ||
+    !config.execution?.entrypoints?.lint?.trim() ||
+    !config.execution?.entrypoints?.verify?.trim() ||
+    !config.execution?.entrypoints?.review?.trim()
+  ) {
+    throw new Error("Config execution.entrypoints.{build,test,lint,verify,review} are required");
+  }
+
   if (!config.artifacts?.planProgressRoot?.trim()) {
     throw new Error("Config artifacts.planProgressRoot is required");
   }
@@ -257,6 +292,10 @@ function validateConfig(config: ProjectConfig): void {
 export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectProfileId): ProjectConfig {
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
+  const task = {
+    ...config.task,
+    command: taskCommand
+  };
   return {
     ...config,
     profile: {
@@ -273,10 +312,8 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
       requireTrackerForIssueFlow: profile.trackerDefault === "linear",
       scopes: profile.linearDefaults.scopes
     },
-    task: {
-      ...config.task,
-      command: taskCommand
-    },
+    task,
+    execution: normalizeExecutionConfig(config.execution, task),
     commands: renderTaskCommands(profile.taskCommands, taskCommand),
     manifesto: {
       ...config.manifesto,
@@ -299,6 +336,15 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
   const profileId = config.profile?.id ?? defaults.profile.id;
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
+  const task = {
+    ...defaults.task,
+    ...config.task,
+    command: taskCommand,
+    tasks: {
+      ...defaults.task.tasks,
+      ...config.task?.tasks
+    }
+  };
 
   return {
     ...defaults,
@@ -336,15 +382,8 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
       ...defaults.runtimes,
       ...config.runtimes
     },
-    task: {
-      ...defaults.task,
-      ...config.task,
-      command: taskCommand,
-      tasks: {
-        ...defaults.task.tasks,
-        ...config.task?.tasks
-      }
-    },
+    task,
+    execution: normalizeExecutionConfig(config.execution, task),
     commands: normalizeTaskCommands(config.commands, profile.taskCommands, taskCommand),
     manifesto: {
       ...defaults.manifesto,
@@ -380,6 +419,74 @@ function normalizeTaskCommand(taskCommand: string | undefined): string {
   }
 
   return taskCommand;
+}
+
+function createDefaultExecutionConfig(task: ProjectConfig["task"]): ProjectConfig["execution"] {
+  return {
+    canonicalRoot: DEFAULT_EXECUTION_ROOT,
+    worktreeEnvVar: DEFAULT_WORKTREE_ENV_VAR,
+    worktreeStrategy: DEFAULT_WORKTREE_STRATEGY,
+    entrypoints: buildDefaultExecutionEntrypoints(task.command, task.tasks)
+  };
+}
+
+function normalizeExecutionConfig(
+  currentExecution: ProjectConfig["execution"] | undefined,
+  task: ProjectConfig["task"]
+): ProjectConfig["execution"] {
+  const defaults = createDefaultExecutionConfig(task);
+
+  return {
+    canonicalRoot: currentExecution?.canonicalRoot?.trim() || defaults.canonicalRoot,
+    worktreeEnvVar: currentExecution?.worktreeEnvVar?.trim() || defaults.worktreeEnvVar,
+    worktreeStrategy: currentExecution?.worktreeStrategy === "overlay" ? "overlay" : defaults.worktreeStrategy,
+    entrypoints: normalizeExecutionEntrypoints(currentExecution?.entrypoints, task)
+  };
+}
+
+function normalizeExecutionEntrypoints(
+  currentEntrypoints: ProjectConfig["execution"]["entrypoints"] | undefined,
+  task: ProjectConfig["task"]
+): ProjectConfig["execution"]["entrypoints"] {
+  return {
+    build: normalizeExecutionEntrypoint(currentEntrypoints?.build, task.command, task.tasks.build),
+    test: normalizeExecutionEntrypoint(currentEntrypoints?.test, task.command, task.tasks.test),
+    lint: normalizeExecutionEntrypoint(currentEntrypoints?.lint, task.command, task.tasks.lint),
+    verify: normalizeExecutionEntrypoint(currentEntrypoints?.verify, task.command, task.tasks.verify),
+    review: normalizeExecutionEntrypoint(currentEntrypoints?.review, task.command, task.tasks.review)
+  };
+}
+
+function normalizeExecutionEntrypoint(
+  currentEntrypoint: string | undefined,
+  taskCommand: string,
+  taskName: string
+): string {
+  const defaultEntrypoint = buildTaskEntrypoint(taskCommand, taskName);
+  const legacyEntrypoints = [buildTaskEntrypoint("task", taskName), buildTaskEntrypoint("go-task", taskName)];
+
+  if (!currentEntrypoint || currentEntrypoint === defaultEntrypoint || legacyEntrypoints.includes(currentEntrypoint)) {
+    return defaultEntrypoint;
+  }
+
+  return currentEntrypoint;
+}
+
+function buildDefaultExecutionEntrypoints(
+  taskCommand: string,
+  taskNames: ProjectConfig["task"]["tasks"]
+): ProjectConfig["execution"]["entrypoints"] {
+  return {
+    build: buildTaskEntrypoint(taskCommand, taskNames.build),
+    test: buildTaskEntrypoint(taskCommand, taskNames.test),
+    lint: buildTaskEntrypoint(taskCommand, taskNames.lint),
+    verify: buildTaskEntrypoint(taskCommand, taskNames.verify),
+    review: buildTaskEntrypoint(taskCommand, taskNames.review)
+  };
+}
+
+function buildTaskEntrypoint(taskCommand: string, taskName: string): string {
+  return `${taskCommand} ${taskName}`;
 }
 
 function normalizeTaskCommands(

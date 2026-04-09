@@ -129,6 +129,9 @@ const additionalContext = [
   `Profile: ${manifest.profile.id}`,
   `Tracker: ${manifest.workflow.tracker}`,
   `Canonical verify task: ${manifest.task.command} ${manifest.task.tasks.verify}`,
+  `Execution root: ${manifest.execution?.canonicalRoot ?? "."}`,
+  `Worktree strategy: ${manifest.execution?.worktreeStrategy ?? "direct"}`,
+  `Verify entrypoint: ${manifest.execution?.entrypoints?.verify ?? `${manifest.task.command} ${manifest.task.tasks.verify}`}`,
   getCurrentSupervisorSummary() ? `Active supervisor: ${getCurrentSupervisorSummary()}` : "Active supervisor: none",
   getCurrentOrchestratorSummary()
     ? `Active orchestrator run: ${getCurrentOrchestratorSummary()}`

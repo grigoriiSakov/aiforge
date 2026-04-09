@@ -1981,6 +1981,8 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(result.message).toContain("projectRules.markdown");
     expect(result.message).toContain("manifesto.markdown");
     expect(result.message).toContain("agents.markdown");
+    expect(result.message).toContain("worktree strategy");
+    expect(result.message).toContain("execution");
     expect(result.message).toContain(".cursor/mcp.example.json");
   });
 });

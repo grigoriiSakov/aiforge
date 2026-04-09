@@ -51,6 +51,10 @@ describe("config lifecycle", () => {
     expect(config.orchestrator.branchPrefix).toBe("agent/");
     expect(config.orchestrator.maxReviewIterations).toBe(3);
     expect(config.artifacts.planProgressRoot).toBe(".ai/context/runtime");
+    expect(config.execution.canonicalRoot).toBe(".");
+    expect(config.execution.worktreeEnvVar).toBe("AIFORGE_WORKTREE_PATH");
+    expect(config.execution.worktreeStrategy).toBe("direct");
+    expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
   });
 
   test("legacy task command config migrates to repo-local go-task runner", () => {
@@ -143,5 +147,8 @@ describe("config lifecycle", () => {
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} lint`);
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} test`);
     expect(config.commands.review).toContain(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.execution.entrypoints.lint).toBe(`${DEFAULT_TASK_COMMAND} lint`);
+    expect(config.execution.entrypoints.test).toBe(`${DEFAULT_TASK_COMMAND} test`);
+    expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
   });
 });

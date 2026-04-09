@@ -56,12 +56,21 @@ Pipeline owner for:
 12. After every side effect, re-check the next machine action through:
     - `node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID`
 13. Use canonical task names from `ai.config.yaml`.
-14. Before `{{ task_command }} {{ task_lint_name }}`, `{{ task_command }} {{ task_test_name }}`, or `{{ task_command }} {{ task_verify_name }}` against an orchestrator worktree, export
-    `AIFORGE_WORKTREE_PATH` via `node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID`
-    (for example `eval "$(... worktree-env ...)"` in shell); canonical tasks then pick exec vs `compose run`
-    automatically — do not hand-roll long `docker compose run` lines in prompts or artifacts.
-15. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
-16. A phase is not complete without evidence:
+14. Execution contract for this repo:
+    - canonical task root: `{{ execution_canonical_root }}`
+    - worktree env var: `{{ execution_worktree_env_var }}`
+    - worktree strategy: `{{ execution_worktree_strategy }}`
+    - lint entrypoint: `{{ execution_lint_entrypoint }}`
+    - test entrypoint: `{{ execution_test_entrypoint }}`
+    - verify entrypoint: `{{ execution_verify_entrypoint }}`
+15. Before orchestrator lint/test/verify, export `{{ execution_worktree_env_var }}` via
+    `node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID`
+    (for example `eval "$(... worktree-env ...)"` in shell).
+16. Do **not** assume the canonical execution cwd is `{worktreePath}`. Always launch orchestrator validation from the project-defined canonical task root `{{ execution_canonical_root }}` using the configured execution entrypoints above; the code under test must still follow the repo's declared worktree strategy `{{ execution_worktree_strategy }}`.
+17. If the strategy is `overlay`, the validation command may run from the main checkout task root while still testing the worktree overlay selected by `{{ execution_worktree_env_var }}`. If the strategy is `direct`, treat the configured entrypoint itself as the source of truth for how the worktree is executed.
+18. Do not hand-roll long `docker compose run` lines or stack-specific validation commands in prompts or artifacts when the project already provides canonical wrappers/tasks.
+19. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
+20. A phase is not complete without evidence:
    - `plan` -> complete plan artifact
    - `build` -> code changes aligned with plan
    - `test` -> canonical task evidence (see scope split below)
@@ -69,23 +78,23 @@ Pipeline owner for:
    - **Quality bar (in-scope):** нельзя считать `test`/pre-review этап завершённым и уходить в review, пока для **Claimed Write Scope** нет честного зелёного сигнала по затронутому поведению: scoped тесты/проверки по задаче, затронутые файлы из `paths` / `shared_surfaces` без новых регрессий, которые вы ввели. Ошибки линта/типов/тестов, которые относятся к **заявленным** путям или общим поверхностям скоупа, — блокер до фикса, сужения скоупа с правкой плана, или **явного** человеческого исключения в issue/plan.
    - **Repo-wide red вне скоупа:** если полный `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` падает из‑за уже существующего baseline, других пакетов или файлов **вне** `Claimed Write Scope`, это **не** повод вечно стопорить пайплайн. Обязательно: (1) зафиксировать в `PROGRESS::` / `progress.md` и при необходимости в плане — какая команда красная, выдержка/лог, почему сбои **вне** claimed paths; (2) приложить **scoped** evidence по задаче (как узкий прогон тестов под изменение); (3) перейти в **review loop** — review проверяет, что разделение «в скоупе / вне скоупа» корректно и что в скоупе работа действительно готова. Если review согласен с остаточным repo-wide долгом, можно дать чистый вердикт по задаче с явным **residual risk** в выводе. Нельзя использовать эту лазейку, если красное относится к вашим файлам скоупа или вы не можете аргументированно отделить сбои от claim.
    - **«Старые» ошибки внутри скоупа:** не отмазка. Если падение в claimed path — чините, сужайте claim, или эскалируйте человеку; не закрывайте этап фразой «было до меня».
-17. Record test/review evidence through the runtime helper:
+21. Record test/review evidence through the runtime helper:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
     - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
-18. If review returns `medium` or `high`, the next mandatory action is another fix loop:
+22. If review returns `medium` or `high`, the next mandatory action is another fix loop:
     - go back to build
     - fix the findings
     - rerun scoped test and verify evidence (and refresh the repo-wide OOS note if full lint/verify is still red outside scope)
     - rerun review
     - repeat until no `medium` or `high` findings remain
-19. Re-check managed runtime state before stopping the turn.
+23. Re-check managed runtime state before stopping the turn.
 {% if linear_enabled -%}
-20. Keep Linear issue states aligned with the workflow (when MCP is available):
+24. Keep Linear issue states aligned with the workflow (when MCP is available):
     - plan-ready -> `{{ tracker_status_plan_ready }}`
     - active execution -> `{{ tracker_status_active }}`
     - review-ready -> `{{ tracker_status_review }}`
 {% else -%}
-20. Do not drive Linear issue states via MCP; rely on local plan/progress artifacts and orchestrator runtime JSON for phase truth.
+24. Do not drive Linear issue states via MCP; rely on local plan/progress artifacts and orchestrator runtime JSON for phase truth.
 {% endif -%}
 
 ## Conflict policy

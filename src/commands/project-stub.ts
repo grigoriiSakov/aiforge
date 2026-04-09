@@ -26,6 +26,13 @@ Please analyze this project and produce only the project-specific additions I st
   - lint: \`${config.task.command} ${config.task.tasks.lint}\`
   - verify: \`${config.task.command} ${config.task.tasks.verify}\`
   - review: \`${config.task.command} ${config.task.tasks.review}\`
+- Execution contract:
+  - canonical root: \`${config.execution.canonicalRoot}\`
+  - worktree env var: \`${config.execution.worktreeEnvVar}\`
+  - worktree strategy: \`${config.execution.worktreeStrategy}\`
+  - lint entrypoint: \`${config.execution.entrypoints.lint}\`
+  - test entrypoint: \`${config.execution.entrypoints.test}\`
+  - verify entrypoint: \`${config.execution.entrypoints.verify}\`
 
 ## Existing generic surfaces
 
@@ -65,6 +72,7 @@ Please analyze this project and produce only the project-specific additions I st
 - \`ai.config.yaml\` -> \`projectRules.markdown\`
 - \`ai.config.yaml\` -> \`manifesto.markdown\`
 - \`ai.config.yaml\` -> \`agents.markdown\`
+- \`ai.config.yaml\` -> \`execution\`
 - \`Taskfile.yml\`
 - \`.ai/linear-scope.json\`
 - \`.cursor/settings.json\`
@@ -80,6 +88,7 @@ Examples:
 - orchestrator worktree location / branch naming rules
 - docker/container names
 - package manager details
+- canonical execution root / worktree strategy / validation entrypoints
 - module/layout conventions
 - import-boundary rules
 - docs sync rules
@@ -109,6 +118,7 @@ Examples:
 - When proposing project-specific rules, return the exact YAML block for \`projectRules.markdown\`.
 - When proposing manifesto customizations, return the exact YAML block for \`manifesto.markdown\`.
 - When proposing AGENTS customizations, return the exact YAML block for \`agents.markdown\`.
+- When proposing execution semantics, return the exact YAML block for \`execution\`.
 - If something should stay manual, output an explicit TODO block.
 
 ## Output format

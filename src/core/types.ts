@@ -21,6 +21,16 @@ export interface TaskCommands {
   review: string[];
 }
 
+export type WorktreeExecutionStrategy = "direct" | "overlay";
+
+export interface ExecutionEntrypoints {
+  build: string;
+  test: string;
+  lint: string;
+  verify: string;
+  review: string;
+}
+
 export interface RuntimeFlags {
   cursor: boolean;
   codex: boolean;
@@ -59,6 +69,12 @@ export interface ProjectConfig {
     worktreeRoot: string;
     branchPrefix: string;
     maxReviewIterations: number;
+  };
+  execution: {
+    canonicalRoot: string;
+    worktreeEnvVar: string;
+    worktreeStrategy: WorktreeExecutionStrategy;
+    entrypoints: ExecutionEntrypoints;
   };
   /** Local PLAN:: / PROGRESS:: mirror layout; per-issue files live under `{planProgressRoot}/{ISSUE-ID}/`. */
   artifacts: {
