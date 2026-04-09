@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 import type { CommandResult } from "../core/types.js";
 
@@ -13,6 +13,11 @@ type SupervisorState = {
   manifestPath?: string;
   managerBranch?: string;
   currentIssueId?: string | null;
+  runner?: {
+    provider?: string;
+    commandTemplate?: string | null;
+    detectedProvider?: string | null;
+  };
 };
 
 function runtimePath(repoRoot: string): string {
@@ -125,6 +130,76 @@ function invokeSupervisorRuntime(repoRoot: string, args: string[]): unknown {
   }
 }
 
+function detectRuntimeProvider(): string | null {
+  const explicit = process.env.AIFORGE_RUNTIME_PROVIDER?.trim().toLowerCase();
+  if (explicit) {
+    return explicit;
+  }
+  if (process.env.CLAUDECODE || process.env.CLAUDE_CODE) {
+    return "claude";
+  }
+  if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_AGENT) {
+    return "cursor";
+  }
+  if (process.env.CODEX_SANDBOX || process.env.CODEX_ENV) {
+    return "codex";
+  }
+  return null;
+}
+
+function resolveRunnerProvider(state: SupervisorState): string {
+  const configured = String(state.runner?.provider ?? "auto").trim().toLowerCase();
+  if (configured && configured !== "auto") {
+    return configured;
+  }
+  return detectRuntimeProvider() ?? "manual";
+}
+
+function resolveRunnerCommandTemplate(state: SupervisorState, provider: string): string | null {
+  const configured = typeof state.runner?.commandTemplate === "string" ? state.runner.commandTemplate.trim() : "";
+  if (configured) {
+    return configured;
+  }
+  const generic = process.env.AIFORGE_RUNNER_COMMAND?.trim();
+  if (generic) {
+    return generic;
+  }
+  const providerSpecific =
+    process.env[`AIFORGE_${provider.toUpperCase()}_RUNNER_COMMAND`]?.trim() ??
+    process.env[`AIFORGE_${provider.toUpperCase()}_COMMAND`]?.trim();
+  return providerSpecific || null;
+}
+
+function renderRunnerCommand(
+  template: string,
+  params: {
+    repoRoot: string;
+    slug: string;
+    issueId: string;
+    promptPath: string;
+    provider: string;
+  }
+): string {
+  return template
+    .replaceAll("{{repo_root}}", params.repoRoot)
+    .replaceAll("{{slug}}", params.slug)
+    .replaceAll("{{issue_id}}", params.issueId)
+    .replaceAll("{{prompt_file}}", params.promptPath)
+    .replaceAll("{{provider}}", params.provider);
+}
+
+function launchDetachedCommand(repoRoot: string, command: string): string {
+  const runId = `worker-${Date.now()}`;
+  const child = spawn("bash", ["-lc", command], {
+    cwd: repoRoot,
+    detached: true,
+    stdio: "ignore",
+    env: process.env
+  });
+  child.unref();
+  return `${runId}-${String(child.pid ?? "nopid")}`;
+}
+
 export function runInitiativeSupervisorStartCommand(
   repoRoot: string,
   options: {
@@ -140,21 +215,12 @@ export function runInitiativeSupervisorStartCommand(
 
   if (existing.status === "paused") {
     const resumed = invokeSupervisorRuntime(repoRoot, ["resume", "--slug", options.slug]);
-    return {
-      ok: true,
-      code: 0,
-      message: `Initiative supervisor started for ${options.slug}`,
-      details: resumed as Record<string, unknown>
-    };
+    const refreshed = readExistingState(repoRoot, options.slug) ?? existing;
+    return continueInitiativeSupervisor(repoRoot, options.slug, refreshed, resumed as Record<string, unknown>);
   }
 
   if (existing.status === "running") {
-    return {
-      ok: true,
-      code: 0,
-      message: `Initiative supervisor already running for ${options.slug}`,
-      details: existing as Record<string, unknown>
-    };
+    return continueInitiativeSupervisor(repoRoot, options.slug, existing, existing as Record<string, unknown>);
   }
 
   throw new Error(
@@ -175,6 +241,8 @@ export function runInitiativeSupervisorInitCommand(
     tracker?: string;
     teams?: string[];
     issueIds?: string[];
+    runnerProvider?: string;
+    runnerCommand?: string;
   }
 ): CommandResult {
   const existing = readExistingState(repoRoot, options.slug);
@@ -197,6 +265,12 @@ export function runInitiativeSupervisorInitCommand(
   }
   if (typeof options.maxAttempts === "number") {
     args.push("--max-attempts", String(options.maxAttempts));
+  }
+  if (options.runnerProvider) {
+    args.push("--runner-provider", options.runnerProvider);
+  }
+  if (options.runnerCommand) {
+    args.push("--runner-command", options.runnerCommand);
   }
   for (const team of options.teams ?? []) {
     args.push("--team", team);
@@ -293,5 +367,94 @@ export function runInitiativeSupervisorAbortCommand(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function continueInitiativeSupervisor(
+  repoRoot: string,
+  slug: string,
+  state: SupervisorState,
+  baseDetails: Record<string, unknown>
+): CommandResult {
+  const next = invokeSupervisorRuntime(repoRoot, ["graph", "next", "--slug", slug]) as Record<string, unknown>;
+  const action = String(next.action ?? "unknown");
+
+  if (!["launch_worker", "await_worker_launch"].includes(action)) {
+    return {
+      ok: true,
+      code: 0,
+      message: `Initiative supervisor started for ${slug}`,
+      details: {
+        ...baseDetails,
+        next
+      }
+    };
+  }
+
+  const promptPayload = invokeSupervisorRuntime(repoRoot, ["prepare-worker-prompt", "--slug", slug]) as Record<
+    string,
+    unknown
+  >;
+  const issueId = String(promptPayload.issue ?? next.issue ?? "");
+  const relativePromptPath = String(promptPayload.promptPath ?? next.promptPath ?? "");
+  const absolutePromptPath = path.isAbsolute(relativePromptPath)
+    ? relativePromptPath
+    : path.join(repoRoot, relativePromptPath);
+  const provider = resolveRunnerProvider(state);
+  const commandTemplate = resolveRunnerCommandTemplate(state, provider);
+
+  if (!commandTemplate) {
+    return {
+      ok: true,
+      code: 0,
+      message: `Initiative supervisor started for ${slug}; worker launch is waiting for a configured runner`,
+      details: {
+        ...baseDetails,
+        next: {
+          action: "await_worker_launch",
+          issue: issueId,
+          provider,
+          promptPath: relativePromptPath
+        },
+        manualLaunchRequired: true,
+        hint:
+          "Configure a runner command via --runner-command at init time or env AIFORGE_RUNNER_COMMAND / AIFORGE_<PROVIDER>_RUNNER_COMMAND."
+      }
+    };
+  }
+
+  const renderedCommand = renderRunnerCommand(commandTemplate, {
+    repoRoot,
+    slug,
+    issueId,
+    promptPath: absolutePromptPath,
+    provider
+  });
+  const runId = launchDetachedCommand(repoRoot, renderedCommand);
+  const launchedState = invokeSupervisorRuntime(repoRoot, [
+    "record-worker",
+    "--slug",
+    slug,
+    "--issue",
+    issueId,
+    "--status",
+    "launched",
+    "--run-id",
+    runId
+  ]) as Record<string, unknown>;
+
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor started for ${slug}; worker launched for ${issueId}`,
+    details: {
+      ...launchedState,
+      launch: {
+        provider,
+        runId,
+        promptPath: relativePromptPath,
+        commandTemplate
+      }
+    }
+  };
 }
 

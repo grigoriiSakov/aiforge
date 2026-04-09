@@ -178,6 +178,8 @@ aiforge initiative-supervisor init \
   --project-id proj_123 \
   --tracker linear \
   --team backend \
+  --runner-provider claude \
+  --runner-command './scripts/run-worker "{{prompt_file}}" "{{issue_id}}"' \
   --manager-branch initiative/billing-v2
 
 aiforge initiative-supervisor start --slug billing-v2
@@ -197,6 +199,8 @@ aiforge initiative-supervisor resume --slug billing-v2
   - или конкретные `--issue ISSUE-ID`
 - `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
 - если run уже существует и находится в `paused`, `start` запускает его дальше
+- если настроен `--runner-command` или env `AIFORGE_RUNNER_COMMAND`, `start` сразу пытается стартовать worker
+- если runner command не настроен, `start` подготавливает prompt и честно переводит loop в состояние ожидания запуска worker (`await_worker_launch`)
 - для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest, затем сделать `init`
 - блокировки на issues вне выбранного среза сохраняются как external metadata и не попадают в очередь этого supervisor run
 

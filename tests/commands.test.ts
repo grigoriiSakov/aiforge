@@ -39,6 +39,17 @@ import {
   runNodeScriptWithInput
 } from "./helpers.js";
 
+async function waitForFile(targetPath: string, timeoutMs = 1500): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(targetPath)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return fs.existsSync(targetPath);
+}
+
 describe("command flow", () => {
   const originalPath = process.env.PATH ?? "";
 
@@ -46,6 +57,11 @@ describe("command flow", () => {
     process.env.PATH = originalPath;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
+    delete process.env.AIFORGE_RUNTIME_PROVIDER;
+    delete process.env.AIFORGE_RUNNER_COMMAND;
+    delete process.env.AIFORGE_CLAUDE_RUNNER_COMMAND;
+    delete process.env.AIFORGE_CODEX_RUNNER_COMMAND;
+    delete process.env.AIFORGE_CURSOR_RUNNER_COMMAND;
   });
 
   test("init creates config and generated artifacts", async () => {
@@ -757,9 +773,12 @@ describe("command flow", () => {
     expect(started.ok).toBe(true);
     expect(started.message).toContain("started");
     expect((started.details as Record<string, unknown>).status).toBe("running");
+    expect(((started.details as Record<string, unknown>).next as Record<string, unknown>).action).toBe(
+      "await_worker_launch"
+    );
 
     const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
-    expect((next.details as Record<string, unknown>).action).toBe("launch_worker");
+    expect((next.details as Record<string, unknown>).action).toBe("await_worker_launch");
     expect((next.details as Record<string, unknown>).issue).toBe("APP-77");
 
     const paused = runInitiativeSupervisorPauseCommand(repoRoot, { slug: "kernel", reason: "waiting" });
@@ -774,6 +793,81 @@ describe("command flow", () => {
 
     const aborted = runInitiativeSupervisorAbortCommand(repoRoot, { slug: "kernel", reason: "stop now" });
     expect((aborted.details as Record<string, unknown>).status).toBe("aborted");
+  });
+
+  test("initiative supervisor start auto-launches worker when runner command is configured", async () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-runner-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Supervisor Runner Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", "kernel");
+    const tempDir = path.join(repoRoot, ".tmp");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(initiativeDir, "issues-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          slug: "kernel",
+          baseBranch: "main",
+          managerBranch: "initiative/kernel",
+          issues: [{ id: "APP-77", title: "Refactor kernel", team: "backend", order: 10, blockedBy: [] }]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const runtimeTemplatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(runtimeTemplatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    fs.writeFileSync(path.join(runtimeDir, "initiative-supervisor-state.mjs"), renderedRuntime, { mode: 0o755 });
+
+    const launchMarker = path.join(tempDir, "runner-launch.txt");
+    const runnerBin = createFakeExecutable(
+      tempDir,
+      "fake-runner.sh",
+      `#!/usr/bin/env bash
+set -eu
+printf "%s\\n%s\\n%s\\n" "$1" "$2" "$3" > "$3"
+`
+    );
+
+    const initialized = runInitiativeSupervisorInitCommand(repoRoot, {
+      slug: "kernel",
+      teams: ["backend"],
+      runnerProvider: "claude",
+      runnerCommand: `${runnerBin} "{{prompt_file}}" "{{issue_id}}" "${launchMarker}"`
+    });
+    expect(initialized.ok).toBe(true);
+
+    const started = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
+    expect(started.ok).toBe(true);
+    expect(started.message).toContain("worker launched");
+    expect(((started.details as Record<string, unknown>).launch as Record<string, unknown>).provider).toBe("claude");
+    expect((started.details as Record<string, unknown>).status).toBe("running");
+    expect(await waitForFile(launchMarker)).toBe(true);
+
+    const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
+    expect((next.details as Record<string, unknown>).action).toBe("wait_worker");
+    expect((next.details as Record<string, unknown>).issue).toBe("APP-77");
   });
 
   test("codex guards block manager-mode edits when initiative supervisor is active", async () => {

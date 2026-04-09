@@ -32,6 +32,8 @@ aiforge initiative-supervisor init \
   --tracker linear \
 {% endif -%}
   --team backend \
+  --runner-provider claude \
+  --runner-command './scripts/run-worker "{{prompt_file}}" "{{issue_id}}"' \
   --manager-branch initiative/<slug>
 
 # 2. begin or continue execution
@@ -58,6 +60,8 @@ Expected precondition:
   - multiple `--team ...` values
   - explicit `--issue ISSUE-ID` values
 - selection is durable for that supervisor run
+- if `--runner-command` (or env `AIFORGE_RUNNER_COMMAND`) is configured, `start` attempts to spawn the worker immediately
+- otherwise `start` prepares the worker prompt and the state machine moves to `await_worker_launch`
 
 ## Rule preflight
 
@@ -103,8 +107,11 @@ Expected precondition:
    - `aiforge initiative-supervisor init --slug <slug> [...]`
    - this binds project metadata and prepares durable state, but does **not** start execution yet
    - if only part of the initiative belongs to this team/run, pass selection flags during `init`
+   - if worker auto-launch is desired, also provide `--runner-provider <provider>` and `--runner-command '<shell-template>'`
 3. Start or continue execution through:
    - `aiforge initiative-supervisor start --slug <slug>`
+   - if a runner command exists, `start` spawns a worker and records `record-worker --status launched`
+   - otherwise `start` leaves the run in `await_worker_launch` with a concrete prompt path for manual handoff
 4. Treat `aiforge initiative-supervisor next --slug <slug>` (backed by `.ai/runtime/initiative-supervisor-state.mjs graph next`) as the source of truth for the next machine action.
 4. Before each worker launch, generate a fresh prompt:
    - `node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>`
@@ -143,6 +150,8 @@ aiforge initiative-supervisor init \
   --tracker linear \
 {% endif -%}
   --team backend \
+  --runner-provider claude \
+  --runner-command './scripts/run-worker "{{prompt_file}}" "{{issue_id}}"' \
   --manager-branch initiative/<slug>
 
 # 2. start the supervisor

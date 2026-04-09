@@ -174,6 +174,11 @@ async function main(): Promise<void> {
     .option("--issue <id>", "Include this explicit issue id (repeatable)", collectOption, [])
     .option("--base-branch <name>", "Base branch for the initiative manager branch")
     .option("--manager-branch <name>", "Manager branch name")
+    .option("--runner-provider <provider>", "Worker runner provider: auto|manual|claude|codex|cursor")
+    .option(
+      "--runner-command <template>",
+      "Shell template used to launch a worker. Placeholders: {{repo_root}}, {{slug}}, {{issue_id}}, {{prompt_file}}, {{provider}}"
+    )
     .option("--max-attempts <count>", "Max worker attempts per issue")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
@@ -188,6 +193,8 @@ async function main(): Promise<void> {
         issue: string[];
         baseBranch?: string;
         managerBranch?: string;
+        runnerProvider?: string;
+        runnerCommand?: string;
         maxAttempts?: string;
         repo: string;
         json: boolean;
@@ -205,6 +212,8 @@ async function main(): Promise<void> {
           ...(options.issue.length > 0 ? { issueIds: options.issue } : {}),
           ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
           ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
+          ...(options.runnerProvider ? { runnerProvider: options.runnerProvider } : {}),
+          ...(options.runnerCommand ? { runnerCommand: options.runnerCommand } : {}),
           ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
         });
         printResult(result, options.json);
