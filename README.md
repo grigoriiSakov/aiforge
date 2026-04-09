@@ -172,6 +172,9 @@ aiforge linear scope set \
 `.ai/context/initiatives/<slug>/issues-manifest.json`, можно запускать supervisor loop:
 
 ```bash
+aiforge initiative-supervisor init --interactive --start
+
+# or explicit non-interactive form
 aiforge initiative-supervisor init \
   --slug billing-v2 \
   --project "Billing V2" \
@@ -192,12 +195,14 @@ aiforge initiative-supervisor resume --slug billing-v2
 Важно:
 
 - `init` использует уже существующий `issues-manifest.json`, при необходимости дописывает туда metadata проекта (`project`, `projectId`, `tracker`) и готовит supervisor run без запуска worker loop
+- `init --interactive` задаёт вопросы, а если локального manifest нет, может bootstrap-нуть его из компактного списка issues вместо ручного JSON
 - при `init` можно выбрать, какой срез инициативы выполняет этот supervisor:
   - `--team backend`
   - `--team frontend`
   - повторяемые `--team ...`
   - или конкретные `--issue ISSUE-ID`
 - `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
+- `init --start` делает init и сразу запускает supervisor
 - если run уже существует и находится в `paused`, `start` запускает его дальше
 - если настроен `--runner-command` или env `AIFORGE_RUNNER_COMMAND`, `start` сразу пытается стартовать worker
 - если runner command не настроен, `start` подготавливает prompt и честно переводит loop в состояние ожидания запуска worker (`await_worker_launch`)

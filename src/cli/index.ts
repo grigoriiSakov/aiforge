@@ -11,6 +11,7 @@ import { runInitCommand } from "../commands/init.js";
 import {
   runInitiativeSupervisorAbortCommand,
   runInitiativeSupervisorInitCommand,
+  runInitiativeSupervisorInteractiveInitCommand,
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
@@ -165,7 +166,7 @@ async function main(): Promise<void> {
   const initiativeSupervisor = program.command("initiative-supervisor").description("Initiative supervisor runtime");
   initiativeSupervisor
     .command("init")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--slug <slug>", "Initiative slug")
     .option("--manifest <path>", "Path to issues-manifest.json")
     .option("--project <name>", "Tracker project name")
     .option("--project-id <id>", "Tracker project id")
@@ -180,11 +181,13 @@ async function main(): Promise<void> {
       "Shell template used to launch a worker. Placeholders: {{repo_root}}, {{slug}}, {{issue_id}}, {{prompt_file}}, {{provider}}"
     )
     .option("--max-attempts <count>", "Max worker attempts per issue")
+    .option("--interactive", "Ask questions and bootstrap missing initiative manifest", false)
+    .option("--start", "Start supervisor immediately after init", false)
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action(
-      (options: {
-        slug: string;
+      async (options: {
+        slug?: string;
         manifest?: string;
         project?: string;
         projectId?: string;
@@ -196,14 +199,16 @@ async function main(): Promise<void> {
         runnerProvider?: string;
         runnerCommand?: string;
         maxAttempts?: string;
+        interactive: boolean;
+        start: boolean;
         repo: string;
         json: boolean;
       }) => {
         const parsedMaxAttempts =
           options.maxAttempts !== undefined ? Number.parseInt(options.maxAttempts, 10) : undefined;
         const hasMaxAttempts = typeof parsedMaxAttempts === "number" && Number.isFinite(parsedMaxAttempts);
-        const result = runInitiativeSupervisorInitCommand(options.repo, {
-          slug: options.slug,
+        const sharedOptions = {
+          ...(options.slug ? { slug: options.slug } : {}),
           ...(options.manifest ? { manifest: options.manifest } : {}),
           ...(options.project ? { project: options.project } : {}),
           ...(options.projectId ? { projectId: options.projectId } : {}),
@@ -215,7 +220,36 @@ async function main(): Promise<void> {
           ...(options.runnerProvider ? { runnerProvider: options.runnerProvider } : {}),
           ...(options.runnerCommand ? { runnerCommand: options.runnerCommand } : {}),
           ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
-        });
+        };
+        const result = options.interactive
+          ? await runInitiativeSupervisorInteractiveInitCommand(options.repo, {
+              ...sharedOptions,
+              start: options.start
+            })
+          : (() => {
+              if (!options.slug) {
+                throw new Error("initiative-supervisor init requires --slug unless --interactive is used");
+              }
+              const initResult = runInitiativeSupervisorInitCommand(options.repo, {
+                slug: options.slug,
+                ...sharedOptions
+              });
+              if (!options.start) {
+                return initResult;
+              }
+              const startResult = runInitiativeSupervisorStartCommand(options.repo, {
+                slug: options.slug
+              });
+              return {
+                ok: true,
+                code: 0,
+                message: `Initiative supervisor initialized and started for ${options.slug}`,
+                details: {
+                  init: initResult.details,
+                  start: startResult.details
+                }
+              };
+            })();
         printResult(result, options.json);
         process.exit(result.code);
       }

@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
+import { createInterface } from "node:readline/promises";
 import { spawn, spawnSync } from "node:child_process";
 
 import type { CommandResult } from "../core/types.js";
@@ -20,6 +22,40 @@ type SupervisorState = {
   };
 };
 
+type BootstrapIssue = {
+  id: string;
+  title: string;
+  team?: string;
+  order: number;
+  blockedBy: string[];
+};
+
+type InitiativeSupervisorInitOptions = {
+  slug: string;
+  manifest?: string;
+  baseBranch?: string;
+  managerBranch?: string;
+  maxAttempts?: number;
+  project?: string;
+  projectId?: string;
+  tracker?: string;
+  teams?: string[];
+  issueIds?: string[];
+  runnerProvider?: string;
+  runnerCommand?: string;
+  bootstrapIssues?: BootstrapIssue[];
+};
+
+type InteractiveInitOptions = Partial<Omit<InitiativeSupervisorInitOptions, "slug">> & {
+  slug?: string;
+  start?: boolean;
+};
+
+type PromptSession = {
+  question(query: string): Promise<string>;
+  close(): void;
+};
+
 function runtimePath(repoRoot: string): string {
   return path.join(repoRoot, SUPERVISOR_RUNTIME_RELATIVE_PATH);
 }
@@ -30,6 +66,105 @@ function runStatePath(repoRoot: string, slug: string): string {
 
 function defaultManifestPath(repoRoot: string, slug: string): string {
   return path.join(repoRoot, ".ai", "context", "initiatives", slug, "issues-manifest.json");
+}
+
+function defaultManagerBranch(slug: string): string {
+  return `initiative/${slug}`;
+}
+
+function currentGitBranch(repoRoot: string): string | null {
+  const result = spawnSync("git", ["branch", "--show-current"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  const value = result.stdout.trim();
+  return value || null;
+}
+
+function splitCommaList(raw: string): string[] {
+  return String(raw)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseBootstrapIssueLine(line: string, index: number): BootstrapIssue {
+  const parts = line
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part, partIndex) => part !== "" || partIndex < 3);
+
+  if (parts.length < 2) {
+    throw new Error(
+      `Invalid issue entry "${line}". Use "ISSUE-ID | team | title | blockedBy1,blockedBy2" or "ISSUE-ID | title".`
+    );
+  }
+
+  const id = parts[0] ?? "";
+  if (!id) {
+    throw new Error(`Invalid issue entry "${line}": missing issue id.`);
+  }
+
+  if (parts.length === 2) {
+    return {
+      id,
+      title: parts[1] ?? "",
+      order: (index + 1) * 10,
+      blockedBy: []
+    };
+  }
+
+  const team = parts[1] || undefined;
+  const title = parts[2] ?? "";
+  if (!title) {
+    throw new Error(`Invalid issue entry "${line}": missing title.`);
+  }
+
+  return {
+    id,
+    title,
+    ...(team ? { team } : {}),
+    order: (index + 1) * 10,
+    blockedBy: splitCommaList(parts.slice(3).join("|"))
+  };
+}
+
+function buildBootstrapManifest(repoRoot: string, options: InitiativeSupervisorInitOptions): Record<string, unknown> {
+  const artifactsRoot = path.join(".ai", "context", "initiatives", options.slug);
+  const project: Record<string, unknown> = {};
+  if (options.project) {
+    project.project = options.project;
+  }
+  if (options.projectId) {
+    project.projectId = options.projectId;
+  }
+  if (options.tracker) {
+    project.tracker = options.tracker;
+  }
+
+  return {
+    version: 1,
+    slug: options.slug,
+    baseBranch: options.baseBranch ?? currentGitBranch(repoRoot) ?? "main",
+    managerBranch: options.managerBranch ?? defaultManagerBranch(options.slug),
+    maxAttemptsPerIssue: options.maxAttempts ?? 3,
+    artifacts: {
+      prd: path.join(artifactsRoot, "prd.md"),
+      technicalSpec: path.join(artifactsRoot, "technical-spec.md"),
+      executionMap: path.join(artifactsRoot, "execution-map.md")
+    },
+    ...(Object.keys(project).length > 0 ? { project } : {}),
+    issues: (options.bootstrapIssues ?? []).map((issue) => ({
+      id: issue.id,
+      title: issue.title,
+      ...(issue.team ? { team: issue.team } : {}),
+      order: issue.order,
+      blockedBy: issue.blockedBy
+    }))
+  };
 }
 
 function requireRuntime(repoRoot: string): string {
@@ -50,34 +185,26 @@ function readExistingState(repoRoot: string, slug: string): SupervisorState | nu
   return JSON.parse(fs.readFileSync(targetPath, "utf8")) as SupervisorState;
 }
 
-function requireManifest(
-  repoRoot: string,
-  options: {
-    slug: string;
-    manifest?: string;
-  }
-): string {
-  const targetPath = path.resolve(options.manifest ? options.manifest : defaultManifestPath(repoRoot, options.slug));
-  if (!fs.existsSync(targetPath)) {
+function ensureManifest(repoRoot: string, options: InitiativeSupervisorInitOptions): {
+  manifestPath: string;
+  manifest: Record<string, unknown>;
+  created: boolean;
+} {
+  const manifestPath = path.resolve(options.manifest ? options.manifest : defaultManifestPath(repoRoot, options.slug));
+  let created = false;
+  let manifest: Record<string, unknown>;
+
+  if (fs.existsSync(manifestPath)) {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+  } else if ((options.bootstrapIssues?.length ?? 0) > 0) {
+    manifest = buildBootstrapManifest(repoRoot, options);
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    created = true;
+  } else {
     throw new Error(
-      `Missing initiative manifest: ${targetPath}. Create/sync .ai/context/initiatives/${options.slug}/issues-manifest.json first.`
+      `Missing initiative manifest: ${manifestPath}. Run \`aiforge initiative-supervisor init --slug ${options.slug} --interactive\` to bootstrap it, or pass --manifest.`
     );
   }
-  return targetPath;
-}
-
-function patchManifest(repoRoot: string, options: {
-  slug: string;
-  manifest?: string;
-  baseBranch?: string;
-  managerBranch?: string;
-  maxAttempts?: number;
-  project?: string;
-  projectId?: string;
-  tracker?: string;
-}): { manifestPath: string; manifest: Record<string, unknown> } {
-  const manifestPath = requireManifest(repoRoot, options);
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
 
   if (options.baseBranch) {
     manifest.baseBranch = options.baseBranch;
@@ -104,7 +231,7 @@ function patchManifest(repoRoot: string, options: {
   }
 
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  return { manifestPath, manifest };
+  return { manifestPath, manifest, created };
 }
 
 function invokeSupervisorRuntime(repoRoot: string, args: string[]): unknown {
@@ -200,6 +327,208 @@ function launchDetachedCommand(repoRoot: string, command: string): string {
   return `${runId}-${String(child.pid ?? "nopid")}`;
 }
 
+async function promptLine(
+  rl: PromptSession,
+  label: string,
+  defaultValue?: string
+): Promise<string> {
+  const suffix = defaultValue && defaultValue.trim() ? ` [${defaultValue}]` : "";
+  const answer = (await rl.question(`${label}${suffix}: `)).trim();
+  return answer || (defaultValue ?? "");
+}
+
+async function promptRequiredLine(
+  rl: PromptSession,
+  label: string,
+  defaultValue?: string
+): Promise<string> {
+  while (true) {
+    const answer = await promptLine(rl, label, defaultValue);
+    if (answer.trim()) {
+      return answer.trim();
+    }
+  }
+}
+
+async function promptYesNo(
+  rl: PromptSession,
+  label: string,
+  defaultValue: boolean
+): Promise<boolean> {
+  const suffix = defaultValue ? "Y/n" : "y/N";
+  while (true) {
+    const answer = (await rl.question(`${label} [${suffix}]: `)).trim().toLowerCase();
+    if (!answer) {
+      return defaultValue;
+    }
+    if (["y", "yes"].includes(answer)) {
+      return true;
+    }
+    if (["n", "no"].includes(answer)) {
+      return false;
+    }
+  }
+}
+
+async function promptIssueBootstrap(
+  rl: PromptSession,
+  output: NodeJS.WritableStream
+): Promise<BootstrapIssue[]> {
+  output.write(
+    [
+      "Paste ordered work issues one per line.",
+      'Format: ISSUE-ID | team | title | blockedBy1,blockedBy2',
+      'Short format also works: ISSUE-ID | title',
+      "Submit an empty line to finish."
+    ].join("\n") + "\n"
+  );
+
+  const issues: BootstrapIssue[] = [];
+  while (true) {
+    const line = (await rl.question("> ")).trim();
+    if (!line) {
+      break;
+    }
+    issues.push(parseBootstrapIssueLine(line, issues.length));
+  }
+
+  if (issues.length === 0) {
+    throw new Error("Interactive manifest bootstrap aborted: at least one issue is required.");
+  }
+
+  return issues;
+}
+
+function normalizeOptional(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+async function resolveInteractiveInitOptions(
+  repoRoot: string,
+  options: InteractiveInitOptions,
+  input: NodeJS.ReadableStream = process.stdin,
+  output: NodeJS.WritableStream = process.stdout,
+  answers?: string[]
+): Promise<{ init: InitiativeSupervisorInitOptions; start: boolean }> {
+  const queuedAnswers = answers ? [...answers] : null;
+  const rl: PromptSession = queuedAnswers
+    ? {
+        question: async () => queuedAnswers.shift() ?? "",
+        close: () => {}
+      }
+    : createInterface({ input, output });
+
+  try {
+    output.write(`Initiative supervisor init wizard for ${repoRoot}\n`);
+
+    const slug = await promptRequiredLine(rl, "Initiative slug", options.slug);
+    const tracker = await promptLine(rl, "Tracker", options.tracker ?? "linear");
+    const project = await promptLine(rl, "Project name", options.project);
+    const projectId = await promptLine(rl, "Project id", options.projectId);
+    const teamsRaw = await promptLine(
+      rl,
+      "Teams to include (comma-separated, blank = all)",
+      (options.teams ?? []).join(",")
+    );
+    const issueIdsRaw = await promptLine(
+      rl,
+      "Explicit issue ids (comma-separated, blank = all selected by teams)",
+      (options.issueIds ?? []).join(",")
+    );
+    const baseBranch = await promptLine(rl, "Base branch", options.baseBranch ?? currentGitBranch(repoRoot) ?? "main");
+    const managerBranch = await promptLine(
+      rl,
+      "Manager branch",
+      options.managerBranch ?? defaultManagerBranch(slug)
+    );
+    const runnerProvider = await promptLine(
+      rl,
+      "Runner provider",
+      options.runnerProvider ?? detectRuntimeProvider() ?? "manual"
+    );
+    const runnerCommand = await promptLine(
+      rl,
+      "Runner command template (blank = manual launch fallback)",
+      options.runnerCommand
+    );
+    const maxAttemptsRaw = await promptLine(rl, "Max attempts per issue", String(options.maxAttempts ?? 3));
+    const manifestCandidate = path.resolve(options.manifest ? options.manifest : defaultManifestPath(repoRoot, slug));
+    let bootstrapIssues: BootstrapIssue[] | undefined;
+
+    if (!fs.existsSync(manifestCandidate) && !options.manifest) {
+      const shouldBootstrap = await promptYesNo(
+        rl,
+        `No local initiative manifest found at ${manifestCandidate}. Bootstrap one now from pasted issues`,
+        true
+      );
+      if (shouldBootstrap) {
+        bootstrapIssues = await promptIssueBootstrap(rl, output);
+      }
+    }
+
+    const shouldStart =
+      typeof options.start === "boolean"
+        ? options.start
+        : await promptYesNo(rl, "Start supervisor immediately after init", true);
+    const initOptions: InitiativeSupervisorInitOptions = { slug };
+    const normalizedProject = normalizeOptional(project);
+    const normalizedProjectId = normalizeOptional(projectId);
+    const normalizedTracker = normalizeOptional(tracker);
+    const selectedTeams = splitCommaList(teamsRaw);
+    const selectedIssueIds = splitCommaList(issueIdsRaw);
+    const normalizedBaseBranch = normalizeOptional(baseBranch);
+    const normalizedManagerBranch = normalizeOptional(managerBranch);
+    const normalizedRunnerProvider = normalizeOptional(runnerProvider);
+    const normalizedRunnerCommand = normalizeOptional(runnerCommand);
+    const parsedMaxAttempts = Number.parseInt(maxAttemptsRaw, 10);
+
+    if (options.manifest) {
+      initOptions.manifest = options.manifest;
+    }
+    if (normalizedProject) {
+      initOptions.project = normalizedProject;
+    }
+    if (normalizedProjectId) {
+      initOptions.projectId = normalizedProjectId;
+    }
+    if (normalizedTracker) {
+      initOptions.tracker = normalizedTracker;
+    }
+    if (selectedTeams.length > 0) {
+      initOptions.teams = selectedTeams;
+    }
+    if (selectedIssueIds.length > 0) {
+      initOptions.issueIds = selectedIssueIds;
+    }
+    if (normalizedBaseBranch) {
+      initOptions.baseBranch = normalizedBaseBranch;
+    }
+    if (normalizedManagerBranch) {
+      initOptions.managerBranch = normalizedManagerBranch;
+    }
+    if (normalizedRunnerProvider) {
+      initOptions.runnerProvider = normalizedRunnerProvider;
+    }
+    if (normalizedRunnerCommand) {
+      initOptions.runnerCommand = normalizedRunnerCommand;
+    }
+    if (Number.isFinite(parsedMaxAttempts)) {
+      initOptions.maxAttempts = parsedMaxAttempts;
+    }
+    if (bootstrapIssues) {
+      initOptions.bootstrapIssues = bootstrapIssues;
+    }
+
+    return {
+      init: initOptions,
+      start: shouldStart
+    };
+  } finally {
+    rl.close();
+  }
+}
+
 export function runInitiativeSupervisorStartCommand(
   repoRoot: string,
   options: {
@@ -230,20 +559,7 @@ export function runInitiativeSupervisorStartCommand(
 
 export function runInitiativeSupervisorInitCommand(
   repoRoot: string,
-  options: {
-    slug: string;
-    manifest?: string;
-    baseBranch?: string;
-    managerBranch?: string;
-    maxAttempts?: number;
-    project?: string;
-    projectId?: string;
-    tracker?: string;
-    teams?: string[];
-    issueIds?: string[];
-    runnerProvider?: string;
-    runnerCommand?: string;
-  }
+  options: InitiativeSupervisorInitOptions
 ): CommandResult {
   const existing = readExistingState(repoRoot, options.slug);
   if (existing) {
@@ -255,7 +571,7 @@ export function runInitiativeSupervisorInitCommand(
     };
   }
 
-  const { manifestPath, manifest } = patchManifest(repoRoot, options);
+  const { manifestPath, manifest, created } = ensureManifest(repoRoot, options);
   const args = ["init", "--slug", options.slug, "--manifest", manifestPath];
   if (options.baseBranch) {
     args.push("--base-branch", options.baseBranch);
@@ -279,7 +595,7 @@ export function runInitiativeSupervisorInitCommand(
     args.push("--issue", issueId);
   }
 
-  const created = invokeSupervisorRuntime(repoRoot, args) as Record<string, unknown>;
+  const createdState = invokeSupervisorRuntime(repoRoot, args) as Record<string, unknown>;
   const paused = invokeSupervisorRuntime(repoRoot, [
     "pause",
     "--slug",
@@ -294,9 +610,48 @@ export function runInitiativeSupervisorInitCommand(
     message: `Initiative supervisor initialized for ${options.slug}`,
     details: {
       manifestPath,
+      manifestCreated: created,
       manifestProject: isRecord(manifest.project) ? manifest.project : {},
-      created,
+      created: createdState,
       state: paused
+    }
+  };
+}
+
+export async function runInitiativeSupervisorInteractiveInitCommand(
+  repoRoot: string,
+  options: InteractiveInitOptions = {},
+  io: {
+    input?: NodeJS.ReadableStream;
+    output?: NodeJS.WritableStream;
+    answers?: string[];
+  } = {}
+): Promise<CommandResult> {
+  const resolved = await resolveInteractiveInitOptions(repoRoot, options, io.input, io.output, io.answers);
+  const initResult = runInitiativeSupervisorInitCommand(repoRoot, resolved.init);
+
+  if (!resolved.start) {
+    return {
+      ...initResult,
+      message: `${initResult.message} (interactive wizard)`,
+      details: {
+        ...(isRecord(initResult.details) ? initResult.details : {}),
+        interactive: true,
+        started: false
+      }
+    };
+  }
+
+  const startResult = runInitiativeSupervisorStartCommand(repoRoot, { slug: resolved.init.slug });
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor initialized and started for ${resolved.init.slug}`,
+    details: {
+      init: initResult.details,
+      start: startResult.details,
+      interactive: true,
+      started: true
     }
   };
 }

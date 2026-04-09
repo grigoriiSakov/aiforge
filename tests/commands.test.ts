@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { PassThrough } from "node:stream";
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -10,6 +11,7 @@ import { runInitCommand } from "../src/commands/init.js";
 import {
   runInitiativeSupervisorAbortCommand,
   runInitiativeSupervisorInitCommand,
+  runInitiativeSupervisorInteractiveInitCommand,
   runInitiativeSupervisorNextCommand,
   runInitiativeSupervisorPauseCommand,
   runInitiativeSupervisorResumeCommand,
@@ -868,6 +870,86 @@ printf "%s\\n%s\\n%s\\n" "$1" "$2" "$3" > "$3"
     const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
     expect((next.details as Record<string, unknown>).action).toBe("wait_worker");
     expect((next.details as Record<string, unknown>).issue).toBe("APP-77");
+  });
+
+  test("initiative supervisor interactive init bootstraps manifest from answers", async () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-interactive-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Supervisor Interactive Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+
+    const runtimeTemplatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(runtimeTemplatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    fs.writeFileSync(path.join(runtimeDir, "initiative-supervisor-state.mjs"), renderedRuntime, { mode: 0o755 });
+
+    const output = new PassThrough();
+    let transcript = "";
+    output.on("data", (chunk: Buffer | string) => {
+      transcript += chunk.toString();
+    });
+
+    const result = await runInitiativeSupervisorInteractiveInitCommand(
+      repoRoot,
+      { start: true },
+      {
+        output,
+        answers: [
+          "kernel",
+          "linear",
+          "Kernel",
+          "project-123",
+          "backend",
+          "",
+          "",
+          "",
+          "manual",
+          "",
+          "3",
+          "y",
+          "APP-77 | backend | Refactor kernel",
+          ""
+        ]
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("initialized and started");
+    expect(transcript).toContain("Initiative supervisor init wizard");
+
+    const manifestPath = path.join(repoRoot, ".ai", "context", "initiatives", "kernel", "issues-manifest.json");
+    expect(fs.existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    expect(manifest.slug).toBe("kernel");
+    expect((manifest.project as Record<string, unknown>).projectId).toBe("project-123");
+    expect(manifest.issues).toEqual([
+      {
+        id: "APP-77",
+        title: "Refactor kernel",
+        team: "backend",
+        order: 10,
+        blockedBy: []
+      }
+    ]);
+
+    const startDetails = ((result.details as Record<string, unknown>).start ?? {}) as Record<string, unknown>;
+    expect((startDetails.next as Record<string, unknown>).action).toBe("await_worker_launch");
   });
 
   test("codex guards block manager-mode edits when initiative supervisor is active", async () => {

@@ -23,6 +23,9 @@ It must **not** quietly turn into a coding agent in the main checkout.
 Use the CLI entrypoint, not raw runtime commands, for normal operation:
 
 ```bash
+# 0. easiest path: guided setup
+aiforge initiative-supervisor init --interactive --start
+
 # 1. prepare / bind an existing initiative
 aiforge initiative-supervisor init \
   --slug <slug> \
@@ -79,6 +82,7 @@ Expected precondition:
 {% if linear_enabled -%}
 - Before tracker actions, also read `.ai/skills/tracker/SKILL.md` and `.ai/rules/linear-mcp.mdc`.
 {% endif -%}
+- If the user wants a guided setup instead of raw flags, use `.ai/skills/initiative-supervisor-init/SKILL.md`.
 
 ## Required durable artifacts
 
