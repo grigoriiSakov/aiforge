@@ -45,7 +45,9 @@ Pipeline owner for:
    - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
-   - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'` (ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`; чтобы зафиксировать основание — добавь `--base-branch ИМЯ`, например `{{ main_branch }}`)
+   - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
+     По умолчанию ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`.
+     Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/plan не требует pinned base branch.
 9. Interpret submit result strictly:
    - `reserved` -> create the isolated worktree
    - `queued` -> stop; a related issue is still active

@@ -3,7 +3,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_BASE_BRANCH = "{{ main_branch }}";
 const DEFAULT_MANAGER_BRANCH_PREFIX = "supervisor/";
 const DEFAULT_MAX_ATTEMPTS = 3;
 const PLAN_PROGRESS_ROOT = "{{ plan_progress_runtime_root }}";
@@ -79,6 +78,18 @@ function normalizePath(input) {
     .replace(/\/+/g, "/")
     .replace(/\/$/, "")
     .trim();
+}
+
+function normalizeOptionalString(input) {
+  if (typeof input !== "string") {
+    return null;
+  }
+  const trimmed = input.trim();
+  return trimmed || null;
+}
+
+function formatBaseBranchOverride(baseBranch) {
+  return baseBranch ? String(baseBranch) : "none (use current checkout at worktree start)";
 }
 
 function getOption(args, name, fallback = null) {
@@ -230,7 +241,7 @@ function parseIssueManifest(rawManifest, slug, sourcePath) {
   return {
     version: Number.isFinite(rawManifest.version) ? Number(rawManifest.version) : 1,
     slug: String(rawManifest.slug ?? slug).trim() || slug,
-    baseBranch: String(rawManifest.baseBranch ?? rawManifest.base_branch ?? DEFAULT_BASE_BRANCH).trim() || DEFAULT_BASE_BRANCH,
+    baseBranch: normalizeOptionalString(rawManifest.baseBranch ?? rawManifest.base_branch),
     managerBranch:
       String(
         rawManifest.managerBranch ?? rawManifest.manager_branch ?? `${DEFAULT_MANAGER_BRANCH_PREFIX}${slug}`
@@ -369,7 +380,7 @@ function saveCurrentDigest(state) {
     "",
     `- Status: ${state.status}`,
     `- Pause reason: ${state.pauseReason ?? "none"}`,
-    `- Base branch: ${state.baseBranch}`,
+    `- Base branch override: ${formatBaseBranchOverride(state.baseBranch)}`,
     `- Manager branch: ${state.managerBranch}`,
     `- Current issue: ${currentIssueId}`,
     `- Next action: ${next.action}`,
@@ -557,7 +568,7 @@ function initFromSource(args, label) {
   const state = buildState({
     slug,
     sourcePath: normalizePath(path.relative(repoRoot(), sourcePath)),
-    baseBranch: getOption(args, "--base-branch", manifest.baseBranch),
+    baseBranch: normalizeOptionalString(getOption(args, "--base-branch", manifest.baseBranch)),
     managerBranch: getOption(args, "--manager-branch", manifest.managerBranch),
     maxAttemptsPerIssue: Number.parseInt(
       getOption(args, "--max-attempts", String(manifest.maxAttemptsPerIssue ?? DEFAULT_MAX_ATTEMPTS)),

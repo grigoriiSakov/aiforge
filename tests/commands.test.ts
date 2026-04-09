@@ -672,6 +672,44 @@ process.exit(0);
     expect(next.action).toBe("wait_dependencies");
   });
 
+  test("supervisor worker context does not imply a pinned base branch by default", () => {
+    const repoRoot = makeTempRepo("ai-simple-supervisor-default-base-");
+    installSupervisorRuntimeTemplates(repoRoot, "dev");
+
+    const manifestPath = writeInitiativeManifest(repoRoot, "training-plans-v1", {
+      version: 1,
+      slug: "training-plans-v1",
+      managerBranch: "supervisor/training-plans-v1",
+      issues: [{ id: "MPB-51", title: "Routing fix", team: "backend", order: 10, blockedBy: [] }]
+    });
+
+    const syncPath = path.join(repoRoot, ".ai", "runtime", "supervisor-linear-sync.mjs");
+    const statePath = path.join(repoRoot, ".ai", "runtime", "supervisor-state.mjs");
+    const contextPath = path.join(repoRoot, ".ai", "runtime", "supervisor-context.mjs");
+
+    const imported = JSON.parse(
+      runNodeScript(syncPath, ["import", "--slug", "training-plans-v1", "--manifest", manifestPath], repoRoot)
+    );
+    const state = JSON.parse(
+      runNodeScript(
+        statePath,
+        ["init-from-linear", "--slug", "training-plans-v1", "--source", String(imported.snapshotPath)],
+        repoRoot
+      )
+    );
+
+    expect(state.baseBranch).toBeNull();
+    runNodeScript(statePath, ["resume", "--slug", "training-plans-v1"], repoRoot);
+
+    const rendered = JSON.parse(
+      runNodeScript(contextPath, ["render", "--slug", "training-plans-v1", "--role", "worker"], repoRoot)
+    );
+    const workerBrief = fs.readFileSync(path.join(repoRoot, rendered.contextPath), "utf8");
+
+    expect(workerBrief).toContain("Base branch override: none");
+    expect(workerBrief).toContain("Do not pass `--base-branch` unless a pinned base branch override is explicitly provided above");
+  });
+
   test("supervisor command wrappers import, init, daemon, status, pause, resume, and abort", { timeout: 20000 }, async () => {
     const repoRoot = makeTempRepo("ai-simple-supervisor-cli-");
     await runInitCommand({
