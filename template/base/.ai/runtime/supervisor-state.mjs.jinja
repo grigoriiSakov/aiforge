@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DEFAULT_BASE_BRANCH = "{{ main_branch }}";
-const DEFAULT_MANAGER_BRANCH_PREFIX = "initiative/";
+const DEFAULT_MANAGER_BRANCH_PREFIX = "supervisor/";
 const DEFAULT_MAX_ATTEMPTS = 3;
 const PLAN_PROGRESS_ROOT = "{{ plan_progress_runtime_root }}";
 
@@ -17,23 +17,31 @@ function runtimeRoot() {
 }
 
 function supervisorRoot() {
-  return path.join(runtimeRoot(), "initiative-supervisor");
+  return path.join(runtimeRoot(), "supervisor");
 }
 
 function runsDir() {
   return path.join(supervisorRoot(), "runs");
 }
 
-function promptsDir() {
-  return path.join(supervisorRoot(), "prompts");
+function contextDir() {
+  return path.join(supervisorRoot(), "context");
 }
 
 function findingsDir() {
   return path.join(supervisorRoot(), "findings");
 }
 
+function reviewsDir() {
+  return path.join(supervisorRoot(), "reviews");
+}
+
 function eventsDir() {
   return path.join(supervisorRoot(), "events");
+}
+
+function importsDir() {
+  return path.join(supervisorRoot(), "imports");
 }
 
 function ensureDir(targetPath) {
@@ -42,9 +50,11 @@ function ensureDir(targetPath) {
 
 function ensureStateDirs() {
   ensureDir(runsDir());
-  ensureDir(promptsDir());
+  ensureDir(contextDir());
   ensureDir(findingsDir());
+  ensureDir(reviewsDir());
   ensureDir(eventsDir());
+  ensureDir(importsDir());
 }
 
 function utcNow() {
@@ -107,32 +117,56 @@ function requireOption(args, name) {
   return value;
 }
 
-function requireState(slug) {
-  const state = loadState(slug);
-  if (!state) {
-    throw new Error(`unknown initiative supervisor run: ${slug}`);
-  }
-  return state;
-}
-
 function slugStatePath(slug) {
   return path.join(runsDir(), `${slug}.json`);
-}
-
-function eventLogPath(slug) {
-  return path.join(eventsDir(), `${slug}.jsonl`);
 }
 
 function currentPath(slug) {
   return path.join(supervisorRoot(), "current", `${slug}.md`);
 }
 
-function manifestPathForSlug(slug) {
-  return path.join(repoRoot(), ".ai", "context", "initiatives", slug, "issues-manifest.json");
+function eventLogPath(slug) {
+  return path.join(eventsDir(), `${slug}.jsonl`);
+}
+
+function workerContextPath(slug, issueId, attempt) {
+  return path.join(contextDir(), slug, `worker-${issueId}-attempt-${attempt}.md`);
+}
+
+function managerContextPath(slug) {
+  return path.join(contextDir(), slug, "manager.md");
+}
+
+function reviewPath(slug, issueId, attempt) {
+  return path.join(reviewsDir(), slug, `${issueId}-attempt-${attempt}.md`);
+}
+
+function issueFindingsPath(slug, issueId, attempt) {
+  return path.join(findingsDir(), slug, `${issueId}-attempt-${attempt}.md`);
+}
+
+function orchestratorRunPath(issueId) {
+  return normalizePath(path.join(".ai", "runtime", "orchestrator", "runs", `${issueId}.json`));
+}
+
+function localPlanPath(issueId) {
+  return normalizePath(path.join(PLAN_PROGRESS_ROOT, issueId, "plan.md"));
+}
+
+function localProgressPath(issueId) {
+  return normalizePath(path.join(PLAN_PROGRESS_ROOT, issueId, "progress.md"));
 }
 
 function loadState(slug) {
   return readJson(slugStatePath(slug), null);
+}
+
+function requireState(slug) {
+  const state = loadState(slug);
+  if (!state) {
+    throw new Error(`unknown supervisor run: ${slug}`);
+  }
+  return state;
 }
 
 function appendEvent(slug, payload) {
@@ -148,28 +182,28 @@ function normalizeBlockedBy(blockedBy) {
 }
 
 function normalizeTeam(value) {
-  const normalized = String(value ?? "").trim();
-  return normalized ? normalized.toLowerCase() : null;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || null;
 }
 
-function parseIssueManifest(rawManifest, slug, manifestPath) {
+function parseIssueManifest(rawManifest, slug, sourcePath) {
   if (!rawManifest || typeof rawManifest !== "object" || Array.isArray(rawManifest)) {
-    throw new Error(`invalid initiative manifest: ${manifestPath}`);
+    throw new Error(`invalid supervisor source: ${sourcePath}`);
   }
 
   const rawIssues = Array.isArray(rawManifest.issues) ? rawManifest.issues : [];
   if (rawIssues.length === 0) {
-    throw new Error(`initiative manifest must contain at least one issue: ${manifestPath}`);
+    throw new Error(`supervisor source must contain at least one issue: ${sourcePath}`);
   }
 
   const seen = new Set();
   const issues = rawIssues.map((rawIssue, index) => {
     const issueId = String(rawIssue?.id ?? "").trim();
     if (!issueId) {
-      throw new Error(`issue at index ${String(index)} is missing id in ${manifestPath}`);
+      throw new Error(`issue at index ${String(index)} is missing id in ${sourcePath}`);
     }
     if (seen.has(issueId)) {
-      throw new Error(`duplicate issue id in initiative manifest: ${issueId}`);
+      throw new Error(`duplicate issue id in supervisor source: ${issueId}`);
     }
     seen.add(issueId);
     return {
@@ -231,95 +265,74 @@ function selectIssues(manifest, options) {
   const issues = allIssues.filter(shouldInclude);
   if (issues.length === 0) {
     throw new Error(
-      `initiative selection matched no issues (teams=${selectedTeams.join(",") || "none"}, issues=${selectedIssueIds.join(",") || "none"})`
+      `supervisor selection matched no issues (teams=${selectedTeams.join(",") || "none"}, issues=${selectedIssueIds.join(",") || "none"})`
     );
   }
 
   const selectedIds = new Set(issues.map((issue) => issue.id));
   const filteredIssues = issues.map((issue) => ({
     ...issue,
-    blockedBy: issue.blockedBy.filter((issueId) => selectedIds.has(issueId)),
-    externalBlockedBy: issue.blockedBy.filter((issueId) => !selectedIds.has(issueId))
+    blockedBy: issue.blockedBy.filter((entry) => selectedIds.has(entry)),
+    externalBlockedBy: issue.blockedBy.filter((entry) => !selectedIds.has(entry))
   }));
 
   return {
     teams: selectedTeams,
     issueIds: selectedIssueIds,
-    totalManifestIssues: allIssues.length,
     selectedIssueCount: filteredIssues.length,
     issues: filteredIssues
   };
 }
 
-function defaultIssueState(issue) {
-  return {
-    id: issue.id,
-    title: issue.title,
-    order: issue.order,
-    team: issue.team ?? null,
-    blockedBy: issue.blockedBy,
-    externalBlockedBy: issue.externalBlockedBy ?? [],
-    orchestrator: issue.orchestrator,
-    artifacts: issue.artifacts,
-    status: "pending",
-    attempts: 0,
-    lastPromptPath: null,
-    lastFindingsPath: null,
-    lastWorkerRun: null,
-    workerRuns: [],
-    managerReviews: [],
-    commitSha: null,
-    completedAt: null
-  };
-}
-
 function buildState(params) {
-  const issues = {};
+  const issueMap = {};
   const issueOrder = [];
-  for (const issue of params.selectedIssues) {
-    issues[issue.id] = defaultIssueState(issue);
+  for (const issue of params.issues) {
     issueOrder.push(issue.id);
+    issueMap[issue.id] = {
+      id: issue.id,
+      title: issue.title,
+      team: issue.team ?? null,
+      order: issue.order,
+      blockedBy: issue.blockedBy,
+      externalBlockedBy: issue.externalBlockedBy ?? [],
+      orchestrator: issue.orchestrator !== false,
+      artifacts: issue.artifacts ?? {},
+      status: "pending",
+      attempts: 0,
+      lastWorkerContextPath: null,
+      lastFindingsPath: null,
+      lastReviewPath: null,
+      lastWorkerRun: null,
+      workerRuns: [],
+      managerReviews: [],
+      commitSha: null,
+      completedAt: null
+    };
   }
 
   return {
     version: 1,
     slug: params.slug,
-    manifestPath: params.manifestPath,
-    status: "running",
-    pauseReason: null,
+    sourcePath: params.sourcePath,
+    status: "paused",
+    pauseReason: "initialized; start daemon to begin execution",
     currentIssueId: null,
     baseBranch: params.baseBranch,
     managerBranch: params.managerBranch,
     maxAttemptsPerIssue: params.maxAttemptsPerIssue,
-    runner: {
-      provider: params.runner.provider,
-      commandTemplate: params.runner.commandTemplate,
-      detectedProvider: null,
-      lastLaunch: null
-    },
-    selection: {
-      teams: params.selection.teams,
-      issueIds: params.selection.issueIds,
-      totalManifestIssues: params.selection.totalManifestIssues,
-      selectedIssueCount: params.selection.selectedIssueCount
-    },
+    selection: params.selection,
     issueOrder,
-    issues,
-    project: params.manifest.project,
-    artifacts: params.manifest.artifacts,
+    issues: issueMap,
+    project: params.project,
+    artifacts: params.artifacts,
     startedAt: utcNow(),
     updatedAt: utcNow()
   };
 }
 
-function saveState(state) {
-  state.updatedAt = utcNow();
-  writeJson(slugStatePath(state.slug), state);
-  writeCurrentDigest(state);
-}
-
 function allIssues(state) {
-  return state.issueOrder.map((issueId) => state.issues[issueId]).filter(Boolean);
+  return (state.issueOrder ?? []).map((issueId) => state.issues[issueId]).filter(Boolean);
 }
 
 function allDone(state) {
@@ -327,98 +340,78 @@ function allDone(state) {
 }
 
 function currentIssue(state) {
-  return state.currentIssueId ? (state.issues[state.currentIssueId] ?? null) : null;
+  return state.currentIssueId ? state.issues[state.currentIssueId] ?? null : null;
 }
 
-function dependenciesSatisfied(state, issue) {
-  return issue.blockedBy.every((issueId) => state.issues[issueId]?.status === "done");
+function unresolvedDependencies(state, issue) {
+  return issue.blockedBy.filter((blockedIssueId) => state.issues[blockedIssueId]?.status !== "done");
 }
 
 function selectNextRunnableIssue(state) {
-  for (const issueId of state.issueOrder) {
-    const issue = state.issues[issueId];
-    if (!issue) {
-      continue;
-    }
-    if (!["pending", "needs-rework"].includes(issue.status)) {
-      continue;
-    }
-    if (!dependenciesSatisfied(state, issue)) {
-      continue;
-    }
-    return issue;
-  }
-  return null;
+  return allIssues(state).find(
+    (issue) =>
+      ["pending", "needs-rework"].includes(issue.status) &&
+      unresolvedDependencies(state, issue).length === 0 &&
+      (issue.externalBlockedBy ?? []).length === 0
+  );
 }
 
 function nextAttemptNumber(issue) {
-  return Number(issue.attempts ?? 0) + 1;
+  return Math.max(1, Number(issue.attempts ?? 0) + (issue.status === "needs-rework" ? 1 : 1));
 }
 
-function orchestratorRunPath(issueId) {
-  return path.join(repoRoot(), ".ai", "runtime", "orchestrator", "runs", `${issueId}.json`);
-}
-
-function localPlanPath(issueId) {
-  return path.join(repoRoot(), PLAN_PROGRESS_ROOT, issueId, "plan.md");
-}
-
-function localProgressPath(issueId) {
-  return path.join(repoRoot(), PLAN_PROGRESS_ROOT, issueId, "progress.md");
-}
-
-function workerPromptPath(slug, issueId, attempt) {
-  return path.join(promptsDir(), slug, `${issueId}-attempt-${String(attempt)}.md`);
-}
-
-function issueFindingsPath(slug, issueId, attempt) {
-  return path.join(findingsDir(), slug, `${issueId}-attempt-${String(attempt)}.md`);
-}
-
-function writeCurrentDigest(state) {
-  const issue = currentIssue(state);
+function saveCurrentDigest(state) {
+  const currentIssueId = state.currentIssueId ?? "none";
+  const activeIssue = currentIssue(state);
   const next = graphNext(state);
   const lines = [
-    "# Initiative Supervisor",
+    `# Supervisor ${state.slug}`,
     "",
-    `- Slug: ${state.slug}`,
     `- Status: ${state.status}`,
+    `- Pause reason: ${state.pauseReason ?? "none"}`,
     `- Base branch: ${state.baseBranch}`,
     `- Manager branch: ${state.managerBranch}`,
-    `- Runner provider: ${state.runner?.provider ?? "auto"}`,
-    `- Runner command: ${state.runner?.commandTemplate ?? "manual fallback"}`,
-    `- Selected teams: ${(state.selection?.teams ?? []).join(", ") || "all"}`,
-    `- Selected issues: ${(state.selection?.issueIds ?? []).join(", ") || "all by team/filter"}`,
-    `- Issue count: ${String(state.selection?.selectedIssueCount ?? state.issueOrder.length)} / ${String(
-      state.selection?.totalManifestIssues ?? state.issueOrder.length
-    )}`,
-    `- Current issue: ${issue?.id ?? "none"}`,
+    `- Current issue: ${currentIssueId}`,
     `- Next action: ${next.action}`,
-    `- Updated: ${state.updatedAt}`,
-    "",
-    "## Current Issue",
-    issue
-      ? `- Issue: ${issue.id}
-- Title: ${issue.title}
-- Status: ${issue.status}
-- Team: ${issue.team ?? "none"}
-- Attempts: ${String(issue.attempts)}
-- Launch status: ${issue.status === "launch-prepared" ? "waiting-worker-launch" : "none"}
-- Last prompt: ${issue.lastPromptPath ?? "none"}
-- Last findings: ${issue.lastFindingsPath ?? "none"}
-- External blockers: ${issue.externalBlockedBy?.join(",") || "none"}`
-      : "- No current issue selected.",
-    "",
-    "## Issues",
-    ...allIssues(state).map(
-      (entry) =>
-        `- ${entry.id} :: team=${entry.team ?? "none"} :: ${entry.status} :: blockedBy=${entry.blockedBy.join(",") || "none"} :: external=${entry.externalBlockedBy?.join(",") || "none"} :: attempts=${String(entry.attempts)}`
-    )
+    `- Source path: ${state.sourcePath ?? "unknown"}`,
+    `- Selected teams: ${(state.selection?.teams ?? []).join(", ") || "all"}`,
+    `- Selected issue ids: ${(state.selection?.issueIds ?? []).join(", ") || "all"}`,
+    `- Updated at: ${state.updatedAt}`,
+    ""
   ];
+
+  if (activeIssue) {
+    lines.push(
+      "## Current Issue",
+      "",
+      `- ${activeIssue.id} — ${activeIssue.title}`,
+      `- Status: ${activeIssue.status}`,
+      `- Attempts: ${String(activeIssue.attempts)}`,
+      `- Last worker context: ${activeIssue.lastWorkerContextPath ?? "none"}`,
+      `- Last findings: ${activeIssue.lastFindingsPath ?? "none"}`,
+      `- Last review: ${activeIssue.lastReviewPath ?? "none"}`,
+      ""
+    );
+  }
+
+  lines.push("## Issue Order", "");
+  for (const issue of allIssues(state)) {
+    lines.push(
+      `- ${issue.id} | status=${issue.status} | blockedBy=${issue.blockedBy.join(",") || "none"} | externalBlockedBy=${
+        issue.externalBlockedBy.join(",") || "none"
+      }`
+    );
+  }
 
   const targetPath = currentPath(state.slug);
   ensureDir(path.dirname(targetPath));
   fs.writeFileSync(targetPath, `${lines.join("\n")}\n`, "utf8");
+}
+
+function saveState(state) {
+  state.updatedAt = utcNow();
+  writeJson(slugStatePath(state.slug), state);
+  saveCurrentDigest(state);
 }
 
 function graphNext(state) {
@@ -459,7 +452,8 @@ function graphNext(state) {
         .filter((entry) => ["pending", "needs-rework"].includes(entry.status))
         .map((entry) => ({
           issue: entry.id,
-          blockedBy: entry.blockedBy.filter((blockedIssueId) => state.issues[blockedIssueId]?.status !== "done")
+          blockedBy: unresolvedDependencies(state, entry),
+          externalBlockedBy: entry.externalBlockedBy ?? []
         }))
     };
   }
@@ -472,7 +466,7 @@ function graphNext(state) {
       action: "launch_worker",
       issue: issue.id,
       attempt,
-      promptPath: workerPromptPath(state.slug, issue.id, attempt)
+      contextPath: normalizePath(path.relative(repoRoot(), workerContextPath(state.slug, issue.id, attempt)))
     };
   }
 
@@ -493,18 +487,7 @@ function graphNext(state) {
       issue: issue.id,
       attempt,
       findingsPath: issue.lastFindingsPath,
-      promptPath: workerPromptPath(state.slug, issue.id, attempt)
-    };
-  }
-
-  if (issue.status === "launch-prepared") {
-    return {
-      step: "waiting_worker_launch",
-      action: "await_worker_launch",
-      issue: issue.id,
-      promptPath: issue.lastPromptPath,
-      findingsPath: issue.lastFindingsPath,
-      provider: state.runner?.detectedProvider ?? state.runner?.provider ?? "auto"
+      contextPath: normalizePath(path.relative(repoRoot(), workerContextPath(state.slug, issue.id, attempt)))
     };
   }
 
@@ -522,8 +505,8 @@ function graphNext(state) {
       step: "manager_review",
       action: "run_manager_review",
       issue: issue.id,
+      reviewPath: normalizePath(path.relative(repoRoot(), reviewPath(state.slug, issue.id, Math.max(1, issue.attempts)))),
       orchestratorRunPath: orchestratorRunPath(issue.id),
-      worktreePath: issue.lastWorkerRun?.worktreePath ?? null,
       planPath: localPlanPath(issue.id),
       progressPath: localProgressPath(issue.id)
     };
@@ -531,79 +514,77 @@ function graphNext(state) {
 
   if (issue.status === "manager-accepted") {
     return {
-      step: "finalize_issue",
+      step: "finalize",
       action: "finalize_issue",
       issue: issue.id,
-      worktreePath: issue.lastWorkerRun?.worktreePath ?? null
-    };
-  }
-
-  if (issue.status === "done") {
-    return {
-      step: "advance",
-      action: "advance_issue",
-      issue: issue.id
+      commitSha: issue.commitSha
     };
   }
 
   return {
-    step: "blocked",
-    action: "inspect_state",
+    step: "unknown",
+    action: "stop",
     issue: issue.id,
     status: issue.status
   };
 }
 
-function ensureIssueBound(state, issueId) {
-  const issue = state.issues[issueId];
-  if (!issue) {
-    throw new Error(`unknown issue in supervisor state: ${issueId}`);
+function loadSourceFromArgs(args, slug) {
+  const sourcePath = path.resolve(
+    getOption(
+      args,
+      "--source",
+      getOption(args, "--manifest", path.join(repoRoot(), ".ai", "runtime", "supervisor", "imports", `${slug}.json`))
+    )
+  );
+  const source = readJson(sourcePath, null);
+  if (!source) {
+    throw new Error(`missing supervisor source: ${sourcePath}`);
   }
-  return issue;
+  return { sourcePath, source };
 }
 
-function commandInit(args) {
+function initFromSource(args, label) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
-  const manifestPath = path.resolve(getOption(args, "--manifest", manifestPathForSlug(slug)));
-  const rawManifest = readJson(manifestPath, null);
-  const manifest = parseIssueManifest(rawManifest, slug, manifestPath);
+  const { sourcePath, source } = loadSourceFromArgs(args, slug);
+  const manifest = parseIssueManifest(source, slug, sourcePath);
   const selection = selectIssues(manifest, {
     teams: getMultiOptionValues(args, "--team"),
     issueIds: getMultiOptionValues(args, "--issue")
   });
+
   const state = buildState({
     slug,
-    manifestPath,
-    manifest,
-    selectedIssues: selection.issues,
-    selection,
+    sourcePath: normalizePath(path.relative(repoRoot(), sourcePath)),
     baseBranch: getOption(args, "--base-branch", manifest.baseBranch),
     managerBranch: getOption(args, "--manager-branch", manifest.managerBranch),
-    runner: {
-      provider: getOption(args, "--runner-provider", "auto"),
-      commandTemplate: getOption(args, "--runner-command", null)
-    },
     maxAttemptsPerIssue: Number.parseInt(
       getOption(args, "--max-attempts", String(manifest.maxAttemptsPerIssue ?? DEFAULT_MAX_ATTEMPTS)),
       10
-    )
+    ),
+    selection,
+    issues: selection.issues,
+    project: manifest.project,
+    artifacts: manifest.artifacts
   });
   saveState(state);
-  appendEvent(slug, {
-    type: "init",
-    manifestPath,
-    managerBranch: state.managerBranch,
-    selection: state.selection
-  });
+  appendEvent(slug, { type: label, sourcePath: state.sourcePath, issueCount: state.issueOrder.length });
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+}
+
+function commandInitFromManifest(args) {
+  initFromSource(args, "init_from_manifest");
+}
+
+function commandInitFromLinear(args) {
+  initFromSource(args, "init_from_linear");
 }
 
 function commandStatus(args) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
-  const state = requireState(slug);
-  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(requireState(slug), null, 2)}\n`);
 }
 
 function commandPause(args) {
@@ -632,51 +613,6 @@ function commandResume(args) {
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 }
 
-function commandSetRunner(args) {
-  ensureStateDirs();
-  const slug = requireOption(args, "--slug");
-  const state = requireState(slug);
-  const provider = getOption(args, "--runner-provider", null);
-  const commandTemplate = getOption(args, "--runner-command", null);
-  const clearCommand = args.includes("--clear-runner-command");
-
-  if (state.status !== "paused") {
-    throw new Error(`cannot change runner in status ${state.status}; pause the supervisor first`);
-  }
-  if (provider == null && commandTemplate == null && !clearCommand) {
-    throw new Error("set-runner requires --runner-provider, --runner-command, or --clear-runner-command");
-  }
-
-  if (!state.runner || typeof state.runner !== "object") {
-    state.runner = {
-      provider: "auto",
-      commandTemplate: null,
-      detectedProvider: null,
-      lastLaunch: null
-    };
-  }
-
-  if (provider != null) {
-    state.runner.provider = provider;
-    state.runner.detectedProvider = null;
-  }
-  if (clearCommand) {
-    state.runner.commandTemplate = null;
-  }
-  if (commandTemplate != null) {
-    state.runner.commandTemplate = commandTemplate;
-  }
-
-  saveState(state);
-  appendEvent(slug, {
-    type: "set_runner",
-    provider: state.runner.provider,
-    commandTemplate: state.runner.commandTemplate,
-    clearCommand
-  });
-  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
-}
-
 function commandAbort(args) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
@@ -692,76 +628,64 @@ function commandAbort(args) {
 function commandGraphNext(args) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
-  const state = requireState(slug);
-  process.stdout.write(`${JSON.stringify(graphNext(state), null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(graphNext(requireState(slug)), null, 2)}\n`);
 }
 
-function commandPrepareWorkerPrompt(args) {
+function commandWriteWorkerContext(args) {
   ensureStateDirs();
   const slug = requireOption(args, "--slug");
   const state = requireState(slug);
   const next = graphNext(state);
-  if (next.action === "await_worker_launch" && next.issue) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          slug,
-          issue: next.issue,
-          promptPath: next.promptPath,
-          provider: next.provider ?? state.runner?.provider ?? "auto"
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
   if (next.action !== "launch_worker" || !next.issue) {
-    throw new Error(`cannot prepare worker prompt in action ${next.action}`);
+    throw new Error(`cannot write worker context in action ${next.action}`);
   }
-  const issue = ensureIssueBound(state, next.issue);
+  const issue = state.issues[next.issue];
   const attempt = Number(next.attempt ?? nextAttemptNumber(issue));
-  const promptPath = workerPromptPath(slug, issue.id, attempt);
-  const findingsLine = issue.lastFindingsPath ? `- Previous findings: \`${issue.lastFindingsPath}\`` : "";
+  const targetPath = workerContextPath(slug, issue.id, attempt);
   const lines = [
-    `# Initiative Worker Prompt: ${issue.id}`,
+    `# Supervisor Worker Context: ${issue.id}`,
     "",
-    "You are the worker for exactly one issue in an initiative supervisor loop.",
-    "",
-    "Mandatory reads before action:",
-    `- \`{{ manifesto_path }}\``,
-    "- `ai.config.yaml`",
-    "- `.ai/context/current.md` if it exists",
-    "- `.ai/rules/workflow.mdc`",
-    "- `.ai/rules/workflow-gates.mdc`",
-    "- `.ai/rules/project-profile.mdc`",
-    "- `.ai/skills/orchestrator/SKILL.md`",
-    `- \`${currentPath(slug)}\``,
-    `- \`${localPlanPath(issue.id)}\` if it exists`,
-    `- \`${localProgressPath(issue.id)}\` if it exists`,
-    `- \`${state.manifestPath}\``,
-    findingsLine,
-    "",
-    "Execution contract:",
-    `- Issue: \`${issue.id}\``,
+    `- Supervisor slug: ${slug}`,
+    `- Issue: ${issue.id}`,
+    `- Title: ${issue.title}`,
     `- Attempt: ${String(attempt)}`,
-    "- You are not the manager. Do not decide initiative ordering or finalize tracker state.",
-    "- Run the full `/orchestrator` cycle for this issue only.",
-    "- Reach `awaiting-finalize` with honest scoped test evidence and a clean/low review verdict.",
-    "- If review finds issues, stay in the fix loop until they are cleared or you hit a hard blocker.",
-    "- Update local plan/progress artifacts and orchestrator runtime state honestly.",
-    "- Return control only after the issue is truly ready for independent manager verification."
-  ].filter(Boolean);
-  ensureDir(path.dirname(promptPath));
-  fs.writeFileSync(promptPath, `${lines.join("\n")}\n`, "utf8");
-  issue.lastPromptPath = normalizePath(path.relative(repoRoot(), promptPath));
-  issue.status = "launch-prepared";
+    `- Base branch: ${state.baseBranch}`,
+    `- Manager branch: ${state.managerBranch}`,
+    `- Orchestrator run path: ${orchestratorRunPath(issue.id)}`,
+    `- Plan path: ${localPlanPath(issue.id)}`,
+    `- Progress path: ${localProgressPath(issue.id)}`,
+    issue.lastFindingsPath ? `- Rework findings: ${issue.lastFindingsPath}` : "- Rework findings: none",
+    "",
+    "## Required behavior",
+    "",
+    "- Handle this issue only.",
+    "- Use the orchestrator flow to do the implementation in an isolated worktree.",
+    "- Return structured result to the launcher host.",
+    "- Do not modify manager-branch product code directly.",
+    "",
+    "## Result contract",
+    "",
+    "- On success return JSON with `status: completed` and optional `worktreePath`, `summary`, `commitSha`.",
+    "- On failure return JSON with `status: failed` and `summary`.",
+    "- The daemon records state transitions; the worker should not mutate supervisor runtime state directly."
+  ];
+  ensureDir(path.dirname(targetPath));
+  fs.writeFileSync(targetPath, `${lines.join("\n")}\n`, "utf8");
+  issue.lastWorkerContextPath = normalizePath(path.relative(repoRoot(), targetPath));
   state.currentIssueId = issue.id;
   saveState(state);
-  appendEvent(slug, { type: "prepare_worker_prompt", issue: issue.id, attempt, promptPath: issue.lastPromptPath });
+  appendEvent(slug, { type: "write_worker_context", issue: issue.id, attempt, contextPath: issue.lastWorkerContextPath });
   process.stdout.write(
-    `${JSON.stringify({ slug, issue: issue.id, attempt, promptPath: issue.lastPromptPath }, null, 2)}\n`
+    `${JSON.stringify({ issue: issue.id, attempt, contextPath: issue.lastWorkerContextPath }, null, 2)}\n`
   );
+}
+
+function ensureIssueBound(state, issueId) {
+  const issue = state.issues?.[issueId] ?? null;
+  if (!issue) {
+    throw new Error(`issue ${issueId} does not belong to supervisor ${state.slug}`);
+  }
+  return issue;
 }
 
 function commandRecordWorker(args) {
@@ -769,19 +693,15 @@ function commandRecordWorker(args) {
   const slug = requireOption(args, "--slug");
   const issueId = requireOption(args, "--issue");
   const status = requireOption(args, "--status");
-  const state = requireState(slug);
-  const issue = ensureIssueBound(state, issueId);
   const runId = getOption(args, "--run-id", `${issueId}-${utcNow()}`);
   const worktreePath = getOption(args, "--worktree-path", null);
-  const summaryPath = getOption(args, "--summary-path", null);
-  const orchestratorPath = getOption(args, "--orchestrator-run-path", normalizePath(path.relative(repoRoot(), orchestratorRunPath(issueId))));
-
-  if (!["launched", "completed", "failed"].includes(status)) {
-    throw new Error("record-worker status must be launched, completed, or failed");
-  }
+  const summary = getOption(args, "--summary", null);
+  const commitSha = getOption(args, "--commit-sha", null);
+  const state = requireState(slug);
+  const issue = ensureIssueBound(state, issueId);
 
   if (status === "launched") {
-    if (!["pending", "needs-rework", "launch-prepared"].includes(issue.status)) {
+    if (!["pending", "needs-rework"].includes(issue.status)) {
       throw new Error(`cannot launch worker for ${issueId} in status ${issue.status}`);
     }
     issue.attempts = Number(issue.attempts ?? 0) + 1;
@@ -789,110 +709,58 @@ function commandRecordWorker(args) {
     issue.lastWorkerRun = {
       runId,
       status: "running",
-      startedAt: utcNow(),
-      completedAt: null,
       worktreePath,
-      summaryPath,
-      orchestratorRunPath: orchestratorPath
+      summary,
+      commitSha,
+      startedAt: utcNow(),
+      updatedAt: utcNow()
     };
     issue.workerRuns.push(issue.lastWorkerRun);
     state.currentIssueId = issueId;
-  } else {
-    if (issue.status !== "worker-running" && issue.lastWorkerRun) {
-      throw new Error(`cannot record worker completion for ${issueId} in status ${issue.status}`);
-    }
-    if (!issue.lastWorkerRun) {
-      issue.lastWorkerRun = {
-        runId,
-        status: "running",
-        startedAt: utcNow(),
-        completedAt: null,
-        worktreePath,
-        summaryPath,
-        orchestratorRunPath: orchestratorPath
-      };
-      issue.workerRuns.push(issue.lastWorkerRun);
-    }
+    saveState(state);
+    appendEvent(slug, { type: "record_worker", issue: issueId, status, runId, worktreePath, summary, commitSha });
+    process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+    return;
+  }
+
+  if (issue.status !== "worker-running") {
+    throw new Error(`cannot record worker ${status} for ${issueId} in status ${issue.status}`);
+  }
+
+  if (issue.lastWorkerRun) {
     issue.lastWorkerRun.status = status;
-    issue.lastWorkerRun.completedAt = utcNow();
-    issue.lastWorkerRun.worktreePath = worktreePath ?? issue.lastWorkerRun.worktreePath;
-    issue.lastWorkerRun.summaryPath = summaryPath ?? issue.lastWorkerRun.summaryPath;
-    issue.lastWorkerRun.orchestratorRunPath = orchestratorPath ?? issue.lastWorkerRun.orchestratorRunPath;
-    issue.status = status === "completed" ? "worker-completed" : "needs-rework";
-    state.currentIssueId = issueId;
+    issue.lastWorkerRun.updatedAt = utcNow();
+    if (worktreePath) {
+      issue.lastWorkerRun.worktreePath = worktreePath;
+    }
+    if (summary) {
+      issue.lastWorkerRun.summary = summary;
+    }
+    if (commitSha) {
+      issue.lastWorkerRun.commitSha = commitSha;
+    }
+    if (status === "completed") {
+      issue.lastWorkerRun.completedAt = utcNow();
+    }
+    if (status === "failed") {
+      issue.lastWorkerRun.failedAt = utcNow();
+    }
   }
 
-  saveState(state);
-  appendEvent(slug, {
-    type: "record_worker",
-    issue: issueId,
-    status,
-    runId,
-    worktreePath,
-    summaryPath
-  });
-  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
-}
-
-function commandRecordReview(args) {
-  ensureStateDirs();
-  const slug = requireOption(args, "--slug");
-  const issueId = requireOption(args, "--issue");
-  const result = requireOption(args, "--result");
-  const findingsPath = getOption(args, "--findings-path", null);
-  const summary = getOption(args, "--summary", null);
-  const state = requireState(slug);
-  const issue = ensureIssueBound(state, issueId);
-
-  if (!["accept", "rework", "fail"].includes(result)) {
-    throw new Error("record-review result must be accept, rework, or fail");
-  }
-  if (issue.status !== "worker-completed") {
-    throw new Error(`cannot record manager review for ${issueId} in status ${issue.status}`);
-  }
-
-  issue.managerReviews.push({
-    result,
-    findingsPath,
-    summary,
-    timestamp: utcNow()
-  });
-  issue.lastFindingsPath = findingsPath;
-
-  if (result === "accept") {
-    issue.status = "manager-accepted";
-  } else if (result === "rework") {
-    issue.status = "needs-rework";
+  if (status === "completed") {
+    issue.status = "worker-completed";
+  } else if (status === "failed") {
+    issue.status = issue.attempts >= state.maxAttemptsPerIssue ? "failed" : "needs-rework";
+    if (issue.status === "failed") {
+      state.status = "failed";
+    }
   } else {
-    issue.status = "failed";
-    state.status = "failed";
+    throw new Error(`unsupported worker status: ${status}`);
   }
 
   state.currentIssueId = issueId;
   saveState(state);
-  appendEvent(slug, { type: "record_review", issue: issueId, result, findingsPath, summary });
-  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
-}
-
-function commandMarkIssueDone(args) {
-  ensureStateDirs();
-  const slug = requireOption(args, "--slug");
-  const issueId = requireOption(args, "--issue");
-  const commitSha = getOption(args, "--commit-sha", null);
-  const state = requireState(slug);
-  const issue = ensureIssueBound(state, issueId);
-  if (issue.status !== "manager-accepted") {
-    throw new Error(`cannot mark ${issueId} done in status ${issue.status}; manager acceptance required`);
-  }
-  issue.status = "done";
-  issue.commitSha = commitSha;
-  issue.completedAt = utcNow();
-  state.currentIssueId = null;
-  if (allDone(state)) {
-    state.status = "done";
-  }
-  saveState(state);
-  appendEvent(slug, { type: "mark_issue_done", issue: issueId, commitSha });
+  appendEvent(slug, { type: "record_worker", issue: issueId, status, runId, worktreePath, summary, commitSha });
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 }
 
@@ -907,7 +775,7 @@ function commandWriteFindingsStub(args) {
   const lines = [
     `# Findings for ${issueId}`,
     "",
-    "- Fill this file with concrete manager findings before `record-review --result rework`.",
+    "- Fill this file with concrete manager findings before recording `rework`.",
     `- Supervisor slug: ${slug}`,
     `- Attempt: ${String(attempt)}`
   ];
@@ -919,13 +787,85 @@ function commandWriteFindingsStub(args) {
   process.stdout.write(`${JSON.stringify({ issue: issueId, findingsPath: issue.lastFindingsPath }, null, 2)}\n`);
 }
 
+function commandRecordReview(args) {
+  ensureStateDirs();
+  const slug = requireOption(args, "--slug");
+  const issueId = requireOption(args, "--issue");
+  const result = requireOption(args, "--result");
+  const reviewPathInput = getOption(args, "--review-path", null);
+  const findingsPath = getOption(args, "--findings-path", null);
+  const summary = getOption(args, "--summary", null);
+  const commitSha = getOption(args, "--commit-sha", null);
+  const state = requireState(slug);
+  const issue = ensureIssueBound(state, issueId);
+
+  if (issue.status !== "worker-completed") {
+    throw new Error(`cannot record manager review for ${issueId} in status ${issue.status}`);
+  }
+
+  const attempt = Math.max(1, Number(issue.attempts ?? 0));
+  const normalizedReviewPath =
+    reviewPathInput ??
+    normalizePath(path.relative(repoRoot(), reviewPath(slug, issueId, attempt)));
+  issue.lastReviewPath = normalizedReviewPath;
+  issue.managerReviews.push({
+    attempt,
+    result,
+    summary,
+    findingsPath,
+    reviewPath: normalizedReviewPath,
+    commitSha,
+    recordedAt: utcNow()
+  });
+
+  if (result === "accept") {
+    issue.status = "manager-accepted";
+    issue.commitSha = commitSha;
+  } else if (result === "rework") {
+    issue.status = "needs-rework";
+    issue.lastFindingsPath = findingsPath;
+  } else {
+    throw new Error(`unsupported review result: ${result}`);
+  }
+
+  state.currentIssueId = issueId;
+  saveState(state);
+  appendEvent(slug, { type: "record_review", issue: issueId, result, findingsPath, reviewPath: normalizedReviewPath, summary, commitSha });
+  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+}
+
+function commandMarkIssueDone(args) {
+  ensureStateDirs();
+  const slug = requireOption(args, "--slug");
+  const issueId = requireOption(args, "--issue");
+  const commitSha = getOption(args, "--commit-sha", null);
+  const state = requireState(slug);
+  const issue = ensureIssueBound(state, issueId);
+  if (issue.status !== "manager-accepted") {
+    throw new Error(`cannot mark ${issueId} done in status ${issue.status}; manager acceptance required`);
+  }
+  issue.status = "done";
+  issue.commitSha = commitSha ?? issue.commitSha;
+  issue.completedAt = utcNow();
+  state.currentIssueId = null;
+  if (allDone(state)) {
+    state.status = "done";
+  }
+  saveState(state);
+  appendEvent(slug, { type: "mark_issue_done", issue: issueId, commitSha: issue.commitSha });
+  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const command = args[0];
 
   switch (command) {
-    case "init":
-      commandInit(args);
+    case "init-from-manifest":
+      commandInitFromManifest(args);
+      return;
+    case "init-from-linear":
+      commandInitFromLinear(args);
       return;
     case "status":
       commandStatus(args);
@@ -936,23 +876,23 @@ function main() {
     case "resume":
       commandResume(args);
       return;
-    case "set-runner":
-      commandSetRunner(args);
-      return;
     case "abort":
       commandAbort(args);
       return;
     case "graph":
       if (args[1] !== "next") {
-        throw new Error(`unknown initiative supervisor graph command: ${String(args[1] ?? "")}`);
+        throw new Error(`unknown supervisor graph command: ${String(args[1] ?? "")}`);
       }
       commandGraphNext(args.slice(1));
       return;
-    case "prepare-worker-prompt":
-      commandPrepareWorkerPrompt(args);
+    case "write-worker-context":
+      commandWriteWorkerContext(args);
       return;
     case "record-worker":
       commandRecordWorker(args);
+      return;
+    case "write-findings-stub":
+      commandWriteFindingsStub(args);
       return;
     case "record-review":
       commandRecordReview(args);
@@ -960,11 +900,8 @@ function main() {
     case "mark-issue-done":
       commandMarkIssueDone(args);
       return;
-    case "write-findings-stub":
-      commandWriteFindingsStub(args);
-      return;
     default:
-      throw new Error(`unknown initiative supervisor command: ${String(command ?? "")}`);
+      throw new Error(`unknown supervisor command: ${String(command ?? "")}`);
   }
 }
 

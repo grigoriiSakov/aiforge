@@ -1,0 +1,132 @@
+---
+name: supervisor
+description: Chat-first durable manager for multi-issue execution. Use for `/supervisor ...` commands that should coordinate workers, tracker state, and review loops without turning into a coding agent in the main checkout.
+---
+
+# Supervisor
+
+`supervisor` is the chat-facing control plane for long-running multi-issue execution.
+
+It is **not** the implementation worker.
+
+It owns:
+
+- syncing project/issues from tracker context into local runtime state
+- choosing the next issue
+- launching worker attempts
+- launching fresh manager-review turns
+- recording accept/rework/failure decisions
+- pausing/resuming/aborting the durable run
+
+It must **not** quietly drift into editing product code in the manager checkout.
+
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+  - `.ai/skills/orchestrator/SKILL.md`
+  - `.ai/skills/initiative/SKILL.md`
+- Treat those files as hard constraints for this run.
+{% if linear_enabled -%}
+- Before tracker actions, also read:
+  - `.ai/skills/tracker/SKILL.md`
+  - `.ai/rules/linear-mcp.mdc`
+{% endif -%}
+
+## Runtime source of truth
+
+- `.ai/runtime/supervisor/runs/<slug>.json`
+- `.ai/runtime/supervisor/events/<slug>.jsonl`
+- `.ai/runtime/supervisor/current/<slug>.md`
+- `.ai/runtime/supervisor/context/<slug>/manager.md`
+- `.ai/runtime/supervisor/context/<slug>/worker-<issue>-attempt-<n>.md`
+- `.ai/runtime/supervisor/reviews/<slug>/<issue>-attempt-<n>.md`
+- `.ai/runtime/supervisor/findings/<slug>/<issue>-attempt-<n>.md`
+
+Do not rely on chat memory for resume.
+
+## Required operating model
+
+1. The user interacts with `supervisor` in chat, not through manual `next` loops.
+2. The durable loop is owned by `.ai/runtime/supervisor-daemon.mjs`.
+3. Before each fresh manager turn, rehydrate from:
+   - `.ai/runtime/supervisor/current/<slug>.md`
+   - `.ai/runtime/supervisor/runs/<slug>.json`
+   - `node .ai/runtime/supervisor-state.mjs graph next --slug <slug>`
+4. The manager must not edit product code in the main checkout.
+5. Workers handle implementation through the orchestrator flow in isolated worktrees.
+6. Manager review is explicit and persisted; do not accept worker claims on trust.
+
+## User-facing commands
+
+The normal chat UX is:
+
+- `/supervisor run <slug>`
+- `/supervisor status <slug>`
+- `/supervisor pause <slug>`
+- `/supervisor resume <slug>`
+- `/supervisor abort <slug>`
+
+## `/supervisor run <slug>` protocol
+
+1. Rehydrate rules and current context.
+2. Resolve initiative/project context:
+{% if linear_enabled -%}
+   - prefer tracker-backed project/issues via `.ai/skills/tracker/SKILL.md`
+   - if a local `.ai/context/initiatives/<slug>/issues-manifest.json` already exists, it may be reused as the initial source snapshot
+{% else -%}
+   - use the local initiative bundle under `.ai/context/initiatives/<slug>/` when present
+{% endif -%}
+3. Write or refresh a normalized local snapshot through:
+
+```bash
+node .ai/runtime/supervisor-linear-sync.mjs import --slug <slug> [--source /abs/path/to/snapshot.json | --manifest /abs/path/to/issues-manifest.json]
+```
+
+4. Initialize state if the run does not exist yet:
+
+```bash
+node .ai/runtime/supervisor-state.mjs init-from-linear --slug <slug>
+```
+
+5. Start or continue the durable loop:
+
+```bash
+node .ai/runtime/supervisor-daemon.mjs run --slug <slug>
+```
+
+6. Report concise progress back to the user:
+   - active status
+   - current issue
+   - next machine action
+   - blockers if any
+
+## Review discipline
+
+When the daemon reaches manager review:
+
+- inspect `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+- inspect changed paths / worktree evidence
+- rerun canonical checks when needed
+- record either:
+  - `accept`
+  - `rework`
+
+No silent acceptance.
+
+## Stop conditions
+
+- no issue source can be resolved from tracker or local initiative bundle
+- manager starts editing product code directly
+- worker result is not verifiable
+- review result cannot be persisted
+- daemon hits explicit pause/abort/failed state
+
+## Outcome
+
+The user gets a chat-first `supervisor` flow while durable state, launches, and review transitions stay on disk under `.ai/runtime/supervisor/**`.

@@ -75,7 +75,7 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
 8. **Initiative spec + execution map on the project (no meta “planning issue”)** — do **not** create a separate tracker issue whose only job is to hold a plan for spawning other issues. Put initiative-level material on the **project** instead:
    - **Technical spec** (scope, contracts/API/data, migrations expectation, test plan with `{{ task_command }} {{ task_test_name }}` / `{{ task_command }} {{ task_verify_name }}` where relevant, dependencies, out of scope, DoD, link to the PRD): project description and/or a **second project attachment** (e.g. `technical-spec.md`), in `{{ workflow_language }}` unless the user overrides.
    - **Execution map** (sequence, milestones, dependency map, cross-surface blockers — same spirit as `.ai/reference/plan-template.md` at initiative level): same attachment, a dedicated project doc (`execution-map.md`), or a clearly marked section inside the PRD (e.g. rollout + epic breakdown) that you treat as canonical for ordering work.
-   - **Machine-readable initiative manifest** stored locally at `.ai/context/initiatives/<slug>/issues-manifest.json`: this is the durable input for `initiative-supervisor`. It must include `slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifact paths, and the ordered issue list with `id`, `title`, `order`, `blockedBy`, and any extra per-issue metadata you need later.
+   - **Machine-readable initiative manifest** stored locally at `.ai/context/initiatives/<slug>/issues-manifest.json`: this is a durable local source artifact for `supervisor`. It must include `slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifact paths, and the ordered issue list with `id`, `title`, `order`, `blockedBy`, and any extra per-issue metadata you need later.
    - Minimal shape:
      ```json
      {
@@ -112,7 +112,7 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
    - `.ai/context/initiatives/<slug>/technical-spec.md` — initiative technical spec + pointer to `prd.md` (paste into project description, project doc, or first real work issue only if the team insists — not as a dedicated “create issues from this” ticket)
    - `.ai/context/initiatives/<slug>/execution-map.md` — optional: sequence, dependencies, blockers (`.ai/reference/plan-template.md` style markers where useful); omit if fully covered inside `prd.md`
    - `.ai/context/initiatives/<slug>/issues-breakdown.md` — ordered **work** issues with dependencies and DoD each (ready to paste as real issues)
-   - `.ai/context/initiatives/<slug>/issues-manifest.json` — the machine-readable form of the same ordering for `initiative-supervisor` (`slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifacts, ordered issues with `blockedBy`)
+   - `.ai/context/initiatives/<slug>/issues-manifest.json` — the machine-readable form of the same ordering for `supervisor` (`slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifacts, ordered issues with `blockedBy`)
 
    End with short instructions for importing or copying into the team’s tracker (`{{ workflow_tracker }}` in `ai.config.yaml` is informational here).
 {% endif %}
@@ -138,7 +138,7 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
 ## Outcome
 
 {% if linear_enabled %}
-- Linear project in scope, PRD + initiative spec/execution map at **project** level (no meta planning-only issue), ordered atomic work issues with explicit dependencies, and a local `.ai/context/initiatives/<slug>/issues-manifest.json` ready for `initiative-supervisor`.
+- Linear project in scope, PRD + initiative spec/execution map at **project** level (no meta planning-only issue), ordered atomic work issues with explicit dependencies, and a local `.ai/context/initiatives/<slug>/issues-manifest.json` ready for `supervisor`.
 {% else %}
-- Local bundle under `.ai/context/initiatives/<slug>/` ready for manual import into the team tracker (`{{ workflow_tracker }}`), including `issues-manifest.json` for `initiative-supervisor`.
+- Local bundle under `.ai/context/initiatives/<slug>/` ready for manual import into the team tracker (`{{ workflow_tracker }}`), including `issues-manifest.json` for `supervisor`.
 {% endif %}

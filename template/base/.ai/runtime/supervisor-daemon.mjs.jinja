@@ -1,0 +1,299 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { spawnSync } from "node:child_process";
+
+function repoRoot() {
+  return process.cwd();
+}
+
+function supervisorRoot() {
+  return path.join(repoRoot(), ".ai", "runtime", "supervisor");
+}
+
+function leasesDir() {
+  return path.join(supervisorRoot(), "leases");
+}
+
+function ensureDir(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
+function writeJson(filePath, payload) {
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function getOption(args, name, fallback = null) {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return fallback;
+  }
+  return args[index + 1] ?? fallback;
+}
+
+function requireOption(args, name) {
+  const value = getOption(args, name, null);
+  if (!value) {
+    throw new Error(`missing required option: ${name}`);
+  }
+  return value;
+}
+
+function invokeRuntime(relativePath, args) {
+  const targetPath = path.join(repoRoot(), relativePath);
+  const result = spawnSync("node", [targetPath, ...args], {
+    cwd: repoRoot(),
+    encoding: "utf8",
+    env: process.env
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `${relativePath} failed: ${args.join(" ")}`);
+  }
+  const stdout = result.stdout.trim();
+  return stdout ? JSON.parse(stdout) : {};
+}
+
+function detectLauncher(preferred) {
+  if (preferred && preferred !== "auto") {
+    return preferred;
+  }
+  const explicit = process.env.AIFORGE_SUPERVISOR_LAUNCHER?.trim().toLowerCase();
+  if (explicit) {
+    return explicit;
+  }
+  if (process.env.CLAUDECODE || process.env.CLAUDE_CODE) {
+    return "claude";
+  }
+  if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_AGENT) {
+    return "cursor";
+  }
+  if (process.env.CODEX_SANDBOX || process.env.CODEX_ENV) {
+    return "codex";
+  }
+  return "headless";
+}
+
+function leasePath(slug) {
+  return path.join(leasesDir(), `${slug}.json`);
+}
+
+function touchLease(slug, launcher, phase) {
+  writeJson(leasePath(slug), {
+    slug,
+    launcher,
+    phase,
+    pid: process.pid,
+    heartbeatAt: new Date().toISOString()
+  });
+}
+
+function launcherScriptPath(launcher) {
+  return path.join(".ai", "runtime", "supervisor-launchers", `${launcher}.mjs`);
+}
+
+function launchRole(launcher, params) {
+  return invokeRuntime(launcherScriptPath(launcher), [
+    "launch",
+    "--role",
+    params.role,
+    "--slug",
+    params.slug,
+    "--issue",
+    params.issue,
+    "--context-file",
+    params.contextFile
+  ]);
+}
+
+function normalizeContextPath(contextPayload) {
+  return path.isAbsolute(contextPayload.contextPath)
+    ? contextPayload.contextPath
+    : path.join(repoRoot(), String(contextPayload.contextPath));
+}
+
+function runLoop(args) {
+  ensureDir(leasesDir());
+
+  const slug = requireOption(args, "--slug");
+  const launcher = detectLauncher(getOption(args, "--launcher", "auto"));
+  const tickLimit = Number.parseInt(getOption(args, "--tick-limit", "200"), 10);
+  const pollMs = Number.parseInt(getOption(args, "--poll-ms", "200"), 10);
+  const history = [];
+
+  for (let tick = 1; tick <= tickLimit; tick += 1) {
+    const next = invokeRuntime(".ai/runtime/supervisor-state.mjs", ["graph", "next", "--slug", slug]);
+    history.push({ tick, action: next.action, issue: next.issue ?? null });
+    touchLease(slug, launcher, String(next.action ?? "unknown"));
+
+    switch (next.action) {
+      case "wait_resume":
+      case "stop":
+      case "flow_complete":
+      case "wait_dependencies":
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              slug,
+              launcher,
+              status: next.status ?? next.action,
+              next,
+              ticks: history
+            },
+            null,
+            2
+          )}\n`
+        );
+        return;
+      case "escalate_max_attempts":
+        invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+          "pause",
+          "--slug",
+          slug,
+          "--reason",
+          `max attempts exceeded for ${String(next.issue ?? "unknown")}`
+        ]);
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              slug,
+              launcher,
+              status: "paused",
+              reason: `max attempts exceeded for ${String(next.issue ?? "unknown")}`,
+              next,
+              ticks: history
+            },
+            null,
+            2
+          )}\n`
+        );
+        return;
+      case "launch_worker": {
+        const contextPayload = invokeRuntime(".ai/runtime/supervisor-context.mjs", [
+          "render",
+          "--slug",
+          slug,
+          "--role",
+          "worker"
+        ]);
+        const issueId = String(contextPayload.issue ?? next.issue ?? "");
+        const launchResult = launchRole(launcher, {
+          role: "worker",
+          slug,
+          issue: issueId,
+          contextFile: normalizeContextPath(contextPayload)
+        });
+        invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+          "record-worker",
+          "--slug",
+          slug,
+          "--issue",
+          issueId,
+          "--status",
+          "launched",
+          "--run-id",
+          String(launchResult.runId ?? `${issueId}-${Date.now()}`)
+        ]);
+        invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+          "record-worker",
+          "--slug",
+          slug,
+          "--issue",
+          issueId,
+          "--status",
+          String(launchResult.status ?? "completed"),
+          "--run-id",
+          String(launchResult.runId ?? `${issueId}-${Date.now()}`),
+          ...(launchResult.worktreePath ? ["--worktree-path", String(launchResult.worktreePath)] : []),
+          ...(launchResult.summary ? ["--summary", String(launchResult.summary)] : []),
+          ...(launchResult.commitSha ? ["--commit-sha", String(launchResult.commitSha)] : [])
+        ]);
+        continue;
+      }
+      case "wait_worker":
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pollMs);
+        continue;
+      case "run_manager_review": {
+        const contextPayload = invokeRuntime(".ai/runtime/supervisor-context.mjs", [
+          "render",
+          "--slug",
+          slug,
+          "--role",
+          "manager"
+        ]);
+        const issueId = String(contextPayload.issue ?? next.issue ?? "");
+        const reviewResult = launchRole(launcher, {
+          role: "manager-review",
+          slug,
+          issue: issueId,
+          contextFile: normalizeContextPath(contextPayload)
+        });
+        if (String(reviewResult.result ?? "accept") === "rework" && !reviewResult.findingsPath) {
+          const stub = invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+            "write-findings-stub",
+            "--slug",
+            slug,
+            "--issue",
+            issueId
+          ]);
+          reviewResult.findingsPath = stub.findingsPath;
+        }
+        invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+          "record-review",
+          "--slug",
+          slug,
+          "--issue",
+          issueId,
+          "--result",
+          String(reviewResult.result ?? "accept"),
+          ...(reviewResult.reviewPath ? ["--review-path", String(reviewResult.reviewPath)] : []),
+          ...(reviewResult.findingsPath ? ["--findings-path", String(reviewResult.findingsPath)] : []),
+          ...(reviewResult.summary ? ["--summary", String(reviewResult.summary)] : []),
+          ...(reviewResult.commitSha ? ["--commit-sha", String(reviewResult.commitSha)] : [])
+        ]);
+        continue;
+      }
+      case "finalize_issue":
+        invokeRuntime(".ai/runtime/supervisor-state.mjs", [
+          "mark-issue-done",
+          "--slug",
+          slug,
+          "--issue",
+          String(next.issue ?? ""),
+          ...(next.commitSha ? ["--commit-sha", String(next.commitSha)] : [])
+        ]);
+        continue;
+      default:
+        throw new Error(`unsupported supervisor daemon action: ${String(next.action ?? "")}`);
+    }
+  }
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        slug,
+        launcher,
+        status: "tick_limit_reached",
+        ticks: history
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+  switch (command) {
+    case "run":
+      runLoop(args);
+      return;
+    default:
+      throw new Error(`unknown supervisor-daemon command: ${String(command ?? "")}`);
+  }
+}
+
+main();

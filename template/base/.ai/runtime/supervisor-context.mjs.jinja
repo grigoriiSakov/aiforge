@@ -1,0 +1,206 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+function repoRoot() {
+  return process.cwd();
+}
+
+function supervisorRoot() {
+  return path.join(repoRoot(), ".ai", "runtime", "supervisor");
+}
+
+function runsDir() {
+  return path.join(supervisorRoot(), "runs");
+}
+
+function contextDir() {
+  return path.join(supervisorRoot(), "context");
+}
+
+function ensureDir(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`missing file: ${filePath}`);
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "")
+    .trim();
+}
+
+function getOption(args, name, fallback = null) {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return fallback;
+  }
+  return args[index + 1] ?? fallback;
+}
+
+function requireOption(args, name) {
+  const value = getOption(args, name, null);
+  if (!value) {
+    throw new Error(`missing required option: ${name}`);
+  }
+  return value;
+}
+
+function runStateCommand(args) {
+  const statePath = path.join(repoRoot(), ".ai", "runtime", "supervisor-state.mjs");
+  const result = spawnSync("node", [statePath, ...args], {
+    cwd: repoRoot(),
+    encoding: "utf8"
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `supervisor-state failed: ${args.join(" ")}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+function loadState(slug) {
+  return readJson(path.join(runsDir(), `${slug}.json`));
+}
+
+function managerContextPath(slug) {
+  return path.join(contextDir(), slug, "manager.md");
+}
+
+function workerContextPath(slug, issueId, attempt) {
+  return path.join(contextDir(), slug, `worker-${issueId}-attempt-${attempt}.md`);
+}
+
+function renderManagerContext(slug, state, next) {
+  const issueId = String(next.issue ?? state.currentIssueId ?? "none");
+  const issue = issueId !== "none" ? state.issues?.[issueId] ?? null : null;
+  const lines = [
+    `# Supervisor Manager Context: ${slug}`,
+    "",
+    `- Status: ${state.status}`,
+    `- Current issue: ${issueId}`,
+    `- Next action: ${next.action}`,
+    `- Base branch: ${state.baseBranch}`,
+    `- Manager branch: ${state.managerBranch}`,
+    `- Source path: ${state.sourcePath ?? "unknown"}`,
+    "",
+    "## Hard rules",
+    "",
+    "- You are the manager, not the implementation worker.",
+    "- Do not edit product code in the manager checkout.",
+    "- Rehydrate from runtime state, not chat memory.",
+    "- Every transition must be persisted to `.ai/runtime/supervisor/runs/<slug>.json` via supervisor-state.",
+    "",
+    "## Allowed surfaces",
+    "",
+    "- `.ai/runtime/supervisor/**`",
+    "- `.ai/context/current.md`",
+    "- `.ai/runtime/orchestrator/**`",
+    "",
+    "## Issue summary",
+    issue
+      ? [
+          "",
+          `- ${issue.id} — ${issue.title}`,
+          `- Status: ${issue.status}`,
+          `- Attempts: ${String(issue.attempts)}`,
+          `- Last worker context: ${issue.lastWorkerContextPath ?? "none"}`,
+          `- Last findings: ${issue.lastFindingsPath ?? "none"}`,
+          `- Last review: ${issue.lastReviewPath ?? "none"}`
+        ].join("\n")
+      : "- No active issue."
+  ];
+
+  const targetPath = managerContextPath(slug);
+  ensureDir(path.dirname(targetPath));
+  fs.writeFileSync(targetPath, `${lines.join("\n")}\n`, "utf8");
+  return targetPath;
+}
+
+function renderWorkerContext(slug, state, next) {
+  if (!next.issue) {
+    throw new Error("worker context requires active issue");
+  }
+  const issue = state.issues?.[next.issue];
+  if (!issue) {
+    throw new Error(`unknown supervisor issue: ${next.issue}`);
+  }
+  const attempt = Number(next.attempt ?? Math.max(1, Number(issue.attempts ?? 0) + 1));
+  const targetPath = workerContextPath(slug, issue.id, attempt);
+  const lines = [
+    `# Supervisor Worker Brief: ${issue.id}`,
+    "",
+    `- Supervisor slug: ${slug}`,
+    `- Issue: ${issue.id}`,
+    `- Title: ${issue.title}`,
+    `- Attempt: ${String(attempt)}`,
+    `- Base branch: ${state.baseBranch}`,
+    `- Manager branch: ${state.managerBranch}`,
+    `- Orchestrator run path: .ai/runtime/orchestrator/runs/${issue.id}.json`,
+    `- Plan path: {{ plan_progress_runtime_root }}/${issue.id}/plan.md`,
+    `- Progress path: {{ plan_progress_runtime_root }}/${issue.id}/progress.md`,
+    issue.lastFindingsPath ? `- Rework findings: ${issue.lastFindingsPath}` : "- Rework findings: none",
+    "",
+    "## Required behavior",
+    "",
+    "- Handle exactly this issue.",
+    "- Use the orchestrator flow in an isolated worktree.",
+    "- Return only structured completion metadata to the launcher host.",
+    "- Do not mutate supervisor state directly unless the runtime contract explicitly requires it.",
+    "",
+    "## Structured return",
+    "",
+    "- Success: `{ \"status\": \"completed\", \"summary\": \"...\", \"worktreePath\": \"/abs/path\", \"commitSha\": \"optional\" }`",
+    "- Failure: `{ \"status\": \"failed\", \"summary\": \"...\" }`"
+  ];
+  ensureDir(path.dirname(targetPath));
+  fs.writeFileSync(targetPath, `${lines.join("\n")}\n`, "utf8");
+  return targetPath;
+}
+
+function render(args) {
+  const slug = requireOption(args, "--slug");
+  const role = getOption(args, "--role", "manager");
+  const state = loadState(slug);
+  const next = runStateCommand(["graph", "next", "--slug", slug]);
+
+  const targetPath =
+    role === "worker" ? renderWorkerContext(slug, state, next) : renderManagerContext(slug, state, next);
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        slug,
+        role,
+        contextPath: normalizePath(path.relative(repoRoot(), targetPath)),
+        nextAction: next.action,
+        issue: next.issue ?? state.currentIssueId ?? null
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  switch (command) {
+    case "render":
+      render(args);
+      return;
+    default:
+      throw new Error(`unknown supervisor-context command: ${String(command ?? "")}`);
+  }
+}
+
+main();

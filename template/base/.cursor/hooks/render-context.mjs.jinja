@@ -11,7 +11,7 @@ const taskStatePath = path.join(projectDir, ".ai", "runtime", "task-state.json")
 const reviewStatePath = path.join(projectDir, ".ai", "runtime", "review-verdict.json");
 const orchestratorRegistryPath = path.join(projectDir, ".ai", "runtime", "orchestrator", "registry.json");
 const orchestratorRunsDir = path.join(projectDir, ".ai", "runtime", "orchestrator", "runs");
-const supervisorRunsDir = path.join(projectDir, ".ai", "runtime", "initiative-supervisor", "runs");
+const supervisorRunsDir = path.join(projectDir, ".ai", "runtime", "supervisor", "runs");
 const contextDir = path.join(projectDir, ".ai", "context");
 const currentPath = path.join(contextDir, "current.md");
 
@@ -160,14 +160,14 @@ const lines = [
   `- Review task: ${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.review ?? "review"}`,
   `- Review verdict: ${reviewState?.status ?? "missing"}`,
   "",
-  "## Initiative Supervisor",
+  "## Supervisor",
   supervisorRun
     ? `- Slug: ${supervisorRun.slug}
 - Status: ${supervisorRun.status}
 - Manager branch: ${supervisorRun.managerBranch ?? "missing"}
 - Current issue: ${supervisorRun.currentIssueId ?? "none"}
 - Rule: manager must not edit product code in the main checkout; use isolated worker runs.`
-    : "- No active initiative supervisor run.",
+    : "- No active supervisor run.",
   "",
   "## Orchestrator",
   orchestratorRun

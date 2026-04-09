@@ -8,23 +8,22 @@ import { runAdoptCommand } from "../commands/adopt.js";
 import { runDetectCommand } from "../commands/detect.js";
 import { runDoctorCommand } from "../commands/doctor.js";
 import { runInitCommand } from "../commands/init.js";
-import {
-  runInitiativeSupervisorAbortCommand,
-  runInitiativeSupervisorInitCommand,
-  runInitiativeSupervisorInteractiveInitCommand,
-  runInitiativeSupervisorNextCommand,
-  runInitiativeSupervisorPauseCommand,
-  runInitiativeSupervisorResumeCommand,
-  runInitiativeSupervisorSetRunnerCommand,
-  runInitiativeSupervisorStartCommand,
-  runInitiativeSupervisorStatusCommand
-} from "../commands/initiative-supervisor.js";
 import { runLinearInitCommand } from "../commands/linear-init.js";
 import { runLinearScopeSetCommand } from "../commands/linear-scope-set.js";
 import { runLlmsBuildCommand } from "../commands/llms-build.js";
 import { runManifestoInitCommand } from "../commands/manifesto-init.js";
 import { runMcpScaffoldCommand } from "../commands/mcp-scaffold.js";
 import { runProjectStubCommand } from "../commands/project-stub.js";
+import {
+  runSupervisorAbortCommand,
+  runSupervisorDaemonCommand,
+  runSupervisorInitFromSourceCommand,
+  runSupervisorNextCommand,
+  runSupervisorPauseCommand,
+  runSupervisorResumeCommand,
+  runSupervisorStatusCommand,
+  runSupervisorSyncImportCommand
+} from "../commands/supervisor.js";
 import { runSyncCommand } from "../commands/sync.js";
 import { runUpdateCommand } from "../commands/update.js";
 import { printResult } from "../core/output.js";
@@ -164,141 +163,130 @@ async function main(): Promise<void> {
       process.exit(result.code);
     });
 
-  const initiativeSupervisor = program.command("initiative-supervisor").description("Initiative supervisor runtime");
-  initiativeSupervisor
+  const supervisor = program.command("supervisor").description("Supervisor control plane");
+  supervisor
+    .command("import")
+    .requiredOption("--slug <slug>", "Supervisor slug")
+    .option("--source <path>", "Tracker/project snapshot path")
+    .option("--manifest <path>", "Existing local issues-manifest path")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; source?: string; manifest?: string; repo: string; json: boolean }) => {
+      const result = runSupervisorSyncImportCommand(options.repo, {
+        slug: options.slug,
+        ...(options.source ? { source: options.source } : {}),
+        ...(options.manifest ? { manifest: options.manifest } : {})
+      });
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  supervisor
     .command("init")
-    .option("--slug <slug>", "Initiative slug")
-    .option("--manifest <path>", "Path to issues-manifest.json")
-    .option("--project <name>", "Tracker project name")
-    .option("--project-id <id>", "Tracker project id")
-    .option("--tracker <name>", "Tracker type override for project metadata")
+    .requiredOption("--slug <slug>", "Supervisor slug")
+    .option("--source <path>", "Normalized supervisor source snapshot")
+    .option("--manifest <path>", "Existing local issues-manifest path")
     .option("--team <name>", "Include only issues for this team (repeatable)", collectOption, [])
     .option("--issue <id>", "Include this explicit issue id (repeatable)", collectOption, [])
-    .option("--base-branch <name>", "Base branch for the initiative manager branch")
+    .option("--base-branch <name>", "Base branch for the manager branch")
     .option("--manager-branch <name>", "Manager branch name")
-    .option("--runner-provider <provider>", "Worker runner provider: auto|manual|claude|codex|cursor")
-    .option(
-      "--runner-command <template>",
-      "Shell template used to launch a worker. Placeholders: {{repo_root}}, {{slug}}, {{issue_id}}, {{prompt_file}}, {{provider}}"
-    )
     .option("--max-attempts <count>", "Max worker attempts per issue")
-    .option("--interactive", "Ask questions and bootstrap missing initiative manifest", false)
-    .option("--start", "Start supervisor immediately after init", false)
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action(
-      async (options: {
-        slug?: string;
+      (options: {
+        slug: string;
+        source?: string;
         manifest?: string;
-        project?: string;
-        projectId?: string;
-        tracker?: string;
         team: string[];
         issue: string[];
         baseBranch?: string;
         managerBranch?: string;
-        runnerProvider?: string;
-        runnerCommand?: string;
         maxAttempts?: string;
-        interactive: boolean;
-        start: boolean;
         repo: string;
         json: boolean;
       }) => {
         const parsedMaxAttempts =
           options.maxAttempts !== undefined ? Number.parseInt(options.maxAttempts, 10) : undefined;
         const hasMaxAttempts = typeof parsedMaxAttempts === "number" && Number.isFinite(parsedMaxAttempts);
-        const sharedOptions = {
-          ...(options.slug ? { slug: options.slug } : {}),
+        const result = runSupervisorInitFromSourceCommand(options.repo, {
+          slug: options.slug,
+          ...(options.source ? { source: options.source } : {}),
           ...(options.manifest ? { manifest: options.manifest } : {}),
-          ...(options.project ? { project: options.project } : {}),
-          ...(options.projectId ? { projectId: options.projectId } : {}),
-          ...(options.tracker ? { tracker: options.tracker } : {}),
           ...(options.team.length > 0 ? { teams: options.team } : {}),
           ...(options.issue.length > 0 ? { issueIds: options.issue } : {}),
           ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
           ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
-          ...(options.runnerProvider ? { runnerProvider: options.runnerProvider } : {}),
-          ...(options.runnerCommand ? { runnerCommand: options.runnerCommand } : {}),
           ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
-        };
-        const result = options.interactive
-          ? await runInitiativeSupervisorInteractiveInitCommand(options.repo, {
-              ...sharedOptions,
-              start: options.start
-            })
-          : (() => {
-              if (!options.slug) {
-                throw new Error("initiative-supervisor init requires --slug unless --interactive is used");
-              }
-              const initResult = runInitiativeSupervisorInitCommand(options.repo, {
-                slug: options.slug,
-                ...sharedOptions
-              });
-              if (!options.start) {
-                return initResult;
-              }
-              const startResult = runInitiativeSupervisorStartCommand(options.repo, {
-                slug: options.slug
-              });
-              return {
-                ok: true,
-                code: 0,
-                message: `Initiative supervisor initialized and started for ${options.slug}`,
-                details: {
-                  init: initResult.details,
-                  start: startResult.details
-                }
-              };
-            })();
+        });
         printResult(result, options.json);
         process.exit(result.code);
       }
     );
 
-  initiativeSupervisor
-    .command("start")
-    .requiredOption("--slug <slug>", "Initiative slug")
+  supervisor
+    .command("daemon")
+    .requiredOption("--slug <slug>", "Supervisor slug")
+    .option("--launcher <name>", "Launcher adapter name")
+    .option("--tick-limit <count>", "Maximum daemon ticks before exit")
+    .option("--poll-ms <ms>", "Polling delay for idle/wait states")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorStartCommand(options.repo, {
-        slug: options.slug
-      });
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
+    .action(
+      (options: {
+        slug: string;
+        launcher?: string;
+        tickLimit?: string;
+        pollMs?: string;
+        repo: string;
+        json: boolean;
+      }) => {
+        const parsedTickLimit =
+          options.tickLimit !== undefined ? Number.parseInt(options.tickLimit, 10) : undefined;
+        const parsedPollMs = options.pollMs !== undefined ? Number.parseInt(options.pollMs, 10) : undefined;
+        const result = runSupervisorDaemonCommand(options.repo, {
+          slug: options.slug,
+          ...(options.launcher ? { launcher: options.launcher } : {}),
+          ...(typeof parsedTickLimit === "number" && Number.isFinite(parsedTickLimit)
+            ? { tickLimit: parsedTickLimit }
+            : {}),
+          ...(typeof parsedPollMs === "number" && Number.isFinite(parsedPollMs) ? { pollMs: parsedPollMs } : {})
+        });
+        printResult(result, options.json);
+        process.exit(result.code);
+      }
+    );
 
-  initiativeSupervisor
+  supervisor
     .command("status")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .requiredOption("--slug <slug>", "Supervisor slug")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorStatusCommand(options.repo, options.slug);
+      const result = runSupervisorStatusCommand(options.repo, options.slug);
       printResult(result, options.json);
       process.exit(result.code);
     });
 
-  initiativeSupervisor
+  supervisor
     .command("next")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .requiredOption("--slug <slug>", "Supervisor slug")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorNextCommand(options.repo, options.slug);
+      const result = runSupervisorNextCommand(options.repo, options.slug);
       printResult(result, options.json);
       process.exit(result.code);
     });
 
-  initiativeSupervisor
+  supervisor
     .command("pause")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .requiredOption("--slug <slug>", "Supervisor slug")
     .option("--reason <text>", "Pause reason")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorPauseCommand(options.repo, {
+      const result = runSupervisorPauseCommand(options.repo, {
         slug: options.slug,
         ...(options.reason ? { reason: options.reason } : {})
       });
@@ -306,56 +294,25 @@ async function main(): Promise<void> {
       process.exit(result.code);
     });
 
-  initiativeSupervisor
+  supervisor
     .command("resume")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .requiredOption("--slug <slug>", "Supervisor slug")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorResumeCommand(options.repo, options.slug);
+      const result = runSupervisorResumeCommand(options.repo, options.slug);
       printResult(result, options.json);
       process.exit(result.code);
     });
 
-  initiativeSupervisor
-    .command("set-runner")
-    .requiredOption("--slug <slug>", "Initiative slug")
-    .option("--runner-provider <provider>", "Worker runner provider: auto|manual|claude|codex|cursor")
-    .option(
-      "--runner-command <template>",
-      "Shell template used to launch a worker. Placeholders: {{repo_root}}, {{slug}}, {{issue_id}}, {{prompt_file}}, {{provider}}"
-    )
-    .option("--clear-runner-command", "Clear stored runner command and fall back to env/provider resolution", false)
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action(
-      (options: {
-        slug: string;
-        runnerProvider?: string;
-        runnerCommand?: string;
-        clearRunnerCommand: boolean;
-        repo: string;
-        json: boolean;
-      }) => {
-        const result = runInitiativeSupervisorSetRunnerCommand(options.repo, {
-          slug: options.slug,
-          ...(options.runnerProvider ? { runnerProvider: options.runnerProvider } : {}),
-          ...(options.runnerCommand ? { runnerCommand: options.runnerCommand } : {}),
-          ...(options.clearRunnerCommand ? { clearRunnerCommand: true } : {})
-        });
-        printResult(result, options.json);
-        process.exit(result.code);
-      }
-    );
-
-  initiativeSupervisor
+  supervisor
     .command("abort")
-    .requiredOption("--slug <slug>", "Initiative slug")
+    .requiredOption("--slug <slug>", "Supervisor slug")
     .option("--reason <text>", "Abort reason")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--json", "Print JSON output", false)
     .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
-      const result = runInitiativeSupervisorAbortCommand(options.repo, {
+      const result = runSupervisorAbortCommand(options.repo, {
         slug: options.slug,
         ...(options.reason ? { reason: options.reason } : {})
       });

@@ -94,7 +94,7 @@ function getCurrentOrchestratorRun() {
 }
 
 function getCurrentSupervisorRun() {
-  const runsDir = path.join(process.cwd(), ".ai", "runtime", "initiative-supervisor", "runs");
+  const runsDir = path.join(process.cwd(), ".ai", "runtime", "supervisor", "runs");
   if (!fs.existsSync(runsDir)) {
     return null;
   }
@@ -188,7 +188,7 @@ process.stdin.on("end", () => {
         {
           continue: true,
           systemMessage:
-            `Initiative supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
+            `Supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
             `Do not stop after this command. Next action: ${nextActionForSupervisor(activeSupervisor)}. ` +
             "Manager mode must keep state on disk, launch isolated workers, and accept/reject work explicitly."
         },

@@ -5,3 +5,4 @@ dist/
 .vitest/
 coverage/
 tmp/
+.cursor/

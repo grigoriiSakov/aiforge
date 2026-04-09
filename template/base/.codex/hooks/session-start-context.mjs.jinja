@@ -48,7 +48,7 @@ function isRunBoundToCurrentContext(run, branchName) {
 }
 
 function getCurrentSupervisorSummary() {
-  const runsRoot = path.join(process.cwd(), ".ai", "runtime", "initiative-supervisor", "runs");
+  const runsRoot = path.join(process.cwd(), ".ai", "runtime", "supervisor", "runs");
   if (!fs.existsSync(runsRoot)) {
     return null;
   }
@@ -133,8 +133,8 @@ const additionalContext = [
   `Tracker: ${manifest.workflow.tracker}`,
   `Canonical verify task: ${manifest.task.command} ${manifest.task.tasks.verify}`,
   getCurrentSupervisorSummary()
-    ? `Active initiative supervisor: ${getCurrentSupervisorSummary()}`
-    : "Active initiative supervisor: none",
+    ? `Active supervisor: ${getCurrentSupervisorSummary()}`
+    : "Active supervisor: none",
   getCurrentOrchestratorSummary()
     ? `Active orchestrator run: ${getCurrentOrchestratorSummary()}`
     : "Active orchestrator run: none"

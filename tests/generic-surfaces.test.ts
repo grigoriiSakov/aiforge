@@ -39,7 +39,7 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/build/SKILL.md.jinja",
       ".ai/skills/review/SKILL.md.jinja",
       ".ai/skills/issue/SKILL.md.jinja",
-      ".ai/skills/initiative-supervisor/SKILL.md.jinja",
+      ".ai/skills/supervisor/SKILL.md.jinja",
       ".ai/skills/check/SKILL.md.jinja",
       ".ai/skills/debug/SKILL.md.jinja",
       ".ai/skills/docs/SKILL.md.jinja",
@@ -47,7 +47,14 @@ describe("generic reusable surfaces", () => {
       ".ai/runtime/task-state.mjs.jinja",
       ".ai/runtime/review-state.mjs.jinja",
       ".ai/runtime/orchestrator-state.mjs.jinja",
-      ".ai/runtime/initiative-supervisor-state.mjs.jinja"
+      ".ai/runtime/supervisor-state.mjs.jinja",
+      ".ai/runtime/supervisor-context.mjs.jinja",
+      ".ai/runtime/supervisor-daemon.mjs.jinja",
+      ".ai/runtime/supervisor-linear-sync.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/headless.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/cursor.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/claude.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/codex.mjs.jinja"
     ];
 
     for (const relativePath of expectedPaths) {
@@ -66,7 +73,7 @@ describe("generic reusable surfaces", () => {
       "docs/SKILL.md.jinja",
       "investigate/SKILL.md.jinja",
       "initiative/SKILL.md.jinja",
-      "initiative-supervisor/SKILL.md.jinja",
+      "supervisor/SKILL.md.jinja",
       "issue/SKILL.md.jinja",
       "orchestrator/SKILL.md.jinja",
       "plan/SKILL.md.jinja",

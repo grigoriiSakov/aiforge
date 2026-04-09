@@ -33,12 +33,12 @@ npx tsx src/cli/index.ts adopt --repo /path/to/existing-repo
 npx tsx src/cli/index.ts sync --repo /path/to/repo
 npx tsx src/cli/index.ts update --repo /path/to/repo
 npx tsx src/cli/index.ts doctor --repo /path/to/repo
-npx tsx src/cli/index.ts initiative-supervisor init --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts initiative-supervisor start --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts initiative-supervisor status --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts initiative-supervisor next --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts initiative-supervisor pause --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts initiative-supervisor resume --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor import --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor init --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor daemon --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor status --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor pause --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts supervisor resume --repo /path/to/repo --slug my-initiative
 npx tsx src/cli/index.ts mcp scaffold --repo /path/to/repo
 npx tsx src/cli/index.ts manifesto init --repo /path/to/repo
 npx tsx src/cli/index.ts llms build --repo /path/to/repo
@@ -166,59 +166,29 @@ aiforge linear scope set \
 - `.ai/linear-scope.json`
 - `.cursor/settings.json`
 
-## Initiative Supervisor
+## Supervisor
 
-Если initiative уже создал PRD / project / issue set, а локально есть
-`.ai/context/initiatives/<slug>/issues-manifest.json`, можно запускать supervisor loop:
+`supervisor` больше не рекламируется как обычный user-facing CLI workflow. Нормальный UX теперь должен жить в чате через skill `/supervisor`, а CLI остается low-level control plane для runtime scripts, daemon loop и recovery.
+
+Внутренний control plane выглядит так:
 
 ```bash
-aiforge initiative-supervisor init --interactive --start
-
-# or explicit non-interactive form
-aiforge initiative-supervisor init \
-  --slug billing-v2 \
-  --project "Billing V2" \
-  --project-id proj_123 \
-  --tracker linear \
-  --team backend \
-  --runner-provider claude \
-  --runner-command './scripts/run-worker "{{prompt_file}}" "{{issue_id}}"' \
-  --manager-branch initiative/billing-v2
-
-aiforge initiative-supervisor start --slug billing-v2
-aiforge initiative-supervisor status --slug billing-v2
-aiforge initiative-supervisor next --slug billing-v2
-aiforge initiative-supervisor pause --slug billing-v2 --reason "waiting for manual review"
-aiforge initiative-supervisor set-runner --slug billing-v2 --runner-provider codex --clear-runner-command
-aiforge initiative-supervisor resume --slug billing-v2
+aiforge supervisor import --slug billing-v2 --manifest .ai/context/initiatives/billing-v2/issues-manifest.json
+aiforge supervisor init --slug billing-v2
+aiforge supervisor daemon --slug billing-v2
+aiforge supervisor status --slug billing-v2
+aiforge supervisor pause --slug billing-v2 --reason "manual hold"
+aiforge supervisor resume --slug billing-v2
+aiforge supervisor abort --slug billing-v2 --reason "stop loop"
 ```
 
 Важно:
 
-- `init` использует уже существующий `issues-manifest.json`, при необходимости дописывает туда metadata проекта (`project`, `projectId`, `tracker`) и готовит supervisor run без запуска worker loop
-- `init --interactive` задаёт вопросы, а если локального manifest нет, может bootstrap-нуть его из компактного списка issues вместо ручного JSON
-- при `init` можно выбрать, какой срез инициативы выполняет этот supervisor:
-  - `--team backend`
-  - `--team frontend`
-  - повторяемые `--team ...`
-  - или конкретные `--issue ISSUE-ID`
-- `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
-- `init --start` делает init и сразу запускает supervisor
-- если run уже существует и находится в `paused`, `start` запускает его дальше
-- если надо переключить worker runtime, ставишь supervisor на паузу и делаешь `set-runner`
-- `set-runner --clear-runner-command` полезен при переключении, например, с `claude` на `codex`, чтобы старый command template не остался висеть в state
-- если настроен `--runner-command` или env `AIFORGE_RUNNER_COMMAND`, `start` сразу пытается стартовать worker
-- если runner command не настроен, `start` подготавливает prompt и честно переводит loop в состояние ожидания запуска worker (`await_worker_launch`)
-- для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest, затем сделать `init`
-- блокировки на issues вне выбранного среза сохраняются как external metadata и не попадают в очередь этого supervisor run
-
-Практический сценарий:
-
-1. В нужном репозитории подготовь `.ai/context/initiatives/<slug>/issues-manifest.json`.
-2. Один раз выполни `aiforge initiative-supervisor init ...`, чтобы привязать metadata проекта, выбрать `team` / `issue` slice и создать durable run.
-3. Дай `aiforge initiative-supervisor start --slug <slug>`.
-4. Смотри состояние через `status` и следующий шаг через `next`.
-5. Если надо остановиться, используй `pause`; когда захочешь продолжить, используй `start` или `resume`.
+- основной запуск предполагается из чата, не через ручной `next`
+- issue source сначала нормализуется в `.ai/runtime/supervisor/imports/<slug>.json`
+- durable state живет под `.ai/runtime/supervisor/**`
+- worker launch идет через launcher adapters, а не через public `runner-command`
+- hooks должны подмешивать `supervisor` context и блокировать product edits в manager mode
 
 ## Установка CLI как глобальной команды
 
