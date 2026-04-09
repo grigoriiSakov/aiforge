@@ -79,6 +79,26 @@ function getOption(args, name, fallback = null) {
   return args[index + 1] ?? fallback;
 }
 
+function getMultiOptionValues(args, name) {
+  const values = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== name) {
+      continue;
+    }
+    const rawValue = args[index + 1] ?? "";
+    if (!rawValue || String(rawValue).startsWith("--")) {
+      throw new Error(`missing value for ${name}`);
+    }
+    values.push(
+      ...String(rawValue)
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    );
+  }
+  return [...new Set(values)];
+}
+
 function requireOption(args, name) {
   const value = getOption(args, name, null);
   if (!value) {
@@ -127,6 +147,11 @@ function normalizeBlockedBy(blockedBy) {
   return [...new Set(blockedBy.map((entry) => String(entry).trim()).filter(Boolean))];
 }
 
+function normalizeTeam(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized.toLowerCase() : null;
+}
+
 function parseIssueManifest(rawManifest, slug, manifestPath) {
   if (!rawManifest || typeof rawManifest !== "object" || Array.isArray(rawManifest)) {
     throw new Error(`invalid initiative manifest: ${manifestPath}`);
@@ -152,6 +177,7 @@ function parseIssueManifest(rawManifest, slug, manifestPath) {
       title: String(rawIssue?.title ?? issueId).trim() || issueId,
       order: Number.isFinite(rawIssue?.order) ? Number(rawIssue.order) : index + 1,
       blockedBy: normalizeBlockedBy(rawIssue?.blockedBy ?? rawIssue?.blocked_by),
+      team: normalizeTeam(rawIssue?.team ?? rawIssue?.ownerTeam ?? rawIssue?.owner_team),
       orchestrator: rawIssue?.orchestrator !== false,
       artifacts: typeof rawIssue?.artifacts === "object" && rawIssue?.artifacts ? rawIssue.artifacts : {}
     };
@@ -184,12 +210,55 @@ function parseIssueManifest(rawManifest, slug, manifestPath) {
   };
 }
 
+function selectIssues(manifest, options) {
+  const selectedTeams = [...new Set((options?.teams ?? []).map(normalizeTeam).filter(Boolean))];
+  const selectedIssueIds = [...new Set((options?.issueIds ?? []).map((entry) => String(entry).trim()).filter(Boolean))];
+  const allIssues = manifest.issues;
+  const issueIdSet = new Set(allIssues.map((issue) => issue.id));
+
+  const missingIssueIds = selectedIssueIds.filter((issueId) => !issueIdSet.has(issueId));
+  if (missingIssueIds.length > 0) {
+    throw new Error(`unknown issue ids in selection: ${missingIssueIds.join(", ")}`);
+  }
+
+  const shouldInclude = (issue) => {
+    if (selectedTeams.length === 0 && selectedIssueIds.length === 0) {
+      return true;
+    }
+    return selectedIssueIds.includes(issue.id) || (issue.team ? selectedTeams.includes(issue.team) : false);
+  };
+
+  const issues = allIssues.filter(shouldInclude);
+  if (issues.length === 0) {
+    throw new Error(
+      `initiative selection matched no issues (teams=${selectedTeams.join(",") || "none"}, issues=${selectedIssueIds.join(",") || "none"})`
+    );
+  }
+
+  const selectedIds = new Set(issues.map((issue) => issue.id));
+  const filteredIssues = issues.map((issue) => ({
+    ...issue,
+    blockedBy: issue.blockedBy.filter((issueId) => selectedIds.has(issueId)),
+    externalBlockedBy: issue.blockedBy.filter((issueId) => !selectedIds.has(issueId))
+  }));
+
+  return {
+    teams: selectedTeams,
+    issueIds: selectedIssueIds,
+    totalManifestIssues: allIssues.length,
+    selectedIssueCount: filteredIssues.length,
+    issues: filteredIssues
+  };
+}
+
 function defaultIssueState(issue) {
   return {
     id: issue.id,
     title: issue.title,
     order: issue.order,
+    team: issue.team ?? null,
     blockedBy: issue.blockedBy,
+    externalBlockedBy: issue.externalBlockedBy ?? [],
     orchestrator: issue.orchestrator,
     artifacts: issue.artifacts,
     status: "pending",
@@ -207,7 +276,7 @@ function defaultIssueState(issue) {
 function buildState(params) {
   const issues = {};
   const issueOrder = [];
-  for (const issue of params.manifest.issues) {
+  for (const issue of params.selectedIssues) {
     issues[issue.id] = defaultIssueState(issue);
     issueOrder.push(issue.id);
   }
@@ -222,6 +291,12 @@ function buildState(params) {
     baseBranch: params.baseBranch,
     managerBranch: params.managerBranch,
     maxAttemptsPerIssue: params.maxAttemptsPerIssue,
+    selection: {
+      teams: params.selection.teams,
+      issueIds: params.selection.issueIds,
+      totalManifestIssues: params.selection.totalManifestIssues,
+      selectedIssueCount: params.selection.selectedIssueCount
+    },
     issueOrder,
     issues,
     project: params.manifest.project,
@@ -304,6 +379,11 @@ function writeCurrentDigest(state) {
     `- Status: ${state.status}`,
     `- Base branch: ${state.baseBranch}`,
     `- Manager branch: ${state.managerBranch}`,
+    `- Selected teams: ${(state.selection?.teams ?? []).join(", ") || "all"}`,
+    `- Selected issues: ${(state.selection?.issueIds ?? []).join(", ") || "all by team/filter"}`,
+    `- Issue count: ${String(state.selection?.selectedIssueCount ?? state.issueOrder.length)} / ${String(
+      state.selection?.totalManifestIssues ?? state.issueOrder.length
+    )}`,
     `- Current issue: ${issue?.id ?? "none"}`,
     `- Next action: ${next.action}`,
     `- Updated: ${state.updatedAt}`,
@@ -313,15 +393,17 @@ function writeCurrentDigest(state) {
       ? `- Issue: ${issue.id}
 - Title: ${issue.title}
 - Status: ${issue.status}
+- Team: ${issue.team ?? "none"}
 - Attempts: ${String(issue.attempts)}
 - Last prompt: ${issue.lastPromptPath ?? "none"}
-- Last findings: ${issue.lastFindingsPath ?? "none"}`
+- Last findings: ${issue.lastFindingsPath ?? "none"}
+- External blockers: ${issue.externalBlockedBy?.join(",") || "none"}`
       : "- No current issue selected.",
     "",
     "## Issues",
     ...allIssues(state).map(
       (entry) =>
-        `- ${entry.id} :: ${entry.status} :: blockedBy=${entry.blockedBy.join(",") || "none"} :: attempts=${String(entry.attempts)}`
+        `- ${entry.id} :: team=${entry.team ?? "none"} :: ${entry.status} :: blockedBy=${entry.blockedBy.join(",") || "none"} :: external=${entry.externalBlockedBy?.join(",") || "none"} :: attempts=${String(entry.attempts)}`
     )
   ];
 
@@ -466,10 +548,16 @@ function commandInit(args) {
   const manifestPath = path.resolve(getOption(args, "--manifest", manifestPathForSlug(slug)));
   const rawManifest = readJson(manifestPath, null);
   const manifest = parseIssueManifest(rawManifest, slug, manifestPath);
+  const selection = selectIssues(manifest, {
+    teams: getMultiOptionValues(args, "--team"),
+    issueIds: getMultiOptionValues(args, "--issue")
+  });
   const state = buildState({
     slug,
     manifestPath,
     manifest,
+    selectedIssues: selection.issues,
+    selection,
     baseBranch: getOption(args, "--base-branch", manifest.baseBranch),
     managerBranch: getOption(args, "--manager-branch", manifest.managerBranch),
     maxAttemptsPerIssue: Number.parseInt(
@@ -478,7 +566,12 @@ function commandInit(args) {
     )
   });
   saveState(state);
-  appendEvent(slug, { type: "init", manifestPath, managerBranch: state.managerBranch });
+  appendEvent(slug, {
+    type: "init",
+    manifestPath,
+    managerBranch: state.managerBranch,
+    selection: state.selection
+  });
   process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 }
 

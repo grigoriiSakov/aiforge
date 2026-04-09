@@ -173,6 +173,8 @@ export function runInitiativeSupervisorInitCommand(
     project?: string;
     projectId?: string;
     tracker?: string;
+    teams?: string[];
+    issueIds?: string[];
   }
 ): CommandResult {
   const existing = readExistingState(repoRoot, options.slug);
@@ -195,6 +197,12 @@ export function runInitiativeSupervisorInitCommand(
   }
   if (typeof options.maxAttempts === "number") {
     args.push("--max-attempts", String(options.maxAttempts));
+  }
+  for (const team of options.teams ?? []) {
+    args.push("--team", team);
+  }
+  for (const issueId of options.issueIds ?? []) {
+    args.push("--issue", issueId);
   }
 
   const created = invokeSupervisorRuntime(repoRoot, args) as Record<string, unknown>;

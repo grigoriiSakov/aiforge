@@ -172,7 +172,14 @@ aiforge linear scope set \
 `.ai/context/initiatives/<slug>/issues-manifest.json`, можно запускать supervisor loop:
 
 ```bash
-aiforge initiative-supervisor init --slug billing-v2 --project "Billing V2" --project-id proj_123 --tracker linear
+aiforge initiative-supervisor init \
+  --slug billing-v2 \
+  --project "Billing V2" \
+  --project-id proj_123 \
+  --tracker linear \
+  --team backend \
+  --manager-branch initiative/billing-v2
+
 aiforge initiative-supervisor start --slug billing-v2
 aiforge initiative-supervisor status --slug billing-v2
 aiforge initiative-supervisor next --slug billing-v2
@@ -183,9 +190,23 @@ aiforge initiative-supervisor resume --slug billing-v2
 Важно:
 
 - `init` использует уже существующий `issues-manifest.json`, при необходимости дописывает туда metadata проекта (`project`, `projectId`, `tracker`) и готовит supervisor run без запуска worker loop
+- при `init` можно выбрать, какой срез инициативы выполняет этот supervisor:
+  - `--team backend`
+  - `--team frontend`
+  - повторяемые `--team ...`
+  - или конкретные `--issue ISSUE-ID`
 - `start` не создаёт run с нуля: он запускает уже инициализированный supervisor
 - если run уже существует и находится в `paused`, `start` запускает его дальше
 - для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest, затем сделать `init`
+- блокировки на issues вне выбранного среза сохраняются как external metadata и не попадают в очередь этого supervisor run
+
+Практический сценарий:
+
+1. В нужном репозитории подготовь `.ai/context/initiatives/<slug>/issues-manifest.json`.
+2. Один раз выполни `aiforge initiative-supervisor init ...`, чтобы привязать metadata проекта, выбрать `team` / `issue` slice и создать durable run.
+3. Дай `aiforge initiative-supervisor start --slug <slug>`.
+4. Смотри состояние через `status` и следующий шаг через `next`.
+5. Если надо остановиться, используй `pause`; когда захочешь продолжить, используй `start` или `resume`.
 
 ## Установка CLI как глобальной команды
 

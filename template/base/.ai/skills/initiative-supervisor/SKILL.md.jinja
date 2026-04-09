@@ -18,6 +18,47 @@ It owns:
 
 It must **not** quietly turn into a coding agent in the main checkout.
 
+## Quick Start
+
+Use the CLI entrypoint, not raw runtime commands, for normal operation:
+
+```bash
+# 1. prepare / bind an existing initiative
+aiforge initiative-supervisor init \
+  --slug <slug> \
+{% if linear_enabled -%}
+  --project "Project Name" \
+  --project-id <tracker-project-id> \
+  --tracker linear \
+{% endif -%}
+  --team backend \
+  --manager-branch initiative/<slug>
+
+# 2. begin or continue execution
+aiforge initiative-supervisor start --slug <slug>
+
+# 3. inspect next machine action
+aiforge initiative-supervisor status --slug <slug>
+aiforge initiative-supervisor next --slug <slug>
+
+# 4. pause / continue when needed
+aiforge initiative-supervisor pause --slug <slug> --reason "manual stop"
+aiforge initiative-supervisor resume --slug <slug>
+```
+
+Expected precondition:
+
+- `.ai/context/initiatives/<slug>/issues-manifest.json` already exists
+{% if linear_enabled -%}
+- if the initiative already exists in Linear, pass its project metadata during `init`; do **not** create a duplicate project
+{% endif -%}
+- if the initiative contains issues for multiple teams, choose the execution slice at `init` time:
+  - `--team backend`
+  - `--team frontend`
+  - multiple `--team ...` values
+  - explicit `--issue ISSUE-ID` values
+- selection is durable for that supervisor run
+
 ## Rule preflight
 
 - Before doing anything else in this skill, read:
@@ -58,10 +99,13 @@ It must **not** quietly turn into a coding agent in the main checkout.
 ## Mandatory protocol
 
 1. Read the initiative manifest `.ai/context/initiatives/<slug>/issues-manifest.json`.
-2. Start or resume the durable state through:
-   - `node .ai/runtime/initiative-supervisor-state.mjs init --slug <slug>` for a new run
-   - `node .ai/runtime/initiative-supervisor-state.mjs status --slug <slug>` for resume / inspection
-3. Treat `node .ai/runtime/initiative-supervisor-state.mjs graph next --slug <slug>` as the source of truth for the next machine action.
+2. Initialize the supervisor once through the CLI:
+   - `aiforge initiative-supervisor init --slug <slug> [...]`
+   - this binds project metadata and prepares durable state, but does **not** start execution yet
+   - if only part of the initiative belongs to this team/run, pass selection flags during `init`
+3. Start or continue execution through:
+   - `aiforge initiative-supervisor start --slug <slug>`
+4. Treat `aiforge initiative-supervisor next --slug <slug>` (backed by `.ai/runtime/initiative-supervisor-state.mjs graph next`) as the source of truth for the next machine action.
 4. Before each worker launch, generate a fresh prompt:
    - `node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>`
 5. Launch the worker in an **isolated run** with that prompt and the current issue only.
@@ -90,15 +134,23 @@ It must **not** quietly turn into a coding agent in the main checkout.
 ## Concrete loop skeleton
 
 ```bash
-# 1. start or resume durable state
-node .ai/runtime/initiative-supervisor-state.mjs init --slug <slug>
-# or
-node .ai/runtime/initiative-supervisor-state.mjs status --slug <slug>
+# 1. initialize the already-created initiative
+aiforge initiative-supervisor init \
+  --slug <slug> \
+{% if linear_enabled -%}
+  --project "Project Name" \
+  --project-id <tracker-project-id> \
+  --tracker linear \
+{% endif -%}
+  --team backend \
+  --manager-branch initiative/<slug>
 
-# 2. inspect next machine action
-node .ai/runtime/initiative-supervisor-state.mjs graph next --slug <slug>
+# 2. start the supervisor
+aiforge initiative-supervisor start --slug <slug>
+aiforge initiative-supervisor status --slug <slug>
+aiforge initiative-supervisor next --slug <slug>
 
-# 3. before worker launch
+# 3. before worker launch, the manager may still call raw runtime helpers internally
 node .ai/runtime/initiative-supervisor-state.mjs prepare-worker-prompt --slug <slug>
 node .ai/runtime/initiative-supervisor-state.mjs record-worker --slug <slug> --issue ISSUE-ID --status launched --run-id <run-id>
 
@@ -120,6 +172,19 @@ node .ai/runtime/initiative-supervisor-state.mjs mark-issue-done --slug <slug> -
 - Before the loop, ensure the main checkout is on that branch and is clean.
 - Do not implement feature code directly on the manager branch.
 - Acceptable manager-side changes are limited to runtime state, findings, prompts, commit/merge actions, and tracker transitions.
+
+## Team / issue selection
+
+- Use `init` to choose which slice of the initiative this supervisor owns.
+- Examples:
+  - `aiforge initiative-supervisor init --slug <slug> --team backend`
+  - `aiforge initiative-supervisor init --slug <slug> --team frontend`
+  - `aiforge initiative-supervisor init --slug <slug> --team backend --team frontend`
+  - `aiforge initiative-supervisor init --slug <slug> --issue MPB-49 --issue MPB-50`
+- `--team` and `--issue` filters are combined as a union.
+- Internal blockers between selected issues remain in the execution graph.
+- Blockers that point to issues **outside** the selected slice are stored as metadata (`externalBlockedBy`) and are treated as **external preconditions**, not as tasks for this supervisor run.
+- That means frontend-only runs are valid **after** backend prerequisites are handled elsewhere; the supervisor will not automatically execute out-of-scope backend issues.
 
 ## Manager review bar
 
@@ -158,12 +223,12 @@ If any of those fail, the worker is **not** accepted.
 ## Pause / resume
 
 - To pause safely:
-  - `node .ai/runtime/initiative-supervisor-state.mjs pause --slug <slug> --reason "..."`
+  - `aiforge initiative-supervisor pause --slug <slug> --reason "..."`
 - To resume:
   - reread the preflight files
   - reread `.ai/runtime/initiative-supervisor/current/<slug>.md`
-  - `node .ai/runtime/initiative-supervisor-state.mjs resume --slug <slug>`
-  - continue from `graph next`
+  - `aiforge initiative-supervisor resume --slug <slug>`
+  - continue from `aiforge initiative-supervisor next --slug <slug>`
 - Do not rely on chat memory for resume.
 
 ## Stop conditions

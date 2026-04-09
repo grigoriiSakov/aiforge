@@ -612,6 +612,70 @@ describe("command flow", () => {
     ).toBe(true);
   });
 
+  test("initiative supervisor runtime can initialize only one team and treat other blockers as external", () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-team-filter-");
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", "training-plans-v1");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(initiativeDir, "issues-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          slug: "training-plans-v1",
+          baseBranch: "dev",
+          managerBranch: "initiative/training-plans-v1",
+          issues: [
+            { id: "MPB-49", title: "Backend foundation", team: "backend", order: 10, blockedBy: [] },
+            { id: "MPB-50", title: "Backend publish", team: "backend", order: 20, blockedBy: ["MPB-49"] },
+            { id: "MPF-947", title: "Frontend coach flows", team: "frontend", order: 30, blockedBy: ["MPB-49", "MPB-50"] }
+          ]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const templatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(templatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "dev")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    const runtimePath = path.join(runtimeDir, "initiative-supervisor-state.mjs");
+    fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+
+    const backendOnly = JSON.parse(
+      runNodeScript(runtimePath, ["init", "--slug", "training-plans-v1", "--team", "backend"], repoRoot)
+    );
+    expect(backendOnly.selection.teams).toEqual(["backend"]);
+    expect(backendOnly.selection.selectedIssueCount).toBe(2);
+    expect(backendOnly.issueOrder).toEqual(["MPB-49", "MPB-50"]);
+
+    const frontendOnly = JSON.parse(
+      runNodeScript(runtimePath, ["init", "--slug", "training-plans-v1-frontend", "--manifest", path.join(initiativeDir, "issues-manifest.json"), "--team", "frontend"], repoRoot)
+    );
+    expect(frontendOnly.selection.teams).toEqual(["frontend"]);
+    expect(frontendOnly.issueOrder).toEqual(["MPF-947"]);
+    expect(frontendOnly.issues["MPF-947"].blockedBy).toEqual([]);
+    expect(frontendOnly.issues["MPF-947"].externalBlockedBy).toEqual(["MPB-49", "MPB-50"]);
+
+    const next = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "--slug", "training-plans-v1-frontend"], repoRoot)
+    );
+    expect(next.action).toBe("launch_worker");
+    expect(next.issue).toBe("MPF-947");
+  });
+
   test("initiative supervisor command wrappers init, start, inspect, pause, resume, and abort existing initiatives", async () => {
     const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-cli-");
     await runInitCommand({
@@ -633,7 +697,10 @@ describe("command flow", () => {
           slug: "kernel",
           baseBranch: "main",
           managerBranch: "initiative/kernel",
-          issues: [{ id: "APP-77", title: "Refactor kernel", order: 10, blockedBy: [] }]
+          issues: [
+            { id: "APP-77", title: "Refactor kernel", team: "backend", order: 10, blockedBy: [] },
+            { id: "APP-88", title: "Frontend shell", team: "frontend", order: 20, blockedBy: ["APP-77"] }
+          ]
         },
         null,
         2
@@ -664,13 +731,20 @@ describe("command flow", () => {
       project: "Kernel",
       projectId: "project-123",
       tracker: "linear",
-      managerBranch: "initiative/kernel"
+      managerBranch: "initiative/kernel",
+      teams: ["backend"]
     });
     expect(initialized.ok).toBe(true);
     expect(initialized.message).toContain("initialized");
     expect(
       ((initialized.details as Record<string, unknown>).manifestProject as Record<string, unknown>).project
     ).toBe("Kernel");
+    expect(
+      (((initialized.details as Record<string, unknown>).created as Record<string, unknown>).selection as Record<
+        string,
+        unknown
+      >).selectedIssueCount
+    ).toBe(1);
     expect(
       ((initialized.details as Record<string, unknown>).state as Record<string, unknown>).status
     ).toBe("paused");
@@ -686,6 +760,7 @@ describe("command flow", () => {
 
     const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
     expect((next.details as Record<string, unknown>).action).toBe("launch_worker");
+    expect((next.details as Record<string, unknown>).issue).toBe("APP-77");
 
     const paused = runInitiativeSupervisorPauseCommand(repoRoot, { slug: "kernel", reason: "waiting" });
     expect((paused.details as Record<string, unknown>).status).toBe("paused");

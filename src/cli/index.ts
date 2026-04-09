@@ -28,6 +28,10 @@ import { runUpdateCommand } from "../commands/update.js";
 import { printResult } from "../core/output.js";
 import type { ProjectProfileId } from "../core/types.js";
 
+function collectOption(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 async function main(): Promise<void> {
   const program = new Command();
   program
@@ -166,6 +170,8 @@ async function main(): Promise<void> {
     .option("--project <name>", "Tracker project name")
     .option("--project-id <id>", "Tracker project id")
     .option("--tracker <name>", "Tracker type override for project metadata")
+    .option("--team <name>", "Include only issues for this team (repeatable)", collectOption, [])
+    .option("--issue <id>", "Include this explicit issue id (repeatable)", collectOption, [])
     .option("--base-branch <name>", "Base branch for the initiative manager branch")
     .option("--manager-branch <name>", "Manager branch name")
     .option("--max-attempts <count>", "Max worker attempts per issue")
@@ -178,6 +184,8 @@ async function main(): Promise<void> {
         project?: string;
         projectId?: string;
         tracker?: string;
+        team: string[];
+        issue: string[];
         baseBranch?: string;
         managerBranch?: string;
         maxAttempts?: string;
@@ -193,6 +201,8 @@ async function main(): Promise<void> {
           ...(options.project ? { project: options.project } : {}),
           ...(options.projectId ? { projectId: options.projectId } : {}),
           ...(options.tracker ? { tracker: options.tracker } : {}),
+          ...(options.team.length > 0 ? { teams: options.team } : {}),
+          ...(options.issue.length > 0 ? { issueIds: options.issue } : {}),
           ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
           ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
           ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
