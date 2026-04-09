@@ -6,7 +6,7 @@
 
 MVP-фокус:
 - bootstrap managed surfaces в существующем или новом проекте;
-- единый UX команд через `task`;
+- единый UX команд через repo-local `go-task`;
 - предсказуемый update lifecycle без ручного копипаста.
 
 ## 2) Problem Statement

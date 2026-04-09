@@ -257,7 +257,7 @@ aiforge doctor
 - generic hooks, без hardcoded `uv` / `artisan` / `yarn` в ядре;
 - stack-specific команды живут в profile/config;
 - update flow идёт через `Copier`, а не через собственную heavyweight OS;
-- canonical workflow опирается на `task build/test/lint/verify/review`.
+- canonical workflow опирается на `go-task build/test/lint/verify/review` через repo-local runner `.ai/bin/go-task`.
 
 ## Linear-first surfaces
 

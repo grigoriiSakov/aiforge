@@ -1,3 +1,4 @@
+import { TASK_COMMAND_PLACEHOLDER } from "../task-runner.js";
 import type { ProfileDefinition, ProjectProfileId } from "../types.js";
 
 export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = {
@@ -11,10 +12,13 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       lint: ["cd ../docker && docker compose exec app uv run ruff check ."],
       verify: [
         "python3 scripts/check_import_boundaries.py",
-        "task lint",
-        "task test"
+        `${TASK_COMMAND_PLACEHOLDER} lint`,
+        `${TASK_COMMAND_PLACEHOLDER} test`
       ],
-      review: ["task verify", "echo \"Review evidence collected. Record final verdict via review-state.mjs.\""]
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
     },
     trackerDefault: "linear",
     languageDefault: "ru",
@@ -53,8 +57,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
         "docker compose exec php vendor/bin/pint --dirty --format=agent",
         "docker compose exec php vendor/bin/phpstan analyse"
       ],
-      verify: ["task lint", "task test"],
-      review: ["task verify", "echo \"Review evidence collected. Record final verdict via review-state.mjs.\""]
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
     },
     trackerDefault: "gitlab",
     languageDefault: "ru",
@@ -91,7 +98,10 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       test: ["yarn test"],
       lint: ["yarn typecheck:ci"],
       verify: ["yarn gate:prepush"],
-      review: ["task verify", "echo \"Review evidence collected. Record final verdict via review-state.mjs.\""]
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
     },
     trackerDefault: "linear",
     languageDefault: "ru",

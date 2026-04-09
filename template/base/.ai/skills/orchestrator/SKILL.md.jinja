@@ -56,7 +56,7 @@ Pipeline owner for:
 12. After every side effect, re-check the next machine action through:
     - `node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID`
 13. Use canonical task names from `ai.config.yaml`.
-14. Before `task lint`, `task test`, or `task verify` against an orchestrator worktree, export
+14. Before `{{ task_command }} {{ task_lint_name }}`, `{{ task_command }} {{ task_test_name }}`, or `{{ task_command }} {{ task_verify_name }}` against an orchestrator worktree, export
     `AIFORGE_WORKTREE_PATH` via `node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID`
     (for example `eval "$(... worktree-env ...)"` in shell); canonical tasks then pick exec vs `compose run`
     automatically — do not hand-roll long `docker compose run` lines in prompts or artifacts.

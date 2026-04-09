@@ -10,6 +10,7 @@ import {
   loadConfig,
   saveConfig
 } from "../src/core/config.js";
+import { DEFAULT_TASK_COMMAND } from "../src/core/task-runner.js";
 import { makeTempRepo } from "./helpers.js";
 
 describe("config lifecycle", () => {
@@ -50,5 +51,97 @@ describe("config lifecycle", () => {
     expect(config.orchestrator.branchPrefix).toBe("agent/");
     expect(config.orchestrator.maxReviewIterations).toBe(3);
     expect(config.artifacts.planProgressRoot).toBe(".ai/context/runtime");
+  });
+
+  test("legacy task command config migrates to repo-local go-task runner", () => {
+    const repoRoot = makeTempRepo("aiforge-config-legacy-task-");
+    fs.writeFileSync(
+      path.join(repoRoot, CONFIG_FILE_NAME),
+      [
+        "schemaVersion: 1",
+        "project:",
+        "  slug: demo",
+        "  name: Demo",
+        "  mainBranch: dev",
+        "workflow:",
+        "  tracker: linear",
+        "  phases: [issue, plan, build, test, review]",
+        "  language: ru",
+        "  trackerStates:",
+        "    planReady: Todo",
+        "    active: In Progress",
+        "    review: In Review",
+        "linear:",
+        "  enabled: true",
+        "  requireTrackerForIssueFlow: true",
+        "  scopes: []",
+        "profile:",
+        "  id: python-fastapi-docker",
+        "orchestrator:",
+        "  worktreeRoot: ~/worktrees/demo",
+        "  branchPrefix: agent/",
+        "  maxReviewIterations: 3",
+        "artifacts:",
+        "  planProgressRoot: .ai/context/runtime",
+        "runtimes:",
+        "  cursor: true",
+        "  codex: true",
+        "  claude: true",
+        "  agent: true",
+        "  agents: true",
+        "task:",
+        "  command: task",
+        "  tasks:",
+        "    build: build",
+        "    test: test",
+        "    lint: lint",
+        "    verify: verify",
+        "    review: review",
+        "commands:",
+        "  build:",
+        "    - echo \"No dedicated build step for FastAPI profile\"",
+        "  test:",
+        "    - cd ../docker && docker compose exec app uv run python scripts/run_pytest_isolated.py -v",
+        "  lint:",
+        "    - cd ../docker && docker compose exec app uv run ruff check .",
+        "  verify:",
+        "    - python3 scripts/check_import_boundaries.py",
+        "    - task lint",
+        "    - task test",
+        "  review:",
+        "    - task verify",
+        "    - echo \"Review evidence collected. Record final verdict via review-state.mjs.\"",
+        "manifesto:",
+        "  path: MANIFESTO.md",
+        "  title: Modular Backend Manifesto",
+        "  markdown: \"\"",
+        "agents:",
+        "  markdown: \"\"",
+        "llms:",
+        "  rootDir: llms",
+        "  txtPath: llms.txt",
+        "  sourceGlobs:",
+        "    - src/**/*.py",
+        "mcp:",
+        "  scaffold: true",
+        "  placeholders: [linear, framework-docs, project-db]",
+        "projectRules:",
+        "  markdown: \"\"",
+        "managedSurfaces: []",
+        "updatePolicy: strict",
+        "features:",
+        "  mcp: true",
+        "  llms: true",
+        "  manifesto: true",
+        ""
+      ].join("\n")
+    );
+
+    const config = loadConfig(repoRoot);
+
+    expect(config.task.command).toBe(DEFAULT_TASK_COMMAND);
+    expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} lint`);
+    expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} test`);
+    expect(config.commands.review).toContain(`${DEFAULT_TASK_COMMAND} verify`);
   });
 });

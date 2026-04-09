@@ -26,6 +26,7 @@ import {
 import { runSyncCommand } from "../src/commands/sync.js";
 import { runUpdateCommand } from "../src/commands/update.js";
 import { CONFIG_FILE_NAME, loadConfig, saveConfig } from "../src/core/config.js";
+import { DEFAULT_TASK_COMMAND } from "../src/core/task-runner.js";
 import {
   createFakeExecutable,
   copyFixture,
@@ -99,9 +100,21 @@ describe("command flow", () => {
   const originalPath = process.env.PATH ?? "";
 
   beforeEach(() => {
-    process.env.PATH = originalPath;
+    const fakeTaskBinDir = makeTempRepo("aiforge-task-bin-");
+    createFakeExecutable(
+      fakeTaskBinDir,
+      "go-task",
+      `#!/usr/bin/env node
+if (process.argv.includes("--version")) {
+  process.stdout.write("go-task test stub\\n");
+}
+process.exit(0);
+`
+    );
+    process.env.PATH = `${fakeTaskBinDir}:${originalPath}`;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
+    delete process.env.AIFORGE_TASK_INSTALLER_BIN;
     delete process.env.AIFORGE_RUNTIME_PROVIDER;
     delete process.env.AIFORGE_SUPERVISOR_LAUNCHER;
     delete process.env.AIFORGE_SUPERVISOR_HEADLESS_BIN;
@@ -131,6 +144,8 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, DEFAULT_TASK_COMMAND))).toBe(true);
+    expect(loadConfig(repoRoot).task.command).toBe(DEFAULT_TASK_COMMAND);
     const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
     expect(answersContent).toContain("_src_path:");
     expect(answersContent).not.toContain("_commit:");

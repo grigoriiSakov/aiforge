@@ -11,6 +11,7 @@ import { generateManifesto } from "../core/manifesto.js";
 import { scaffoldMcp } from "../core/mcp.js";
 import { applyRuntimeFlags } from "../core/runtime.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
+import { ensureTaskRunnerInstalled } from "../core/task-runner.js";
 import { resolveTemplatePath } from "../core/template.js";
 import type { CommandResult, ProjectProfileId } from "../core/types.js";
 
@@ -62,6 +63,7 @@ export async function runSyncCommand(
       force: false,
       trust: true
     });
+    ensureTaskRunnerInstalled(repoRoot);
     ensureCopierAnswersFile({
       destinationPath: repoRoot,
       templatePath: resolveTemplatePath(),

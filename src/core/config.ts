@@ -4,6 +4,7 @@ import YAML from "yaml";
 
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
+import { DEFAULT_TASK_COMMAND, renderTaskCommands } from "./task-runner.js";
 import type { DetectionResult, ProjectConfig, ProjectProfileId } from "./types.js";
 
 export const CONFIG_FILE_NAME = "ai.config.yaml";
@@ -17,6 +18,7 @@ export function createConfig(params: {
   detectionResult?: DetectionResult;
 }): ProjectConfig {
   const profile = getProfileDefinition(params.profileId);
+  const taskCommand = DEFAULT_TASK_COMMAND;
 
   return {
     schemaVersion: 1,
@@ -60,7 +62,7 @@ export function createConfig(params: {
       agents: true
     },
     task: {
-      command: "task",
+      command: taskCommand,
       tasks: {
         build: "build",
         test: "test",
@@ -69,7 +71,7 @@ export function createConfig(params: {
         review: "review"
       }
     },
-    commands: profile.taskCommands,
+    commands: renderTaskCommands(profile.taskCommands, taskCommand),
     manifesto: {
       path: "MANIFESTO.md",
       title: profile.manifestoTitle,
@@ -254,6 +256,7 @@ function validateConfig(config: ProjectConfig): void {
 
 export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectProfileId): ProjectConfig {
   const profile = getProfileDefinition(profileId);
+  const taskCommand = normalizeTaskCommand(config.task?.command);
   return {
     ...config,
     profile: {
@@ -270,7 +273,11 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
       requireTrackerForIssueFlow: profile.trackerDefault === "linear",
       scopes: profile.linearDefaults.scopes
     },
-    commands: profile.taskCommands,
+    task: {
+      ...config.task,
+      command: taskCommand
+    },
+    commands: renderTaskCommands(profile.taskCommands, taskCommand),
     manifesto: {
       ...config.manifesto,
       title: profile.manifestoTitle
@@ -289,6 +296,9 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     projectName: config.project?.name ?? "Project",
     profileId: config.profile?.id ?? "python-fastapi-docker"
   });
+  const profileId = config.profile?.id ?? defaults.profile.id;
+  const profile = getProfileDefinition(profileId);
+  const taskCommand = normalizeTaskCommand(config.task?.command);
 
   return {
     ...defaults,
@@ -311,7 +321,8 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     },
     profile: {
       ...defaults.profile,
-      ...config.profile
+      ...config.profile,
+      id: profileId
     },
     orchestrator: {
       ...defaults.orchestrator,
@@ -328,15 +339,13 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     task: {
       ...defaults.task,
       ...config.task,
+      command: taskCommand,
       tasks: {
         ...defaults.task.tasks,
         ...config.task?.tasks
       }
     },
-    commands: {
-      ...defaults.commands,
-      ...config.commands
-    },
+    commands: normalizeTaskCommands(config.commands, profile.taskCommands, taskCommand),
     manifesto: {
       ...defaults.manifesto,
       ...config.manifesto
@@ -363,6 +372,81 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
       ...config.features
     }
   };
+}
+
+function normalizeTaskCommand(taskCommand: string | undefined): string {
+  if (!taskCommand || taskCommand === "task" || taskCommand === "go-task") {
+    return DEFAULT_TASK_COMMAND;
+  }
+
+  return taskCommand;
+}
+
+function normalizeTaskCommands(
+  currentCommands: ProjectConfig["commands"] | undefined,
+  profileTaskCommands: ProjectConfig["commands"],
+  taskCommand: string
+): ProjectConfig["commands"] {
+  return {
+    build: normalizeTaskCommandList(currentCommands?.build, profileTaskCommands.build, taskCommand),
+    test: normalizeTaskCommandList(currentCommands?.test, profileTaskCommands.test, taskCommand),
+    lint: normalizeTaskCommandList(currentCommands?.lint, profileTaskCommands.lint, taskCommand),
+    verify: normalizeTaskCommandList(currentCommands?.verify, profileTaskCommands.verify, taskCommand),
+    review: normalizeTaskCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
+  };
+}
+
+function normalizeTaskCommandList(
+  currentCommands: string[] | undefined,
+  profileCommands: string[],
+  taskCommand: string
+): string[] {
+  const currentDefault = renderTaskCommands(
+    {
+      build: profileCommands,
+      test: profileCommands,
+      lint: profileCommands,
+      verify: profileCommands,
+      review: profileCommands
+    },
+    taskCommand
+  ).build;
+  const legacyTask = renderTaskCommands(
+    {
+      build: profileCommands,
+      test: profileCommands,
+      lint: profileCommands,
+      verify: profileCommands,
+      review: profileCommands
+    },
+    "task"
+  ).build;
+  const legacyGoTask = renderTaskCommands(
+    {
+      build: profileCommands,
+      test: profileCommands,
+      lint: profileCommands,
+      verify: profileCommands,
+      review: profileCommands
+    },
+    "go-task"
+  ).build;
+
+  if (
+    !currentCommands ||
+    areStringArraysEqual(currentCommands, profileCommands) ||
+    areStringArraysEqual(currentCommands, legacyTask) ||
+    areStringArraysEqual(currentCommands, legacyGoTask) ||
+    areStringArraysEqual(currentCommands, currentDefault)
+  ) {
+    return currentDefault;
+  }
+
+  return currentCommands;
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function mergeManagedSurfaces(
