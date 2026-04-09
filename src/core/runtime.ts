@@ -7,6 +7,7 @@ import type { RuntimeFlags } from "./types.js";
 const RUNTIME_PATHS = {
   cursor: ".cursor",
   codex: ".codex",
+  claude: ".claude",
   agent: ".agent",
   agents: ".agents"
 } as const;
@@ -19,6 +20,7 @@ const SHARED_CONTEXT_PATH = path.join(".ai", "context");
 const SKILL_LINK_RUNTIMES = {
   cursor: ".cursor",
   codex: ".codex",
+  claude: ".claude",
   agent: ".agent",
   agents: ".agents"
 } as const;
@@ -26,6 +28,7 @@ const SKILL_LINK_RUNTIMES = {
 const RULE_LINK_RUNTIMES = {
   cursor: ".cursor",
   codex: ".codex",
+  claude: ".claude",
   agent: ".agent"
 } as const;
 

@@ -24,6 +24,7 @@ export interface TaskCommands {
 export interface RuntimeFlags {
   cursor: boolean;
   codex: boolean;
+  claude: boolean;
   agent: boolean;
   agents: boolean;
 }

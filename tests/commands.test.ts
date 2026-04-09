@@ -7,6 +7,14 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { runAdoptCommand } from "../src/commands/adopt.js";
 import { runDoctorCommand } from "../src/commands/doctor.js";
 import { runInitCommand } from "../src/commands/init.js";
+import {
+  runInitiativeSupervisorAbortCommand,
+  runInitiativeSupervisorNextCommand,
+  runInitiativeSupervisorPauseCommand,
+  runInitiativeSupervisorResumeCommand,
+  runInitiativeSupervisorStartCommand,
+  runInitiativeSupervisorStatusCommand
+} from "../src/commands/initiative-supervisor.js";
 import { runLinearInitCommand } from "../src/commands/linear-init.js";
 import { runLinearScopeSetCommand } from "../src/commands/linear-scope-set.js";
 import { runLlmsBuildCommand } from "../src/commands/llms-build.js";
@@ -20,6 +28,7 @@ import {
   createFakeExecutable,
   copyFixture,
   createFakeCopierBin,
+  installClaudeHookTemplates,
   installCodexHookTemplates,
   installCursorHookTemplates,
   installReviewRuntime,
@@ -55,6 +64,7 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "orchestrator-claimed-scope-template.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".claude", "hooks.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs"))).toBe(true);
@@ -68,6 +78,7 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(false);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".claude", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agent", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agents", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".codex", "skills")).isSymbolicLink()).toBe(true);
@@ -78,6 +89,9 @@ describe("command flow", () => {
       fs.realpathSync(path.join(repoRoot, ".ai", "context"))
     );
     expect(fs.realpathSync(path.join(repoRoot, ".cursor", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".claude", "skills"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
     );
     expect(fs.realpathSync(path.join(repoRoot, ".agent", "skills"))).toBe(
@@ -93,9 +107,13 @@ describe("command flow", () => {
       "---\nname: plan\ndescription:"
     );
     expect(fs.lstatSync(path.join(repoRoot, ".codex", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".claude", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agent", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.realpathSync(path.join(repoRoot, ".codex", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
+    expect(fs.realpathSync(path.join(repoRoot, ".claude", "rules"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
     );
     expect(fs.realpathSync(path.join(repoRoot, ".agent", "rules"))).toBe(
@@ -593,6 +611,75 @@ describe("command flow", () => {
     ).toBe(true);
   });
 
+  test("initiative supervisor command wrappers start, inspect, pause, resume, and abort existing initiatives", async () => {
+    const repoRoot = makeTempRepo("ai-simple-initiative-supervisor-cli-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Supervisor CLI Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", "kernel");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(initiativeDir, "issues-manifest.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          slug: "kernel",
+          baseBranch: "main",
+          managerBranch: "initiative/kernel",
+          issues: [{ id: "APP-77", title: "Refactor kernel", order: 10, blockedBy: [] }]
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const runtimeTemplatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "initiative-supervisor-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(runtimeTemplatePath, "utf8")
+      .replaceAll("{{ main_branch }}", "main")
+      .replaceAll("{{ plan_progress_runtime_root }}", ".ai/context/runtime")
+      .replaceAll("{{ manifesto_path }}", "MANIFESTO.md");
+    fs.writeFileSync(path.join(runtimeDir, "initiative-supervisor-state.mjs"), renderedRuntime, { mode: 0o755 });
+
+    const started = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
+    expect(started.ok).toBe(true);
+    expect(started.message).toContain("started");
+    expect((started.details as Record<string, unknown>).managerBranch).toBe("initiative/kernel");
+
+    const status = runInitiativeSupervisorStatusCommand(repoRoot, "kernel");
+    expect(status.ok).toBe(true);
+    expect((status.details as Record<string, unknown>).status).toBe("running");
+
+    const next = runInitiativeSupervisorNextCommand(repoRoot, "kernel");
+    expect((next.details as Record<string, unknown>).action).toBe("launch_worker");
+
+    const paused = runInitiativeSupervisorPauseCommand(repoRoot, { slug: "kernel", reason: "waiting" });
+    expect((paused.details as Record<string, unknown>).status).toBe("paused");
+
+    const resumedViaStart = runInitiativeSupervisorStartCommand(repoRoot, { slug: "kernel" });
+    expect(resumedViaStart.message).toContain("resumed");
+    expect((resumedViaStart.details as Record<string, unknown>).status).toBe("running");
+
+    const resumed = runInitiativeSupervisorResumeCommand(repoRoot, "kernel");
+    expect((resumed.details as Record<string, unknown>).status).toBe("running");
+
+    const aborted = runInitiativeSupervisorAbortCommand(repoRoot, { slug: "kernel", reason: "stop now" });
+    expect((aborted.details as Record<string, unknown>).status).toBe("aborted");
+  });
+
   test("codex guards block manager-mode edits when initiative supervisor is active", async () => {
     const repoRoot = makeTempRepo("ai-simple-supervisor-guard-");
     const git = (args: string[]) => {
@@ -682,6 +769,72 @@ describe("command flow", () => {
     const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(stopGuard.stopReason).toBe("initiative_supervisor_incomplete");
     expect(stopGuard.systemMessage).toContain("run_manager_review");
+  });
+
+  test("claude hooks block manager-mode edits when initiative supervisor is active", async () => {
+    const repoRoot = makeTempRepo("ai-simple-claude-guard-");
+    const git = (args: string[]) => {
+      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+      if (result.status !== 0) {
+        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
+      }
+      return result.stdout.trim();
+    };
+
+    git(["init"]);
+    git(["config", "user.email", "t@t.t"]);
+    git(["config", "user.name", "t"]);
+    fs.writeFileSync(path.join(repoRoot, "README.md"), "# demo\n");
+    git(["add", "."]);
+    git(["commit", "-m", "base"]);
+    git(["branch", "-M", "main"]);
+    git(["checkout", "-b", "initiative/demo"]);
+
+    await runInitCommand({
+      repoRoot,
+      projectName: "Claude Guard Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    installClaudeHookTemplates(repoRoot);
+    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "initiative-supervisor", "runs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "runtime", "initiative-supervisor", "runs", "demo.json"),
+      JSON.stringify(
+        {
+          slug: "demo",
+          status: "running",
+          managerBranch: "initiative/demo",
+          currentIssueId: "APP-1",
+          issues: {
+            "APP-1": {
+              status: "worker-completed"
+            }
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    const preToolUseGuardPath = path.join(repoRoot, ".claude", "hooks", "pre-tool-use-guard.mjs");
+    const stopGuardPath = path.join(repoRoot, ".claude", "hooks", "stop-delivery-guard.mjs");
+
+    const deniedEdit = JSON.parse(
+      runNodeScriptWithInput(
+        preToolUseGuardPath,
+        [],
+        repoRoot,
+        JSON.stringify({ tool_name: "Edit", tool_input: { path: "src/app.ts" } })
+      ).stdout
+    );
+    expect(deniedEdit.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(deniedEdit.systemMessage).toContain("Manager mode");
+
+    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(stopGuard.stopReason).toBe("initiative_supervisor_incomplete");
+    expect(stopGuard.systemMessage).toContain("Initiative supervisor demo");
   });
 
   test("dry-run init does not write config", async () => {
@@ -774,6 +927,7 @@ describe("command flow", () => {
       "runtimes:",
       `  cursor: ${legacyConfig.runtimes.cursor}`,
       `  codex: ${legacyConfig.runtimes.codex}`,
+      `  claude: ${legacyConfig.runtimes.claude}`,
       `  agent: ${legacyConfig.runtimes.agent}`,
       `  agents: ${legacyConfig.runtimes.agents}`,
       "task:",
@@ -1042,10 +1196,12 @@ describe("command flow", () => {
     fs.rmSync(path.join(repoRoot, ".cursor", "context"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".cursor", "linear-scope.json"), { force: true });
     fs.rmSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), { force: true });
+    fs.rmSync(path.join(repoRoot, ".claude", "skills"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".agent", "skills"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".codex", "skills"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".agents", "skills"), { recursive: true, force: true });
     fs.mkdirSync(path.join(repoRoot, ".cursor", "commands"), { recursive: true });
+    fs.rmSync(path.join(repoRoot, ".claude", "rules"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".codex", "rules"), { recursive: true, force: true });
     fs.rmSync(path.join(repoRoot, ".agent", "rules"), { recursive: true, force: true });
 
@@ -1058,6 +1214,7 @@ describe("command flow", () => {
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(false);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "skills")).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(path.join(repoRoot, ".claude", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agent", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".codex", "skills")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agents", "skills")).isSymbolicLink()).toBe(true);
@@ -1070,6 +1227,9 @@ describe("command flow", () => {
     expect(fs.realpathSync(path.join(repoRoot, ".cursor", "skills"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
     );
+    expect(fs.realpathSync(path.join(repoRoot, ".claude", "skills"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
+    );
     expect(fs.realpathSync(path.join(repoRoot, ".agent", "skills"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
     );
@@ -1079,9 +1239,13 @@ describe("command flow", () => {
     expect(fs.realpathSync(path.join(repoRoot, ".agents", "skills"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "skills"))
     );
+    expect(fs.lstatSync(path.join(repoRoot, ".claude", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".codex", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".agent", "rules")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "rules")).isSymbolicLink()).toBe(true);
+    expect(fs.realpathSync(path.join(repoRoot, ".claude", "rules"))).toBe(
+      fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
+    );
     expect(fs.realpathSync(path.join(repoRoot, ".codex", "rules"))).toBe(
       fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
     );

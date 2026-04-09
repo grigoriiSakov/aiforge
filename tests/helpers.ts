@@ -73,11 +73,13 @@ if (mode === "copy") {
   ensureDir(path.join(destinationPath, ".ai", "context"));
   ensureDir(path.join(destinationPath, ".cursor"));
   ensureDir(path.join(destinationPath, ".codex"));
+  ensureDir(path.join(destinationPath, ".claude"));
   ensureDir(path.join(destinationPath, ".agent"));
   ensureDir(path.join(destinationPath, ".ai", "runtime"));
   writeFile(path.join(destinationPath, "AGENTS.md"), agentsContent + "\\n");
   writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
   writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");
+  writeFile(path.join(destinationPath, ".claude", "hooks.json"), "{}\\n");
   writeFile(
     path.join(destinationPath, ".ai", "skills", "plan", "SKILL.md"),
     "---\\nname: plan\\ndescription: Shared planning workflow.\\n---\\n\\n# Plan\\n"
@@ -92,6 +94,7 @@ if (mode === "copy") {
   writeFile(path.join(destinationPath, ".cursor", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".cursor", "HIERARCHY.md"), "# generated\\n");
   writeFile(path.join(destinationPath, ".cursor", "settings.json"), "{\\"plugins\\":{\\"linear\\":{\\"enabled\\":true}}}\\n");
+  writeFile(path.join(destinationPath, ".claude", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agent", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".agents", "README.md"), "generated\\n");
   writeFile(path.join(destinationPath, ".ai", "runtime", "task-state.mjs"), "console.log('ok')\\n");
@@ -274,6 +277,25 @@ export function installCodexHookTemplates(repoRoot: string): void {
   for (const relativePath of hookFiles) {
     const sourcePath = path.join(templateRoot, relativePath);
     const targetPath = path.join(repoRoot, ".codex", relativePath.replace(/\.jinja$/, ""));
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(sourcePath, targetPath);
+    fs.chmodSync(targetPath, 0o755);
+  }
+}
+
+export function installClaudeHookTemplates(repoRoot: string): void {
+  const templateRoot = path.join(process.cwd(), "template", "base", ".claude");
+  const hookFiles = [
+    "hooks.json.jinja",
+    path.join("hooks", "pre-tool-use-guard.mjs.jinja"),
+    path.join("hooks", "post-tool-use-guard.mjs.jinja"),
+    path.join("hooks", "session-start-context.mjs.jinja"),
+    path.join("hooks", "stop-delivery-guard.mjs.jinja")
+  ];
+
+  for (const relativePath of hookFiles) {
+    const sourcePath = path.join(templateRoot, relativePath);
+    const targetPath = path.join(repoRoot, ".claude", relativePath.replace(/\.jinja$/, ""));
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.copyFileSync(sourcePath, targetPath);
     fs.chmodSync(targetPath, 0o755);

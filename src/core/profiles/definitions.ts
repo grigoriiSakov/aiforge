@@ -31,7 +31,15 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       ]
     },
     manifestoTitle: "Modular Backend Manifesto",
-    llmsSourceGlobs: ["src/**/*.py", ".cursor/**/*.md", ".cursor/**/*.mdc", "AGENTS.md", "MANIFESTO.md"],
+    llmsSourceGlobs: [
+      "src/**/*.py",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
     notes: ["Assumes docker-first validation", "Designed for modular FastAPI projects."]
   },
   "laravel-docker": {
@@ -63,7 +71,15 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       ]
     },
     manifestoTitle: "Laravel Domain Workflow Manifesto",
-    llmsSourceGlobs: ["app/**/*.php", ".cursor/**/*.md", ".cursor/**/*.mdc", "AGENTS.md", "MANIFESTO.md"],
+    llmsSourceGlobs: [
+      "app/**/*.php",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
     notes: ["Assumes commands run inside Docker container.", "Optimized for DDD-ish Laravel layout."]
   },
   "vue-quasar-capacitor": {
@@ -92,7 +108,15 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       ]
     },
     manifestoTitle: "Frontend App Workflow Manifesto",
-    llmsSourceGlobs: ["src/**/*.{ts,tsx,js,vue}", ".cursor/**/*.md", ".cursor/**/*.mdc", "AGENTS.md", "MANIFESTO.md"],
+    llmsSourceGlobs: [
+      "src/**/*.{ts,tsx,js,vue}",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
     notes: ["Uses gate-first verification.", "Works for Vue/Quasar/Capacitor style repos."]
   }
 };

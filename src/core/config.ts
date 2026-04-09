@@ -55,6 +55,7 @@ export function createConfig(params: {
     runtimes: {
       cursor: true,
       codex: true,
+      claude: true,
       agent: true,
       agents: true
     },
@@ -98,6 +99,7 @@ export function createConfig(params: {
       { path: "llms", policy: "managed" },
       { path: ".cursor", policy: "managed" },
       { path: ".codex", policy: "managed" },
+      { path: ".claude", policy: "managed" },
       { path: ".agent", policy: "managed" },
       { path: ".agents", policy: "managed" }
     ],
@@ -162,6 +164,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     plan_progress_runtime_root: config.artifacts.planProgressRoot,
     enable_cursor: config.runtimes.cursor,
     enable_codex: config.runtimes.codex,
+    enable_claude: config.runtimes.claude,
     enable_agent: config.runtimes.agent,
     enable_agents: config.runtimes.agents,
     manifesto_title: config.manifesto.title,

@@ -12,7 +12,7 @@ This repository uses the `ai-simple-template` workflow baseline.
 3. `.ai/rules/*`
 4. `.ai/skills/*`
 5. `.ai/reference/*`
-6. `.codex/hooks/*`
+6. `.codex/hooks/*` and `.claude/hooks/*`
 7. `Taskfile.yml`
 
 ## Workflow
@@ -29,6 +29,7 @@ Canonical phases:
 
 - Cursor: `{{ "enabled" if enable_cursor else "disabled" }}`
 - Codex: `{{ "enabled" if enable_codex else "disabled" }}`
+- Claude Code: `{{ "enabled" if enable_claude else "disabled" }}`
 - Antigravity `.agent`: `{{ "enabled" if enable_agent else "disabled" }}`
 - Codex agent mode `.agents`: `{{ "enabled" if enable_agents else "disabled" }}`
 

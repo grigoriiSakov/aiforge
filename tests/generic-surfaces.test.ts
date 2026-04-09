@@ -15,6 +15,12 @@ describe("generic reusable surfaces", () => {
 
     const expectedPaths = [
       ".cursor/HIERARCHY.md.jinja",
+      ".claude/README.md.jinja",
+      ".claude/hooks.json.jinja",
+      ".claude/hooks/pre-tool-use-guard.mjs.jinja",
+      ".claude/hooks/post-tool-use-guard.mjs.jinja",
+      ".claude/hooks/session-start-context.mjs.jinja",
+      ".claude/hooks/stop-delivery-guard.mjs.jinja",
       ".ai/reference/context-budget.md.jinja",
       ".ai/reference/context-artifacts.md.jinja",
       ".ai/reference/issue-spec-template.md.jinja",

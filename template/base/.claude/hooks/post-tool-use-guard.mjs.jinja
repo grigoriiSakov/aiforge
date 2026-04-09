@@ -1,0 +1,217 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+function readManifest() {
+  const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesCanonicalTask(command, taskCommand, taskName) {
+  const phrase = `${taskCommand} ${taskName}`.trim();
+  if (!phrase) {
+    return false;
+  }
+
+  const pattern = new RegExp(`(?:^|[;&|]\\s*)${escapeRegex(phrase)}(?:\\b|$)`);
+  return pattern.test(command);
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
+}
+
+function currentBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isRunBoundToCurrentContext(run, branchName) {
+  const cwd = normalizePath(process.cwd());
+  const worktreePath = normalizePath(run.worktreePath);
+  if (worktreePath && (cwd === worktreePath || cwd.startsWith(`${worktreePath}/`))) {
+    return true;
+  }
+  return Boolean(branchName && run.branch && branchName === String(run.branch));
+}
+
+function getCurrentOrchestratorRun() {
+  const registryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
+  const runsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
+  const registry = readJson(registryPath);
+  if (!registry) {
+    return null;
+  }
+
+  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const branchName = currentBranch();
+  const orderedIssueIds = [...Object.keys(registry.activeReservations ?? {}), ...Object.keys(registry.runs ?? {})];
+
+  for (const issueId of orderedIssueIds) {
+    const run = readJson(path.join(runsDir, `${issueId}.json`));
+    if (!run || !activeStatuses.has(run.status) || !isRunBoundToCurrentContext(run, branchName)) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function getCurrentSupervisorRun() {
+  const runsDir = path.join(process.cwd(), ".ai", "runtime", "initiative-supervisor", "runs");
+  if (!fs.existsSync(runsDir)) {
+    return null;
+  }
+
+  const branchName = currentBranch();
+  for (const fileName of fs.readdirSync(runsDir)) {
+    if (!fileName.endsWith(".json")) {
+      continue;
+    }
+    const run = readJson(path.join(runsDir, fileName));
+    if (!run || String(run.status ?? "") !== "running") {
+      continue;
+    }
+    if (branchName !== String(run.managerBranch ?? "")) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function nextActionForSupervisor(run) {
+  const issueId = run.currentIssueId ?? null;
+  const issue = issueId ? run.issues?.[issueId] : null;
+  if (!issue) {
+    return "launch_worker";
+  }
+  if (issue.status === "worker-running") {
+    return "wait_worker";
+  }
+  if (issue.status === "worker-completed") {
+    return "run_manager_review";
+  }
+  if (issue.status === "manager-accepted") {
+    return "finalize_issue";
+  }
+  return "launch_worker";
+}
+
+function nextActionForRun(run) {
+  if (run.status === "reserved" && !run.worktreePath) {
+    return "start_worktree";
+  }
+  if (run.status === "reviewing") {
+    return "run_review";
+  }
+  return "run_build";
+}
+
+let raw = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  raw += chunk;
+});
+process.stdin.on("end", () => {
+  const input = raw.trim() ? JSON.parse(raw) : {};
+  const command = String(input?.tool_input?.command ?? "");
+  const manifest = readManifest();
+  const activeRun = getCurrentOrchestratorRun();
+  const activeSupervisor = getCurrentSupervisorRun();
+  const taskCommand = String(manifest?.task?.command ?? "task");
+  const tasks = manifest?.task?.tasks ?? {};
+  const canonicalTaskNames = [tasks.verify, tasks.review, tasks.test, tasks.lint, tasks.build].filter(
+    (taskName) => typeof taskName === "string" && taskName.trim()
+  );
+  const touchedOrchestrator =
+    /\bnode\s+\.ai\/runtime\/orchestrator-state\.mjs\b/.test(command) ||
+    canonicalTaskNames.some((taskName) => matchesCanonicalTask(command, taskCommand, taskName));
+
+  if (activeRun && touchedOrchestrator) {
+    const nextAction = nextActionForRun(activeRun);
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          continue: true,
+          systemMessage:
+            `Orchestrator issue ${activeRun.issueId} is still active (status=${activeRun.status}, step=${activeRun.currentStep ?? "unknown"}). ` +
+            `Do not stop after this command. Next action: ${nextAction}. Continue until the orchestrator reaches flow_complete.`
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  if (activeSupervisor) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          continue: true,
+          systemMessage:
+            `Initiative supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
+            `Do not stop after this command. Next action: ${nextActionForSupervisor(activeSupervisor)}. ` +
+            "Manager mode must keep state on disk, launch isolated workers, and accept/reject work explicitly."
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  if (!canonicalTaskNames.some((taskName) => matchesCanonicalTask(command, taskCommand, taskName))) {
+    process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+    return;
+  }
+
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: true,
+        systemMessage:
+          typeof tasks.review === "string" && matchesCanonicalTask(command, taskCommand, tasks.review)
+            ? "Review task finished. Record the final verdict with `node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]`."
+            : "Task command finished. Re-check workflow state before stopping."
+      },
+      null,
+      2
+    )}\n`
+  );
+});

@@ -11,7 +11,7 @@ MVP-фокус:
 
 ## 2) Problem Statement
 
-Команды тратят время на ручную настройку `.cursor/.codex/.agent/.agents`, `AGENTS.md`, `MANIFESTO.md`, `llms`-артефактов и workflow-команд. Конфигурация дрейфует между проектами, обновления неаудируемые.
+Команды тратят время на ручную настройку `.cursor/.codex/.claude/.agent/.agents`, `AGENTS.md`, `MANIFESTO.md`, `llms`-артефактов и workflow-команд. Конфигурация дрейфует между проектами, обновления неаудируемые.
 
 ## 3) MVP Scope
 

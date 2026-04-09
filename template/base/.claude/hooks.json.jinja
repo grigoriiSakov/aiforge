@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/pre-tool-use-guard.mjs",
+            "statusMessage": "Checking manager-only edits",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/session-start-context.mjs",
+            "statusMessage": "Loading project context",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/stop-delivery-guard.mjs",
+            "statusMessage": "Checking workflow closeout",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

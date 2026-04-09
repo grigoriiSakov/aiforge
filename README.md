@@ -16,6 +16,7 @@ MVP CLI-конфигуратор для стандартизации AI-facing e
 - `.cursor/**`
 - `.cursor/settings.json`
 - `.codex/**`
+- `.claude/**`
 - `.agent/**`
 - `.agents/**` if Codex agent mode surface is enabled
 - `Taskfile.yml`
@@ -32,6 +33,11 @@ npx tsx src/cli/index.ts adopt --repo /path/to/existing-repo
 npx tsx src/cli/index.ts sync --repo /path/to/repo
 npx tsx src/cli/index.ts update --repo /path/to/repo
 npx tsx src/cli/index.ts doctor --repo /path/to/repo
+npx tsx src/cli/index.ts initiative-supervisor start --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts initiative-supervisor status --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts initiative-supervisor next --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts initiative-supervisor pause --repo /path/to/repo --slug my-initiative
+npx tsx src/cli/index.ts initiative-supervisor resume --repo /path/to/repo --slug my-initiative
 npx tsx src/cli/index.ts mcp scaffold --repo /path/to/repo
 npx tsx src/cli/index.ts manifesto init --repo /path/to/repo
 npx tsx src/cli/index.ts llms build --repo /path/to/repo
@@ -51,6 +57,10 @@ npx tsx src/cli/index.ts llms build --repo /path/to/repo
 - `.cursor/rules -> .ai/rules`
 - `.cursor/reference -> .ai/reference`
 - `.cursor/context -> .ai/context`
+- `.claude/skills -> .ai/skills`
+- `.claude/rules -> .ai/rules`
+- `.claude/hooks.json`
+- `.claude/hooks/*`
 - `.agent/skills -> .ai/skills`
 - `.agent/rules -> .ai/rules`
 - `.codex/skills -> .ai/skills`
@@ -154,6 +164,25 @@ aiforge linear scope set \
 - `.ai/project.manifest.json`
 - `.ai/linear-scope.json`
 - `.cursor/settings.json`
+
+## Initiative Supervisor
+
+Если initiative уже создал PRD / project / issue set, а локально есть
+`.ai/context/initiatives/<slug>/issues-manifest.json`, можно запускать supervisor loop:
+
+```bash
+aiforge initiative-supervisor start --slug billing-v2
+aiforge initiative-supervisor status --slug billing-v2
+aiforge initiative-supervisor next --slug billing-v2
+aiforge initiative-supervisor pause --slug billing-v2 --reason "waiting for manual review"
+aiforge initiative-supervisor resume --slug billing-v2
+```
+
+Важно:
+
+- `start` использует уже существующий `issues-manifest.json`; он не создаёт Linear project/issues заново
+- если run уже существует и находится в `paused`, `start` ведёт себя как `resume`
+- для уже созданных Linear initiatives достаточно сохранить тот же `<slug>` и issue IDs в локальном manifest
 
 ## Установка CLI как глобальной команды
 

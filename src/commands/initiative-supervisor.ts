@@ -1,0 +1,184 @@
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+import type { CommandResult } from "../core/types.js";
+
+const SUPERVISOR_RUNTIME_RELATIVE_PATH = path.join(".ai", "runtime", "initiative-supervisor-state.mjs");
+const SUPERVISOR_RUNS_DIR = path.join(".ai", "runtime", "initiative-supervisor", "runs");
+
+type SupervisorState = {
+  slug: string;
+  status: string;
+  manifestPath?: string;
+  managerBranch?: string;
+  currentIssueId?: string | null;
+};
+
+function runtimePath(repoRoot: string): string {
+  return path.join(repoRoot, SUPERVISOR_RUNTIME_RELATIVE_PATH);
+}
+
+function runStatePath(repoRoot: string, slug: string): string {
+  return path.join(repoRoot, SUPERVISOR_RUNS_DIR, `${slug}.json`);
+}
+
+function requireRuntime(repoRoot: string): string {
+  const targetPath = runtimePath(repoRoot);
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(
+      `Missing ${SUPERVISOR_RUNTIME_RELATIVE_PATH}. Run aiforge sync/init in the target repo before using initiative-supervisor.`
+    );
+  }
+  return targetPath;
+}
+
+function readExistingState(repoRoot: string, slug: string): SupervisorState | null {
+  const targetPath = runStatePath(repoRoot, slug);
+  if (!fs.existsSync(targetPath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(targetPath, "utf8")) as SupervisorState;
+}
+
+function invokeSupervisorRuntime(repoRoot: string, args: string[]): unknown {
+  const targetPath = requireRuntime(repoRoot);
+  const result = spawnSync("node", [targetPath, ...args], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `initiative-supervisor runtime failed: ${args.join(" ")}`);
+  }
+
+  const stdout = result.stdout.trim();
+  if (!stdout) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(stdout) as unknown;
+  } catch {
+    return { raw: stdout };
+  }
+}
+
+export function runInitiativeSupervisorStartCommand(
+  repoRoot: string,
+  options: {
+    slug: string;
+    manifest?: string;
+    baseBranch?: string;
+    managerBranch?: string;
+    maxAttempts?: number;
+  }
+): CommandResult {
+  const existing = readExistingState(repoRoot, options.slug);
+
+  if (existing) {
+    if (existing.status === "paused") {
+      const resumed = invokeSupervisorRuntime(repoRoot, ["resume", "--slug", options.slug]);
+      return {
+        ok: true,
+        code: 0,
+        message: `Initiative supervisor resumed for ${options.slug}`,
+        details: resumed as Record<string, unknown>
+      };
+    }
+
+    return {
+      ok: true,
+      code: 0,
+      message: `Initiative supervisor already exists for ${options.slug}`,
+      details: existing as Record<string, unknown>
+    };
+  }
+
+  const args = ["init", "--slug", options.slug];
+  if (options.manifest) {
+    args.push("--manifest", options.manifest);
+  }
+  if (options.baseBranch) {
+    args.push("--base-branch", options.baseBranch);
+  }
+  if (options.managerBranch) {
+    args.push("--manager-branch", options.managerBranch);
+  }
+  if (typeof options.maxAttempts === "number") {
+    args.push("--max-attempts", String(options.maxAttempts));
+  }
+
+  const created = invokeSupervisorRuntime(repoRoot, args);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor started for ${options.slug}`,
+    details: created as Record<string, unknown>
+  };
+}
+
+export function runInitiativeSupervisorStatusCommand(repoRoot: string, slug: string): CommandResult {
+  const payload = invokeSupervisorRuntime(repoRoot, ["status", "--slug", slug]);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor status for ${slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+
+export function runInitiativeSupervisorNextCommand(repoRoot: string, slug: string): CommandResult {
+  const payload = invokeSupervisorRuntime(repoRoot, ["graph", "next", "--slug", slug]);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor next action for ${slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+
+export function runInitiativeSupervisorPauseCommand(
+  repoRoot: string,
+  options: { slug: string; reason?: string }
+): CommandResult {
+  const args = ["pause", "--slug", options.slug];
+  if (options.reason) {
+    args.push("--reason", options.reason);
+  }
+  const payload = invokeSupervisorRuntime(repoRoot, args);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor paused for ${options.slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+
+export function runInitiativeSupervisorResumeCommand(repoRoot: string, slug: string): CommandResult {
+  const payload = invokeSupervisorRuntime(repoRoot, ["resume", "--slug", slug]);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor resumed for ${slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+
+export function runInitiativeSupervisorAbortCommand(
+  repoRoot: string,
+  options: { slug: string; reason?: string }
+): CommandResult {
+  const args = ["abort", "--slug", options.slug];
+  if (options.reason) {
+    args.push("--reason", options.reason);
+  }
+  const payload = invokeSupervisorRuntime(repoRoot, args);
+  return {
+    ok: true,
+    code: 0,
+    message: `Initiative supervisor aborted for ${options.slug}`,
+    details: payload as Record<string, unknown>
+  };
+}
+

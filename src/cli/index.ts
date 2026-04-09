@@ -8,6 +8,14 @@ import { runAdoptCommand } from "../commands/adopt.js";
 import { runDetectCommand } from "../commands/detect.js";
 import { runDoctorCommand } from "../commands/doctor.js";
 import { runInitCommand } from "../commands/init.js";
+import {
+  runInitiativeSupervisorAbortCommand,
+  runInitiativeSupervisorNextCommand,
+  runInitiativeSupervisorPauseCommand,
+  runInitiativeSupervisorResumeCommand,
+  runInitiativeSupervisorStartCommand,
+  runInitiativeSupervisorStatusCommand
+} from "../commands/initiative-supervisor.js";
 import { runLinearInitCommand } from "../commands/linear-init.js";
 import { runLinearScopeSetCommand } from "../commands/linear-scope-set.js";
 import { runLlmsBuildCommand } from "../commands/llms-build.js";
@@ -145,6 +153,104 @@ async function main(): Promise<void> {
     .option("--json", "Print JSON output", false)
     .action((options: { repo: string; json: boolean }) => {
       const result = runDoctorCommand(options.repo);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  const initiativeSupervisor = program.command("initiative-supervisor").description("Initiative supervisor runtime");
+  initiativeSupervisor
+    .command("start")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--manifest <path>", "Path to issues-manifest.json")
+    .option("--base-branch <name>", "Base branch for the initiative manager branch")
+    .option("--manager-branch <name>", "Manager branch name")
+    .option("--max-attempts <count>", "Max worker attempts per issue")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action(
+      (options: {
+        slug: string;
+        manifest?: string;
+        baseBranch?: string;
+        managerBranch?: string;
+        maxAttempts?: string;
+        repo: string;
+        json: boolean;
+      }) => {
+        const parsedMaxAttempts =
+          options.maxAttempts !== undefined ? Number.parseInt(options.maxAttempts, 10) : undefined;
+        const hasMaxAttempts = typeof parsedMaxAttempts === "number" && Number.isFinite(parsedMaxAttempts);
+        const result = runInitiativeSupervisorStartCommand(options.repo, {
+          slug: options.slug,
+          ...(options.manifest ? { manifest: options.manifest } : {}),
+          ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
+          ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
+          ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
+        });
+        printResult(result, options.json);
+        process.exit(result.code);
+      }
+    );
+
+  initiativeSupervisor
+    .command("status")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorStatusCommand(options.repo, options.slug);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  initiativeSupervisor
+    .command("next")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorNextCommand(options.repo, options.slug);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  initiativeSupervisor
+    .command("pause")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--reason <text>", "Pause reason")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorPauseCommand(options.repo, {
+        slug: options.slug,
+        ...(options.reason ? { reason: options.reason } : {})
+      });
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  initiativeSupervisor
+    .command("resume")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorResumeCommand(options.repo, options.slug);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  initiativeSupervisor
+    .command("abort")
+    .requiredOption("--slug <slug>", "Initiative slug")
+    .option("--reason <text>", "Abort reason")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
+      const result = runInitiativeSupervisorAbortCommand(options.repo, {
+        slug: options.slug,
+        ...(options.reason ? { reason: options.reason } : {})
+      });
       printResult(result, options.json);
       process.exit(result.code);
     });

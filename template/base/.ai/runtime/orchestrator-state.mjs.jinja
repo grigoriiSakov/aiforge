@@ -20,7 +20,7 @@ const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
 const PENDING_STATUSES = new Set(["queued", "blocked-by-conflict"]);
 const FLOW_COMPLETE_STATUSES = new Set(["awaiting-finalize", "done"]);
 const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
-const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".agent/", ".agents/"];
+const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".claude/", ".agent/", ".agents/"];
 const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.md", "Taskfile.yml"]);
 const ALLOWED_STATUS_TRANSITIONS = {
   submitted: new Set(["reserved", "queued", "blocked-by-conflict", "aborted"]),
@@ -180,7 +180,7 @@ function parseScope(rawScope) {
     const processClaims = [...scope.paths, ...scope.sharedSurfaces].filter(isProcessLayerPath);
     if (processClaims.length === 0) {
       throw new Error(
-        "touches_process_layer=true requires at least one claimed file in .ai/.cursor/.codex/.agent/.agents or root process files"
+        "touches_process_layer=true requires at least one claimed file in .ai/.cursor/.codex/.claude/.agent/.agents or root process files"
       );
     }
   }

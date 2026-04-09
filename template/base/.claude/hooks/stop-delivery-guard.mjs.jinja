@@ -1,0 +1,254 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
+const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
+const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
+const orchestratorRegistryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
+const orchestratorRunsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
+const supervisorRunsDir = path.join(process.cwd(), ".ai", "runtime", "initiative-supervisor", "runs");
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function loadRun(issueId) {
+  return readJson(path.join(orchestratorRunsDir, `${issueId}.json`));
+}
+
+function normalizePath(input) {
+  return String(input ?? "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
+}
+
+function currentBranch() {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function isRunBoundToCurrentContext(run, branchName) {
+  const cwd = normalizePath(process.cwd());
+  const worktreePath = normalizePath(run.worktreePath);
+  if (worktreePath && (cwd === worktreePath || cwd.startsWith(`${worktreePath}/`))) {
+    return true;
+  }
+  return Boolean(branchName && run.branch && branchName === String(run.branch));
+}
+
+function getCurrentOrchestratorRun() {
+  const registry = readJson(orchestratorRegistryPath);
+  if (!registry) {
+    return null;
+  }
+
+  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const branchName = currentBranch();
+  const orderedIssueIds = [...Object.keys(registry.activeReservations ?? {}), ...Object.keys(registry.runs ?? {})];
+
+  for (const issueId of orderedIssueIds) {
+    const run = loadRun(issueId);
+    if (!run || !activeStatuses.has(run.status) || !isRunBoundToCurrentContext(run, branchName)) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function getCurrentSupervisorRun() {
+  if (!fs.existsSync(supervisorRunsDir)) {
+    return null;
+  }
+
+  const branchName = currentBranch();
+  if (!branchName) {
+    return null;
+  }
+
+  for (const entry of fs.readdirSync(supervisorRunsDir)) {
+    if (!entry.endsWith(".json")) {
+      continue;
+    }
+    const run = readJson(path.join(supervisorRunsDir, entry));
+    if (!run || String(run.status ?? "") !== "running") {
+      continue;
+    }
+    if (branchName !== String(run.managerBranch ?? "")) {
+      continue;
+    }
+    return run;
+  }
+
+  return null;
+}
+
+function nextActionForRun(run) {
+  if (run.status === "reserved" && !run.worktreePath) {
+    return "start_worktree";
+  }
+  if (run.status === "reviewing") {
+    return "run_review";
+  }
+  return "run_build";
+}
+
+function nextActionForSupervisor(run) {
+  const currentIssueId = run.currentIssueId ?? null;
+  const issue = currentIssueId ? run.issues?.[currentIssueId] : null;
+  if (!issue) {
+    return "launch_worker";
+  }
+  if (issue.status === "worker-running") {
+    return "wait_worker";
+  }
+  if (issue.status === "worker-completed") {
+    return "run_manager_review";
+  }
+  if (issue.status === "manager-accepted") {
+    return "finalize_issue";
+  }
+  return "launch_worker";
+}
+
+const manifest = readJson(manifestPath);
+const state = readJson(taskStatePath);
+const reviewState = readJson(reviewStatePath);
+const activeRun = getCurrentOrchestratorRun();
+const activeSupervisor = getCurrentSupervisorRun();
+
+if (activeSupervisor) {
+  const nextAction = nextActionForSupervisor(activeSupervisor);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "initiative_supervisor_incomplete",
+        systemMessage:
+          `Initiative supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
+          `Do not stop. Next action: ${nextAction}. Keep the manager loop running until the supervisor reaches done/paused/failed explicitly in its runtime state.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (activeRun) {
+  const nextAction = nextActionForRun(activeRun);
+  const actionMessage =
+    nextAction === "start_worktree"
+      ? "create the orchestrator worktree and continue the flow"
+      : nextAction === "run_review"
+        ? "run review, record the verdict, and continue the flow"
+        : "continue build/test/verify until review is complete";
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "orchestrator_incomplete",
+        systemMessage:
+          `Orchestrator run ${activeRun.issueId} is still active (status=${activeRun.status}, step=${activeRun.currentStep ?? "unknown"}). ` +
+          `Do not stop. Next action: ${nextAction}. You must ${actionMessage} until the orchestrator reaches flow_complete.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (!manifest || !state) {
+  process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
+  process.exit(0);
+}
+
+const verifyTask = manifest.task.tasks.verify;
+const reviewTask = manifest.task.tasks.review;
+const taskCommand = manifest.task.command;
+const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
+
+if (!successfulVerify) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "verify_missing",
+        systemMessage: `Run ${manifest.task.command} ${verifyTask} before stopping.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (!reviewState) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_missing",
+        systemMessage:
+          `Run ${taskCommand} ${reviewTask} and record a final verdict with \`node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (reviewState.status === "pending" || reviewState.status === "missing") {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_pending",
+        systemMessage:
+          `Review is still pending after ${taskCommand} ${reviewTask}. Record a final verdict with \`node .ai/runtime/review-state.mjs verdict <clean|issues-found> [summary]\`.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (reviewState.status === "issues-found") {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_failed",
+        systemMessage: "Review found issues. Fix them before closing or rerun review and record a clean verdict."
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+process.stdout.write(
+  `${JSON.stringify(
+    {
+      continue: true,
+      systemMessage: "Workflow stop guard passed: verify evidence and clean review verdict found."
+    },
+    null,
+    2
+  )}\n`
+);

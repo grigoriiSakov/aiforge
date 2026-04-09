@@ -54,6 +54,10 @@ enable_codex:
   type: bool
   default: true
 
+enable_claude:
+  type: bool
+  default: true
+
 enable_agent:
   type: bool
   default: true

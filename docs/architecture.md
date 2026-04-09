@@ -40,6 +40,7 @@ Contains generated files for target repos:
 
 - `.cursor`
 - `.codex`
+- `.claude`
 - `.agent`
 - `.agents`
 - `AGENTS.md`

@@ -30,6 +30,7 @@ Precedence:
 Managed surfaces:
 - `.cursor/`
 - `.codex/`
+- `.claude/`
 - `.agent/`
 - `.agents/`
 - `AGENTS.md`
