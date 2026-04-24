@@ -5,7 +5,7 @@
 1. Point CLI at an existing repository.
 2. Run `detect` to inspect stack signals.
 3. Run `adopt` to create config + render managed surfaces.
-4. Run `doctor` to verify required surfaces are present.
+4. Run `doctor` to verify required surfaces are present (including `.aiforge.json` and runtime drift checks).
 
 ## Example
 

@@ -5,6 +5,10 @@ import process from "node:process";
 import { Command } from "commander";
 
 import { runAdoptCommand } from "../commands/adopt.js";
+import { runExtensionAddCommand } from "../commands/extension-add.js";
+import { runExtensionListCommand } from "../commands/extension-list.js";
+import { runExtensionRemoveCommand } from "../commands/extension-remove.js";
+import { runExtensionUpdateCommand } from "../commands/extension-update.js";
 import { runDetectCommand } from "../commands/detect.js";
 import { runDoctorCommand } from "../commands/doctor.js";
 import { runInitCommand } from "../commands/init.js";
@@ -24,6 +28,9 @@ import {
   runSupervisorStatusCommand,
   runSupervisorSyncImportCommand
 } from "../commands/supervisor.js";
+import { runSkillsAddGitCommand } from "../commands/skills-add.js";
+import { runSkillsListCommand } from "../commands/skills-list.js";
+import { runSkillsRemoveCommand } from "../commands/skills-remove.js";
 import { runSyncCommand } from "../commands/sync.js";
 import { runUpdateCommand } from "../commands/update.js";
 import { printResult } from "../core/output.js";
@@ -55,6 +62,7 @@ async function main(): Promise<void> {
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--project-name <name>", "Human-readable project name")
     .option("--profile <id>", "Profile id")
+    .option("--interactive", "Prompt for profile / project name on stdin", false)
     .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
@@ -63,6 +71,7 @@ async function main(): Promise<void> {
       projectName?: string;
       profile?: string;
       dryRun: boolean;
+      interactive: boolean;
       json: boolean;
     }) => {
       const initOptions: {
@@ -70,9 +79,11 @@ async function main(): Promise<void> {
         projectName?: string;
         profileId?: ProjectProfileId;
         dryRun: boolean;
+        interactive?: boolean;
       } = {
         repoRoot: options.repo,
-        dryRun: options.dryRun
+        dryRun: options.dryRun,
+        interactive: options.interactive
       };
 
       if (options.projectName) {
@@ -92,6 +103,7 @@ async function main(): Promise<void> {
     .command("adopt")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--profile <id>", "Profile id")
+    .option("--interactive", "Prompt for profile / project name on stdin", false)
     .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
@@ -99,15 +111,18 @@ async function main(): Promise<void> {
       repo: string;
       profile?: string;
       dryRun: boolean;
+      interactive: boolean;
       json: boolean;
     }) => {
       const adoptOptions: {
         repoRoot: string;
         profileId?: ProjectProfileId;
         dryRun: boolean;
+        interactive?: boolean;
       } = {
         repoRoot: options.repo,
-        dryRun: options.dryRun
+        dryRun: options.dryRun,
+        interactive: options.interactive
       };
 
       if (options.profile) {
@@ -395,6 +410,79 @@ async function main(): Promise<void> {
         process.exit(result.code);
       }
     );
+
+  const ext = program.command("extension").description("Install local aiforge extensions (.aiforge/extensions)");
+  ext
+    .command("add")
+    .argument("<path>", "Path to extension directory containing extension.json")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((sourcePath: string, options: { repo: string; json: boolean }) => {
+      const result = runExtensionAddCommand(options.repo, sourcePath);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+  ext
+    .command("list")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { repo: string; json: boolean }) => {
+      const result = runExtensionListCommand(options.repo);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+  ext
+    .command("remove")
+    .argument("<name>", "Extension name from manifest")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((name: string, options: { repo: string; json: boolean }) => {
+      const result = runExtensionRemoveCommand(options.repo, name);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+  ext
+    .command("update")
+    .argument("<name>", "Extension name")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((name: string, options: { repo: string; json: boolean }) => {
+      const result = runExtensionUpdateCommand(options.repo, name);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+
+  const skills = program.command("skills").description("Remote / git-backed skills under .ai/skills");
+  skills
+    .command("add-git")
+    .requiredOption("--url <gitUrl>", "Git URL (shallow clone)")
+    .requiredOption("--id <skillId>", "Destination directory name under .ai/skills")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { url: string; id: string; repo: string; json: boolean }) => {
+      const result = runSkillsAddGitCommand(options.repo, String(options.url), String(options.id));
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+  skills
+    .command("list")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((options: { repo: string; json: boolean }) => {
+      const result = runSkillsListCommand(options.repo);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
+  skills
+    .command("remove")
+    .argument("<id>", "Skill id directory name")
+    .option("--repo <path>", "Repository root", process.cwd())
+    .option("--json", "Print JSON output", false)
+    .action((id: string, options: { repo: string; json: boolean }) => {
+      const result = runSkillsRemoveCommand(options.repo, id);
+      printResult(result, options.json);
+      process.exit(result.code);
+    });
 
   const mcp = program.command("mcp").description("MCP helpers");
   mcp

@@ -3,6 +3,7 @@ import path from "node:path";
 import YAML from "yaml";
 
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
+import { ensureInstallerState } from "./state.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
 import { DEFAULT_TASK_COMMAND, renderTaskCommands } from "./task-runner.js";
 import type { DetectionResult, ProjectConfig, ProjectProfileId } from "./types.js";
@@ -98,6 +99,7 @@ export function createConfig(params: {
       markdown: ""
     },
     managedSurfaces: [
+      { path: ".aiforge.json", policy: "managed" },
       { path: ".ai", policy: "managed" },
       { path: "AGENTS.md", policy: "managed" },
       { path: "MANIFESTO.md", policy: "managed" },
@@ -148,6 +150,7 @@ export function writeMachineManifest(repoRoot: string, config: ProjectConfig): s
   const manifestPath = path.join(repoRoot, MACHINE_MANIFEST_PATH);
   ensureDir(path.dirname(manifestPath));
   writeTextFile(manifestPath, `${JSON.stringify(normalized, null, 2)}\n`);
+  ensureInstallerState(repoRoot, normalized);
   return manifestPath;
 }
 
@@ -289,6 +292,11 @@ function validateConfig(config: ProjectConfig): void {
   getProfileDefinition(config.profile.id);
 }
 
+/**
+ * Rebases `profile.id` and profile-derived **command templates** onto the existing config
+ * without clobbering repo-local truth: Linear scopes, workflow tracker/language, manifesto
+ * body, agents/projectRules prose, and non-empty llms globs stay as in `ai.config.yaml`.
+ */
 export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectProfileId): ProjectConfig {
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
@@ -296,6 +304,17 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
     ...config.task,
     command: taskCommand
   };
+  const profileCommands = renderTaskCommands(profile.taskCommands, taskCommand);
+  const userGlobs = config.llms?.sourceGlobs;
+  const sourceGlobs =
+    Array.isArray(userGlobs) && userGlobs.length > 0 ? userGlobs : profile.llmsSourceGlobs;
+  const isProfileSwitch = config.profile.id !== profileId;
+  const commands = isProfileSwitch
+    ? profileCommands
+    : {
+        ...profileCommands,
+        ...config.commands
+      };
   return {
     ...config,
     profile: {
@@ -303,25 +322,26 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
       id: profileId
     },
     workflow: {
-      ...config.workflow,
-      tracker: profile.trackerDefault,
-      language: profile.languageDefault
+      ...config.workflow
     },
     linear: {
-      enabled: profile.linearDefaults.enabled,
-      requireTrackerForIssueFlow: profile.trackerDefault === "linear",
-      scopes: profile.linearDefaults.scopes
+      ...config.linear
     },
     task,
     execution: normalizeExecutionConfig(config.execution, task),
-    commands: renderTaskCommands(profile.taskCommands, taskCommand),
+    commands,
     manifesto: {
-      ...config.manifesto,
-      title: profile.manifestoTitle
+      ...config.manifesto
+    },
+    agents: {
+      ...config.agents
     },
     llms: {
       ...config.llms,
-      sourceGlobs: profile.llmsSourceGlobs
+      sourceGlobs
+    },
+    projectRules: {
+      ...config.projectRules
     }
   };
 }

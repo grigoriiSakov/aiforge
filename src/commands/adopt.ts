@@ -3,41 +3,71 @@ import path from "node:path";
 import { buildCopierAnswers, createConfig, saveConfig } from "../core/config.js";
 import {
   cleanupTemporaryAnswersFile,
-  ensureCopierAnswersFile,
   ensureCopierInstalled,
   runCopierCopy,
   writeTemporaryAnswersFile
 } from "../core/copier.js";
 import { detectProfile } from "../core/profiles/detect.js";
-import { buildLlms } from "../core/llms.js";
-import { generateManifesto } from "../core/manifesto.js";
-import { scaffoldMcp } from "../core/mcp.js";
-import { applyRuntimeFlags } from "../core/runtime.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
-import { ensureTaskRunnerInstalled } from "../core/task-runner.js";
+import { finalizeAfterCopierCopy } from "../core/setup.js";
 import { resolveTemplatePath } from "../core/template.js";
+import { promptInitWizard } from "../core/wizard.js";
 import type { CommandResult, ProjectProfileId } from "../core/types.js";
 
 export async function runAdoptCommand(options: {
   repoRoot: string;
   profileId?: ProjectProfileId;
   dryRun: boolean;
+  interactive?: boolean;
 }): Promise<CommandResult> {
   ensureCopierInstalled();
 
   const detected = detectProfile(options.repoRoot);
-  const profileId = options.profileId ?? detected.recommendedProfile;
-  if (!options.profileId && detected.score === 0) {
-    throw new Error("Unable to detect profile confidently. Pass --profile explicitly.");
+  let profileId = options.profileId ?? detected.recommendedProfile;
+  let displayName: string | undefined;
+  let wizardAnswers: Awaited<ReturnType<typeof promptInitWizard>> | undefined;
+
+  if (options.interactive) {
+    wizardAnswers = await promptInitWizard({
+      repoSlug: path.basename(options.repoRoot),
+      detected,
+      forceProfilePrompt: Boolean(
+        options.interactive && (detected.score === 0 || detected.confidence === "low")
+      )
+    });
+    if (wizardAnswers.profileId) {
+      profileId = wizardAnswers.profileId;
+    }
+    if (wizardAnswers.projectName) {
+      displayName = wizardAnswers.projectName;
+    }
   }
+
+  if (!options.profileId && !options.interactive && detected.score === 0) {
+    throw new Error("Unable to detect profile confidently. Pass --profile explicitly or use --interactive.");
+  }
+  if (detected.score === 0 && !profileId) {
+    throw new Error("No profile selected. Pass --profile or use --interactive to choose a profile.");
+  }
+
   const projectSlug = path.basename(options.repoRoot);
   const config = createConfig({
     repoRoot: options.repoRoot,
     projectSlug,
-    projectName: projectSlug,
+    projectName: displayName ?? projectSlug,
     profileId,
     detectionResult: detected
   });
+
+  if (wizardAnswers?.manifestoStub) {
+    config.manifesto.markdown = `${wizardAnswers.manifestoStub}\n`;
+  }
+  if (wizardAnswers?.agentsStub) {
+    config.agents = { ...config.agents, markdown: `${wizardAnswers.agentsStub}\n` };
+  }
+  if (wizardAnswers?.projectRulesStub) {
+    config.projectRules = { ...config.projectRules, markdown: `${wizardAnswers.projectRulesStub}\n` };
+  }
 
   const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(config));
 
@@ -59,33 +89,24 @@ export async function runAdoptCommand(options: {
       ok: true,
       code: 0,
       message: `Dry-run adopt for profile ${profileId}`,
-      details: { detected, wouldWrite: ["ai.config.yaml", ".ai/project.manifest.json"] }
+      details: { detected, wouldWrite: ["ai.config.yaml", ".ai/project.manifest.json", ".aiforge.json"] }
     };
   }
 
   const snapshot = createManagedSnapshot(options.repoRoot, config);
   let configPath = "";
+  const templatePath = resolveTemplatePath();
   try {
     configPath = saveConfig(options.repoRoot, config);
     runCopierCopy({
-      templatePath: resolveTemplatePath(),
+      templatePath,
       destinationPath: options.repoRoot,
       dataFilePath: answersFilePath,
       dryRun: false,
       force: false,
       trust: true
     });
-    ensureTaskRunnerInstalled(options.repoRoot);
-    ensureCopierAnswersFile({
-      destinationPath: options.repoRoot,
-      templatePath: resolveTemplatePath(),
-      answers: buildCopierAnswers(config)
-    });
-
-    applyRuntimeFlags(options.repoRoot);
-    generateManifesto(options.repoRoot);
-    await buildLlms(options.repoRoot);
-    scaffoldMcp(options.repoRoot);
+    await finalizeAfterCopierCopy(options.repoRoot, templatePath, config);
   } catch (error) {
     restoreManagedSnapshot(options.repoRoot, snapshot);
     throw error;

@@ -3,7 +3,19 @@ import path from "node:path";
 
 import { CONFIG_FILE_NAME, MACHINE_MANIFEST_PATH, loadConfig } from "./config.js";
 import { readJsonFileIfExists } from "./filesystem.js";
-import type { CommandResult } from "./types.js";
+import { resolveMcpProvider } from "./mcp-registry.js";
+import { INSTALLER_STATE_FILE_NAME, loadInstallerStateOrNull } from "./state.js";
+import type { CommandResult, RuntimeFlags } from "./types.js";
+
+function runtimesEqual(a: RuntimeFlags, b: RuntimeFlags): boolean {
+  return (
+    a.cursor === b.cursor &&
+    a.codex === b.codex &&
+    a.claude === b.claude &&
+    a.agent === b.agent &&
+    a.agents === b.agents
+  );
+}
 
 export function runDoctor(repoRoot: string): CommandResult {
   const configPath = path.join(repoRoot, CONFIG_FILE_NAME);
@@ -57,10 +69,64 @@ export function runDoctor(repoRoot: string): CommandResult {
     };
   }
 
+  const installerPath = path.join(repoRoot, INSTALLER_STATE_FILE_NAME);
+  if (!fs.existsSync(installerPath)) {
+    return {
+      ok: false,
+      code: 3,
+      message: `Missing ${INSTALLER_STATE_FILE_NAME}`,
+      details: {
+        installerPath: INSTALLER_STATE_FILE_NAME,
+        remediation: "Run aiforge sync or aiforge init to create installer state."
+      }
+    };
+  }
+
+  const installerState = loadInstallerStateOrNull(repoRoot, config);
+  if (!installerState) {
+    return {
+      ok: false,
+      code: 3,
+      message: `Invalid or empty ${INSTALLER_STATE_FILE_NAME}`,
+      details: { remediation: "Run aiforge sync to regenerate installer state." }
+    };
+  }
+
+  if (!runtimesEqual(installerState.runtimesEnabled, config.runtimes)) {
+    return {
+      ok: false,
+      code: 3,
+      message: "Installer state drift: runtimes in .aiforge.json do not match ai.config.yaml",
+      details: {
+        expected: config.runtimes,
+        actual: installerState.runtimesEnabled,
+        remediation: "Run aiforge sync to refresh .aiforge.json from ai.config.yaml."
+      }
+    };
+  }
+
+  const mcpEnvHints: string[] = [];
+  if (config.features.mcp) {
+    for (const ph of config.mcp.placeholders ?? []) {
+      const def = resolveMcpProvider(ph);
+      if (!def?.requiredEnv) {
+        continue;
+      }
+      for (const envName of def.requiredEnv) {
+        if (!process.env[envName]) {
+          mcpEnvHints.push(`${def.id}: set environment variable ${envName}`);
+        }
+      }
+    }
+  }
+
   return {
     ok: true,
     code: 0,
     message: "Doctor check passed",
-    details: { profile: config.profile.id }
+    details: {
+      profile: config.profile.id,
+      ...(mcpEnvHints.length > 0 ? { mcpEnvHints } : {})
+    }
   };
 }

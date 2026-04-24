@@ -1,17 +1,12 @@
 import {
   cleanupTemporaryAnswersFile,
-  ensureCopierAnswersFile,
   ensureCopierInstalled,
   runCopierCopy,
   writeTemporaryAnswersFile
 } from "../core/copier.js";
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
-import { buildLlms } from "../core/llms.js";
-import { generateManifesto } from "../core/manifesto.js";
-import { scaffoldMcp } from "../core/mcp.js";
-import { applyRuntimeFlags } from "../core/runtime.js";
+import { finalizeAfterCopierCopy } from "../core/setup.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
-import { ensureTaskRunnerInstalled } from "../core/task-runner.js";
 import { resolveTemplatePath } from "../core/template.js";
 import type { CommandResult, ProjectProfileId } from "../core/types.js";
 
@@ -46,31 +41,22 @@ export async function runUpdateCommand(
   }
 
   const snapshot = createManagedSnapshot(repoRoot, config);
+  const templatePath = resolveTemplatePath();
   try {
     if (profileId) {
       saveConfig(repoRoot, config);
     } else {
       writeMachineManifest(repoRoot, config);
     }
-    ensureCopierAnswersFile({
-      destinationPath: repoRoot,
-      templatePath: resolveTemplatePath(),
-      answers: buildCopierAnswers(config)
-    });
     runCopierCopy({
-      templatePath: resolveTemplatePath(),
+      templatePath,
       destinationPath: repoRoot,
       dataFilePath: answersFilePath,
       dryRun: false,
       force: false,
       trust: true
     });
-    ensureTaskRunnerInstalled(repoRoot);
-
-    applyRuntimeFlags(repoRoot);
-    generateManifesto(repoRoot);
-    await buildLlms(repoRoot);
-    scaffoldMcp(repoRoot);
+    await finalizeAfterCopierCopy(repoRoot, templatePath, config);
   } catch (error) {
     restoreManagedSnapshot(repoRoot, snapshot);
     throw error;

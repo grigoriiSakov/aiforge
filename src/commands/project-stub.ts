@@ -76,7 +76,7 @@ Please analyze this project and produce only the project-specific additions I st
 - \`Taskfile.yml\`
 - \`.ai/linear-scope.json\`
 - \`.cursor/settings.json\`
-- \`.cursor/mcp.example.json\`
+- \`.cursor/mcp.json\` and \`.cursor/mcp/mcp.example.json\`
 
 ## Add any missing project-specific rules if needed
 

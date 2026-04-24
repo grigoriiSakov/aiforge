@@ -1139,7 +1139,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     expect(rawLegacyConfig).not.toContain("\nprojectRules:\n");
     expect(rawLegacyConfig).not.toContain("\nagents:\n  markdown:");
     expect(rawLegacyConfig).not.toContain("\n  markdown: \"\"");
-    expect(rawLegacyConfig).not.toContain("- path: .ai");
+    expect(rawLegacyConfig).not.toContain("- path: .ai\n");
 
     const result = await runSyncCommand(repoRoot, false);
     expect(result.ok).toBe(true);
@@ -2021,6 +2021,6 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(result.message).toContain("agents.markdown");
     expect(result.message).toContain("worktree strategy");
     expect(result.message).toContain("execution");
-    expect(result.message).toContain(".cursor/mcp.example.json");
+    expect(result.message).toMatch(/\.cursor\/mcp\.json|mcp\.example\.json/);
   });
 });

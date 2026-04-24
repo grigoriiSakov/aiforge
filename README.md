@@ -1,101 +1,243 @@
 # aiforge
 
-MVP CLI-конфигуратор для стандартизации AI-facing engineering surfaces в новых и существующих репозиториях.
+MVP CLI для стандартизации AI-facing слоя в новых и существующих репозиториях: единый `ai.config.yaml`, шаблон через Copier, task-runner, MCP, расширения и remote skills.
 
-## Stack
+## Стек
 
 - Node.js + TypeScript
-- Copier как template/update engine
-- Task как единый command layer
+- Copier — template / update
+- Task (`go-task`) — command layer в целевом проекте
+
+---
+
+## Быстрый старт (разработка CLI)
+
+Пути ниже **примеры**: подставь каталог, куда **ты** клонировал репозиторий (или задай переменную один раз).
+
+```bash
+# 1) Клон и вход в репозиторий aiforge (имя папки — любое)
+git clone <URL-репозитория> aiforge
+cd aiforge
+
+# Удобно зафиксировать корень в переменной (опционально)
+export AIFORGE_SRC="$(pwd)"
+
+# 2) Сборка и глобальная команда `aiforge` через npm link
+npm ci
+npm run build
+npm link
+
+# 3) Проверка
+aiforge --help
+```
+
+Дальше в **любом** проекте (другой каталог):
+
+```bash
+cd /path/to/your-app
+aiforge detect
+aiforge init --profile laravel-docker
+# или интерактив: aiforge init --interactive
+aiforge doctor
+```
+
+По умолчанию `--repo` не нужен: CLI использует **текущую директорию** (`process.cwd()`).
+
+---
+
+## Установка CLI (варианты)
+
+Во всех блоках вместо `cd …` можно писать `cd "$AIFORGE_SRC"`, если переменная задана как в примере выше.
+
+### Вариант 1 — `npm link` (удобно для разработки)
+
+```bash
+cd /path/to/aiforge-repo
+npm ci
+npm run build
+npm link
+aiforge --help
+```
+
+### Вариант 2 — глобальная установка без symlink
+
+```bash
+cd /path/to/aiforge-repo
+npm ci
+npm run build
+npm install -g .
+```
+
+### Вариант 3 — разовый запуск без `npm link`
+
+Из корня репозитория aiforge:
+
+```bash
+cd /path/to/aiforge-repo
+npm ci
+npm run build
+node ./dist/src/cli/index.js --help
+```
+
+Явный репозиторий для команд:
+
+```bash
+node /path/to/aiforge-repo/dist/src/cli/index.js doctor --repo /path/to/your-app
+```
+
+---
 
 ## Что генерируется
 
-- `AGENTS.md`
-- `MANIFESTO.md`
-- `.ai/**`
-- `.cursor/**`
-- `.cursor/settings.json`
-- `.codex/**`
-- `.claude/**`
-- `.agent/**`
-- `.agents/**` if Codex agent mode surface is enabled
-- `Taskfile.yml`
-- `llms.txt`
-- `llms/**`
+| Поверхность | Назначение |
+|-------------|------------|
+| `ai.config.yaml` | Контракт процесса: профиль, runtimes, entrypoints, `manifesto` / `agents` / `projectRules` |
+| `.ai/**` | Skills, rules, reference, runtime |
+| `AGENTS.md`, `MANIFESTO.md` | Собираются из YAML (не править как SoT вручную) |
+| `.cursor/**`, `.codex/**`, `.claude/**`, `.agent/**`, `.agents/**` | Runtime-обвязка и symlinks на `.ai` |
+| `Taskfile.yml`, `llms.txt`, `llms/**` | Task layer и LLM context |
+| `.ai/project.manifest.json` | Зеркало YAML для хуков без парсера |
+| `.aiforge.json` | Installer state: MCP, extensions, remote skills, security log, runtimes для `doctor` |
+| MCP JSON | `.cursor/mcp.json`, `.mcp.json`, `.codex/mcp.json` — серверы с префиксом `aiforge-*` |
 
-## Команды
+---
+
+## Dual-state: процесс vs installer
+
+- **`ai.config.yaml`** — durable process contract.
+- **`.ai/project.manifest.json`** — зеркало для инструментов без YAML.
+- **`.aiforge.json`** — то, чем владеет CLI (MCP managed blocks, extensions, remote skills, последний security scan, согласованность runtimes с YAML).
+
+После `saveConfig` / `writeMachineManifest` installer state подтягивается; `aiforge doctor` требует `.aiforge.json` и проверяет runtimes.
+
+---
+
+## `sync`, `update` и `ai.config.yaml`
+
+Типичный сценарий обновления шаблона **без** смены профиля:
 
 ```bash
-npm run build
-npx tsx src/cli/index.ts detect --repo /path/to/repo
-npx tsx src/cli/index.ts init --repo /path/to/repo
-npx tsx src/cli/index.ts adopt --repo /path/to/existing-repo
-npx tsx src/cli/index.ts sync --repo /path/to/repo
-npx tsx src/cli/index.ts update --repo /path/to/repo
-npx tsx src/cli/index.ts doctor --repo /path/to/repo
-npx tsx src/cli/index.ts supervisor import --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts supervisor init --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts supervisor daemon --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts supervisor status --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts supervisor pause --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts supervisor resume --repo /path/to/repo --slug my-initiative
-npx tsx src/cli/index.ts mcp scaffold --repo /path/to/repo
-npx tsx src/cli/index.ts manifesto init --repo /path/to/repo
-npx tsx src/cli/index.ts llms build --repo /path/to/repo
+cd /path/to/your-app
+aiforge sync
+# или
+aiforge update
 ```
+
+В этом режиме **`ai.config.yaml` не перезаписывается** — обновляются managed surfaces (Copier + post-steps), плюс манифест/`.aiforge.json`. Твои секции вроде `manifesto.markdown`, `linear.scopes`, `agents`, `projectRules`, кастомные `commands` для **того же** `profile.id` сохраняются.
+
+Явная смена профиля (редкий случай):
+
+```bash
+aiforge sync --profile vue-quasar-capacitor
+```
+
+Тогда YAML пересохраняется: **`profile.id` и шаблон команд** берутся из нового профиля, а repo-local куски (`linear`, `workflow`, `manifesto` body, `agents`, `projectRules`, непустые `llms.sourceGlobs`) **не затираются** логикой merge в CLI.
+
+---
+
+## Команды (шпаргалка)
+
+Разработка из исходников aiforge (замени пути):
+
+```bash
+cd /path/to/aiforge-repo
+npm run build
+npx tsx src/cli/index.ts detect --repo /path/to/your-app
+npx tsx src/cli/index.ts init --repo /path/to/your-app --interactive
+npx tsx src/cli/index.ts adopt --repo /path/to/existing-app
+npx tsx src/cli/index.ts sync --repo /path/to/your-app
+npx tsx src/cli/index.ts update --repo /path/to/your-app
+npx tsx src/cli/index.ts doctor --repo /path/to/your-app
+```
+
+После `npm link` из каталога приложения:
+
+```bash
+aiforge detect
+aiforge init --profile python-fastapi-docker
+aiforge sync
+aiforge doctor
+```
+
+Расширения и skills:
+
+```bash
+aiforge extension add /path/to/extension --repo /path/to/your-app
+aiforge extension list
+aiforge extension remove <name>
+aiforge extension update <name>
+
+aiforge skills add-git --url https://example.com/skills.git --id my-remote-skills
+aiforge skills list
+aiforge skills remove <id>
+```
+
+Прочее:
+
+```bash
+aiforge mcp scaffold
+aiforge manifesto init
+aiforge llms build
+aiforge project-stub
+```
+
+Supervisor (low-level control plane), из корня целевого репо:
+
+```bash
+aiforge supervisor import --slug my-initiative --manifest .ai/context/initiatives/my-initiative/issues-manifest.json
+aiforge supervisor init --slug my-initiative
+aiforge supervisor daemon --slug my-initiative
+aiforge supervisor status --slug my-initiative
+aiforge supervisor pause --slug my-initiative --reason "manual hold"
+aiforge supervisor resume --slug my-initiative
+aiforge supervisor abort --slug my-initiative --reason "stop loop"
+```
+
+Полный список: `aiforge supervisor --help`.
+
+### `--interactive` (`init` / `adopt`)
+
+Stdin: выбор профиля (если детект слабый), имя проекта, опционально — **короткие однострочные заготовки** для `manifesto.markdown`, `agents.markdown`, `projectRules.markdown` (после вопроса «Add one-line starter text… [y/N]»).
+
+---
+
+## MCP
+
+Плейсхолдеры `ai.config.yaml` → `mcp.placeholders` мапятся на registry (`src/core/mcp-registry.ts`): `linear`, `github`, `filesystem`, `postgres`, `playwright`, `chrome-devtools`, `framework-docs`, `project-db`.
+
+`aiforge mcp scaffold` мержит серверы под ключами `aiforge-*`, не удаляя чужие записи. Подсказки по env — в `aiforge doctor` (`mcpEnvHints`).
+
+---
+
+## Extensions и remote skills
+
+- **`extension add <path>`** — локальная директория с `extension.json`; security gate перед установкой.
+- **`extension update` / `remove` / `list`** — lifecycle.
+- **`skills add-git --url … --id …`** — shallow clone, gate, копия в `.ai/skills/<id>`, запись в `.aiforge.json`.
+
+Подробнее: [docs/extensions-remote-skills.md](docs/extensions-remote-skills.md).
+
+---
 
 ## Generic process kernel
 
-`aiforge` теперь тащит не только runtime surfaces, но и reusable process kernel:
+Общий слой (не привязан к конкретному стеку): `.ai/rules`, `.ai/skills`, `.ai/reference`, `.ai/context`, линки из `.cursor` / `.codex` / `.claude` / `.agent` / `.agents` на эти деревья. Профильные ограничения — отдельными rules и `ai.config.yaml`.
 
-- `.ai/rules/*`
-- `.ai/skills/*`
-- `.ai/reference/*`
-- `.ai/context/*`
-- `.ai/linear-scope.json`
-- `.cursor/HIERARCHY.md`
-- `.cursor/skills -> .ai/skills`
-- `.cursor/rules -> .ai/rules`
-- `.cursor/reference -> .ai/reference`
-- `.cursor/context -> .ai/context`
-- `.claude/skills -> .ai/skills`
-- `.claude/rules -> .ai/rules`
-- `.claude/hooks.json`
-- `.claude/hooks/*`
-- `.agent/skills -> .ai/skills`
-- `.agent/rules -> .ai/rules`
-- `.codex/skills -> .ai/skills`
-- `.codex/rules -> .ai/rules`
-- `.agents/skills -> .ai/skills` when Codex agent mode compatibility is enabled
+---
 
-Это generic слой. Он не должен знать твой конкретный стек глубоко.
-Например, `workflow-gates.mdc` тащит общие plan/build/test/review/docs gate'ы, а profile-specific ограничения докручиваются отдельными rules поверх него.
+## Project-specific: YAML и `project-stub`
 
-## Project-specific customization stub
+Источник истины для генерируемых `MANIFESTO.md` / `AGENTS.md` / `.ai/rules/project-profile.mdc` — поля в **`ai.config.yaml`**. После `sync` / `update` эти файлы пересобираются.
 
-Когда generic kernel уже развернут, но ещё нужны project-dependent rules/commands, можно вывести готовый prompt-stub:
+Готовый текст для вставки в чат модели (чтобы она помогла заполнить YAML):
 
 ```bash
 aiforge project-stub
 ```
 
-Он печатает в консоль markdown-заглушку, которую можно копипастнуть модели, чтобы она:
+Примеры фрагментов YAML:
 
-- проанализировала конкретный репозиторий;
-- подготовила durable project-specific rules в `ai.config.yaml` -> `projectRules.markdown`;
-- подготовила durable manifesto content в `ai.config.yaml` -> `manifesto.markdown`;
-- подготовила durable `AGENTS.md` content в `ai.config.yaml` -> `agents.markdown`;
-- обновила `Taskfile.yml` и связанные generated surfaces;
-- настроила tracker/MCP-specific surfaces без переписывания generic kernel.
-
-Важно:
-
-- не редактируй руками `.ai/rules/project-profile.mdc` как источник истины;
-- не редактируй руками `MANIFESTO.md` как источник истины;
-- не редактируй руками `AGENTS.md` как источник истины;
-- эти файлы генерируются из `ai.config.yaml` и будут пересобраны при `aiforge sync` / `aiforge update`.
-
-Пример durable project-specific rules:
+**`projectRules.markdown`:**
 
 ```yaml
 projectRules:
@@ -105,146 +247,56 @@ projectRules:
     - Do not introduce cross-module imports from `app/*` into `domain/*`.
 ```
 
-Пример durable manifesto:
+**`manifesto`:**
 
 ```yaml
 manifesto:
   title: Project Workflow Manifesto
   path: MANIFESTO.md
   markdown: |
-    # Project Workflow Manifesto
-
     ## Non-Negotiables
-
     - All externally visible behavior changes require spec notes.
-    - Every non-trivial task must leave behind durable verification evidence.
 ```
 
-Пример durable AGENTS:
+**`agents`:**
 
 ```yaml
 agents:
   markdown: |
-    # AGENTS.md
-
     ## Repo-Specific Constraints
-
     - Always treat `apps/api` as the system-of-record boundary.
-    - Never modify deployment manifests without updating rollout notes.
 ```
+
+---
 
 ## Linear helpers
 
-Чтобы не править shared tracker scope руками:
+Инициализация scope-файлов из текущего YAML:
 
 ```bash
 aiforge linear init
 ```
 
-Это переинициализирует:
-
-- `.ai/linear-scope.json`
-- `.cursor/settings.json`
-
-из текущего `ai.config.yaml`.
-
-Чтобы выставить team/project/labels явно:
+Явная привязка team/project/labels:
 
 ```bash
 aiforge linear scope set \
   --team "Vertex Backend" \
-  --team-id "team-uuid" \
+  --team-id "00000000-0000-0000-0000-000000000000" \
   --project "Kernel" \
-  --project-id "project-uuid" \
+  --project-id "00000000-0000-0000-0000-000000000001" \
   --label backend automation
 ```
 
-Эта команда обновляет:
+Обновляет `ai.config.yaml`, `.ai/project.manifest.json`, `.ai/linear-scope.json`, `.cursor/settings.json`.
 
-- `ai.config.yaml`
-- `.ai/project.manifest.json`
-- `.ai/linear-scope.json`
-- `.cursor/settings.json`
+---
 
 ## Supervisor
 
-`supervisor` больше не рекламируется как обычный user-facing CLI workflow. Нормальный UX теперь должен жить в чате через skill `/supervisor`, а CLI остается low-level control plane для runtime scripts, daemon loop и recovery.
+Основной UX — через skill `/supervisor` в чате; CLI остаётся control plane для импорта, daemon, pause/resume. Durable state: `.ai/runtime/supervisor/**`.
 
-Внутренний control plane выглядит так:
-
-```bash
-aiforge supervisor import --slug billing-v2 --manifest .ai/context/initiatives/billing-v2/issues-manifest.json
-aiforge supervisor init --slug billing-v2
-aiforge supervisor daemon --slug billing-v2
-aiforge supervisor status --slug billing-v2
-aiforge supervisor pause --slug billing-v2 --reason "manual hold"
-aiforge supervisor resume --slug billing-v2
-aiforge supervisor abort --slug billing-v2 --reason "stop loop"
-```
-
-Важно:
-
-- основной запуск предполагается из чата, не через ручной `next`
-- issue source сначала нормализуется в `.ai/runtime/supervisor/imports/<slug>.json`
-- durable state живет под `.ai/runtime/supervisor/**`
-- worker launch идет через launcher adapters, а не через public `runner-command`
-- hooks должны подмешивать `supervisor` context и блокировать product edits в manager mode
-
-## Установка CLI как глобальной команды
-
-После этого ты сможешь в любом проекте писать просто `aiforge update`, `aiforge doctor` и т.д.
-
-### Вариант 1. Локальный development symlink
-
-```bash
-cd /home/grigorii/Projects/ai-simple-template
-npm run build
-npm link
-```
-
-Проверка:
-
-```bash
-aiforge --help
-```
-
-Использование из целевого проекта:
-
-```bash
-cd /path/to/project
-aiforge detect
-aiforge init --profile python-fastapi-docker
-aiforge update
-aiforge doctor
-```
-
-### Вариант 2. Глобальная установка без symlink
-
-```bash
-cd /home/grigorii/Projects/ai-simple-template
-npm run build
-npm install -g .
-```
-
-### Вариант 3. Разовая команда без установки в PATH
-
-```bash
-cd /home/grigorii/Projects/ai-simple-template
-npm run build
-node /home/grigorii/Projects/ai-simple-template/dist/src/cli/index.js --help
-```
-
-## Поведение по умолчанию
-
-CLI по умолчанию работает в текущей директории, потому что `--repo` по умолчанию = `process.cwd()`.
-
-То есть после `npm link` из проекта можно писать просто:
-
-```bash
-aiforge update
-aiforge sync
-aiforge doctor
-```
+---
 
 ## Поддерживаемые профили MVP
 
@@ -252,32 +304,28 @@ aiforge doctor
 - `laravel-docker`
 - `vue-quasar-capacitor`
 
+---
+
 ## Принципы
 
-- generic hooks, без hardcoded `uv` / `artisan` / `yarn` в ядре;
-- stack-specific команды живут в profile/config;
-- update flow идёт через `Copier`, а не через собственную heavyweight OS;
-- canonical workflow опирается на `go-task build/test/lint/verify/review` через repo-local runner `.ai/bin/go-task`.
+- Generic hooks, без захардкоженного `uv` / `artisan` / `yarn` в ядре.
+- Stack-specific команды — в profile / `ai.config.yaml`.
+- Update — через Copier, не самописный OS-слой.
+- Канонический workflow — через repo-local `.ai/bin/go-task` и имена задач из конфига.
+
+---
 
 ## Linear-first surfaces
 
-Если проект живёт вокруг Linear workflow, `aiforge` теперь генерирует и scaffold'ит:
+Генерация и scaffold: `.ai/linear-scope.json`, `.cursor/settings.json`, `.cursor/rules/linear-mcp.mdc` — контракт team/project, degraded mode, tracker-first flow.
 
-- `.ai/linear-scope.json`
-- `.cursor/settings.json`
-- `.cursor/rules/linear-mcp.mdc`
-
-Это не заменяет локальную MCP-настройку полностью, но подсказывает:
-
-- какой team/project scope должен использоваться;
-- что плагин Linear должен быть включён;
-- как должен работать degraded mode;
-- где должен лежать tracker-first process contract.
+---
 
 ## Документация
 
-- [`feature.md`](feature.md)
-- [`architecture.md`](architecture.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/profile-authoring.md`](docs/profile-authoring.md)
-- [`docs/adopt-existing-repo.md`](docs/adopt-existing-repo.md)
+- [feature.md](feature.md)
+- [architecture.md](architecture.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/profile-authoring.md](docs/profile-authoring.md)
+- [docs/adopt-existing-repo.md](docs/adopt-existing-repo.md)
+- [docs/extensions-remote-skills.md](docs/extensions-remote-skills.md)
