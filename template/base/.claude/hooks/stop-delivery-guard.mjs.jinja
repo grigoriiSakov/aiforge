@@ -153,7 +153,7 @@ if (activeRun) {
       ? "create the orchestrator worktree and continue the flow"
       : nextAction === "run_review"
         ? "run review, record the verdict, and continue the flow"
-        : "continue build/test/verify until review is complete";
+        : "continue implement/test/verify until review is complete";
   process.stdout.write(
     `${JSON.stringify(
       {

@@ -26,7 +26,7 @@ export function createConfig(params: {
   const task = {
     command: taskCommand,
     tasks: {
-      build: "build",
+      implement: "implement",
       test: "test",
       lint: "lint",
       verify: "verify",
@@ -43,7 +43,7 @@ export function createConfig(params: {
     },
     workflow: {
       tracker: profile.trackerDefault,
-      phases: ["issue", "plan", "build", "test", "review"],
+      phases: ["issue", "plan", "implement", "test", "review"],
       language: profile.languageDefault,
       trackerStates: {
         planReady: "Todo",
@@ -174,7 +174,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     execution_canonical_root: config.execution.canonicalRoot,
     execution_worktree_env_var: config.execution.worktreeEnvVar,
     execution_worktree_strategy: config.execution.worktreeStrategy,
-    execution_build_entrypoint: config.execution.entrypoints.build,
+    execution_implement_entrypoint: config.execution.entrypoints.implement,
     execution_test_entrypoint: config.execution.entrypoints.test,
     execution_lint_entrypoint: config.execution.entrypoints.lint,
     execution_verify_entrypoint: config.execution.entrypoints.verify,
@@ -191,7 +191,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     llms_txt_path: config.llms.txtPath,
     llms_source_globs: config.llms.sourceGlobs,
     task_command: config.task.command,
-    task_build_name: config.task.tasks.build,
+    task_implement_name: config.task.tasks.implement,
     task_test_name: config.task.tasks.test,
     task_lint_name: config.task.tasks.lint,
     task_verify_name: config.task.tasks.verify,
@@ -249,13 +249,13 @@ function validateConfig(config: ProjectConfig): void {
   }
 
   if (
-    !config.execution?.entrypoints?.build?.trim() ||
+    !config.execution?.entrypoints?.implement?.trim() ||
     !config.execution?.entrypoints?.test?.trim() ||
     !config.execution?.entrypoints?.lint?.trim() ||
     !config.execution?.entrypoints?.verify?.trim() ||
     !config.execution?.entrypoints?.review?.trim()
   ) {
-    throw new Error("Config execution.entrypoints.{build,test,lint,verify,review} are required");
+    throw new Error("Config execution.entrypoints.{implement,test,lint,verify,review} are required");
   }
 
   if (!config.artifacts?.planProgressRoot?.trim()) {
@@ -300,10 +300,12 @@ function validateConfig(config: ProjectConfig): void {
 export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectProfileId): ProjectConfig {
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
-  const task = {
-    ...config.task,
-    command: taskCommand
-  };
+  const task = normalizeTaskConfig(config.task, createConfig({
+    repoRoot: "",
+    projectSlug: config.project?.slug ?? "project",
+    projectName: config.project?.name ?? "Project",
+    profileId
+  }).task, taskCommand);
   const profileCommands = renderTaskCommands(profile.taskCommands, taskCommand);
   const userGlobs = config.llms?.sourceGlobs;
   const sourceGlobs =
@@ -356,15 +358,7 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
   const profileId = config.profile?.id ?? defaults.profile.id;
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
-  const task = {
-    ...defaults.task,
-    ...config.task,
-    command: taskCommand,
-    tasks: {
-      ...defaults.task.tasks,
-      ...config.task?.tasks
-    }
-  };
+  const task = normalizeTaskConfig(config.task, defaults.task, taskCommand);
 
   return {
     ...defaults,
@@ -376,6 +370,7 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     workflow: {
       ...defaults.workflow,
       ...config.workflow,
+      phases: normalizeWorkflowPhases(config.workflow?.phases ?? defaults.workflow.phases),
       trackerStates: {
         ...defaults.workflow.trackerStates,
         ...config.workflow?.trackerStates
@@ -441,6 +436,31 @@ function normalizeTaskCommand(taskCommand: string | undefined): string {
   return taskCommand;
 }
 
+function normalizeWorkflowPhases(phases: string[]): string[] {
+  return phases.map((phase) => (phase === "build" ? "implement" : phase));
+}
+
+function normalizeTaskConfig(
+  currentTask: ProjectConfig["task"] | undefined,
+  defaultTask: ProjectConfig["task"],
+  taskCommand: string
+): ProjectConfig["task"] {
+  const currentTasks = currentTask?.tasks as
+    | (Partial<ProjectConfig["task"]["tasks"]> & { build?: string })
+    | undefined;
+
+  return {
+    command: taskCommand,
+    tasks: {
+      implement: currentTasks?.implement ?? normalizeLegacyBuildTaskName(currentTasks?.build, defaultTask.tasks.implement),
+      test: currentTasks?.test ?? defaultTask.tasks.test,
+      lint: currentTasks?.lint ?? defaultTask.tasks.lint,
+      verify: currentTasks?.verify ?? defaultTask.tasks.verify,
+      review: currentTasks?.review ?? defaultTask.tasks.review
+    }
+  };
+}
+
 function createDefaultExecutionConfig(task: ProjectConfig["task"]): ProjectConfig["execution"] {
   return {
     canonicalRoot: DEFAULT_EXECUTION_ROOT,
@@ -468,8 +488,17 @@ function normalizeExecutionEntrypoints(
   currentEntrypoints: ProjectConfig["execution"]["entrypoints"] | undefined,
   task: ProjectConfig["task"]
 ): ProjectConfig["execution"]["entrypoints"] {
+  const legacyEntrypoints = currentEntrypoints as
+    | (Partial<ProjectConfig["execution"]["entrypoints"]> & { build?: string })
+    | undefined;
+
   return {
-    build: normalizeExecutionEntrypoint(currentEntrypoints?.build, task.command, task.tasks.build),
+    implement: normalizeExecutionEntrypoint(
+      currentEntrypoints?.implement ??
+        normalizeLegacyBuildEntrypoint(legacyEntrypoints?.build, task.command, task.tasks.implement),
+      task.command,
+      task.tasks.implement
+    ),
     test: normalizeExecutionEntrypoint(currentEntrypoints?.test, task.command, task.tasks.test),
     lint: normalizeExecutionEntrypoint(currentEntrypoints?.lint, task.command, task.tasks.lint),
     verify: normalizeExecutionEntrypoint(currentEntrypoints?.verify, task.command, task.tasks.verify),
@@ -497,7 +526,7 @@ function buildDefaultExecutionEntrypoints(
   taskNames: ProjectConfig["task"]["tasks"]
 ): ProjectConfig["execution"]["entrypoints"] {
   return {
-    build: buildTaskEntrypoint(taskCommand, taskNames.build),
+    implement: buildTaskEntrypoint(taskCommand, taskNames.implement),
     test: buildTaskEntrypoint(taskCommand, taskNames.test),
     lint: buildTaskEntrypoint(taskCommand, taskNames.lint),
     verify: buildTaskEntrypoint(taskCommand, taskNames.verify),
@@ -514,13 +543,46 @@ function normalizeTaskCommands(
   profileTaskCommands: ProjectConfig["commands"],
   taskCommand: string
 ): ProjectConfig["commands"] {
+  const legacyCommands = currentCommands as (Partial<ProjectConfig["commands"]> & { build?: string[] }) | undefined;
+
   return {
-    build: normalizeTaskCommandList(currentCommands?.build, profileTaskCommands.build, taskCommand),
+    implement: normalizeTaskCommandList(
+      currentCommands?.implement ?? legacyCommands?.build,
+      profileTaskCommands.implement,
+      taskCommand
+    ),
     test: normalizeTaskCommandList(currentCommands?.test, profileTaskCommands.test, taskCommand),
     lint: normalizeTaskCommandList(currentCommands?.lint, profileTaskCommands.lint, taskCommand),
     verify: normalizeTaskCommandList(currentCommands?.verify, profileTaskCommands.verify, taskCommand),
     review: normalizeTaskCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
   };
+}
+
+function normalizeLegacyBuildTaskName(taskName: string | undefined, defaultImplementTaskName: string): string {
+  if (!taskName || taskName === "build") {
+    return defaultImplementTaskName;
+  }
+
+  return taskName;
+}
+
+function normalizeLegacyBuildEntrypoint(
+  entrypoint: string | undefined,
+  taskCommand: string,
+  implementTaskName: string
+): string | undefined {
+  const legacyBuildEntrypoints = [
+    buildTaskEntrypoint(taskCommand, "build"),
+    buildTaskEntrypoint("task", "build"),
+    buildTaskEntrypoint("go-task", "build"),
+    buildTaskEntrypoint(DEFAULT_TASK_COMMAND, "build")
+  ];
+
+  if (!entrypoint || legacyBuildEntrypoints.includes(entrypoint)) {
+    return undefined;
+  }
+
+  return entrypoint;
 }
 
 function normalizeTaskCommandList(
@@ -530,34 +592,34 @@ function normalizeTaskCommandList(
 ): string[] {
   const currentDefault = renderTaskCommands(
     {
-      build: profileCommands,
+      implement: profileCommands,
       test: profileCommands,
       lint: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },
     taskCommand
-  ).build;
+  ).implement;
   const legacyTask = renderTaskCommands(
     {
-      build: profileCommands,
+      implement: profileCommands,
       test: profileCommands,
       lint: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },
     "task"
-  ).build;
+  ).implement;
   const legacyGoTask = renderTaskCommands(
     {
-      build: profileCommands,
+      implement: profileCommands,
       test: profileCommands,
       lint: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },
     "go-task"
-  ).build;
+  ).implement;
 
   if (
     !currentCommands ||

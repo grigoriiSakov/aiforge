@@ -1,14 +1,14 @@
 version: "3"
 
 tasks:
-  {{ task_build_name }}:
-    desc: Canonical build task
+  {{ task_implement_name }}:
+    desc: Canonical implement task
     cmds:
-      - node .ai/runtime/task-state.mjs pre {{ task_build_name }}
-{% for command in commands.build %}
+      - node .ai/runtime/task-state.mjs pre {{ task_implement_name }}
+{% for command in commands.implement %}
       - {{ command }}
 {% endfor %}
-      - node .ai/runtime/task-state.mjs post {{ task_build_name }}
+      - node .ai/runtime/task-state.mjs post {{ task_implement_name }}
 
   {{ task_test_name }}:
     desc: Canonical test task

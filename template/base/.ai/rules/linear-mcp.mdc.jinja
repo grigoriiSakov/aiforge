@@ -39,7 +39,7 @@ alwaysApply: false
 ## Runtime states
 
 - For tracker-first flows:
-  - plan becomes build-ready -> move to `{{ tracker_status_plan_ready }}`
+  - plan becomes implement-ready -> move to `{{ tracker_status_plan_ready }}`
   - execution starts -> move to `{{ tracker_status_active }}`
   - review-ready state -> move to `{{ tracker_status_review }}`
 - In degraded mode, keep tracker sync pending until connectivity is restored.

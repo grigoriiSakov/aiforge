@@ -1103,7 +1103,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
       "task:",
       `  command: ${legacyConfig.task.command}`,
       "  tasks:",
-      `    build: ${legacyConfig.task.tasks.build}`,
+      "    build: build",
       `    test: ${legacyConfig.task.tasks.test}`,
       `    lint: ${legacyConfig.task.tasks.lint}`,
       `    verify: ${legacyConfig.task.tasks.verify}`,
@@ -1218,7 +1218,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
 
     const syncedConfig = loadConfig(repoRoot);
     expect(syncedConfig.profile.id).toBe("vue-quasar-capacitor");
-    expect(syncedConfig.commands.build).toEqual(["yarn build"]);
+    expect(syncedConfig.commands.implement).toEqual(["yarn build"]);
   });
 
   test("sync and update regenerate project profile from config markdown", async () => {
@@ -1637,7 +1637,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
               review: "review",
               test: "test",
               lint: "lint",
-              build: "build"
+              implement: "implement"
             }
           }
         },
@@ -1756,7 +1756,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
               review: "review",
               test: "test",
               lint: "lint",
-              build: "build"
+              implement: "implement"
             }
           }
         },
@@ -1770,7 +1770,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
         postToolUseGuardPath,
         [],
         repoRoot,
-        JSON.stringify({ tool_input: { command: "just build" } })
+        JSON.stringify({ tool_input: { command: "just implement" } })
       ).stdout
     );
     expect(postToolUse.continue).toBe(true);

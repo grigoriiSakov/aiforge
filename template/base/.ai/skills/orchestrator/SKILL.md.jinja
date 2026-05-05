@@ -1,13 +1,13 @@
 ---
 name: orchestrator
-description: Own the issue -> plan -> build -> test -> review pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
+description: Own the issue -> plan -> implement -> test -> review pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
 ---
 
 # Orchestrator
 
 Pipeline owner for:
 
-`issue -> plan -> build -> test -> review`
+`issue -> plan -> implement -> test -> review`
 
 ## Rule preflight
 
@@ -30,10 +30,10 @@ Pipeline owner for:
    - reservation
    - queue / conflict state
    - worktree assignment
-   - build / test / review transitions
+   - implement / test / review transitions
    - terminal release
 5. Accept exactly one issue ID per orchestrator run.
-6. Do not start build until the current plan contains machine-readable `Claimed Write Scope`.
+6. Do not start implementation until the current plan contains machine-readable `Claimed Write Scope`.
 7. Ensure the workflow keeps a single source of truth for:
 {% if linear_enabled %}
    - plan memory: `PLAN::ISSUE-ID` in Linear together with `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` when both are used (degraded mode: see `.ai/reference/tracker-degraded-mode.md`)
@@ -74,7 +74,7 @@ Pipeline owner for:
 19. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
 20. A phase is not complete without evidence:
    - `plan` -> complete plan artifact
-   - `build` -> code changes aligned with plan
+   - `implement` -> code changes aligned with plan
    - `test` -> canonical task evidence (see scope split below)
    - `review` -> findings-first output plus recorded clean review verdict
    - **Quality bar (in-scope):** нельзя считать `test`/pre-review этап завершённым и уходить в review, пока для **Claimed Write Scope** нет честного зелёного сигнала по затронутому поведению: scoped тесты/проверки по задаче, затронутые файлы из `paths` / `shared_surfaces` без новых регрессий, которые вы ввели. Ошибки линта/типов/тестов, которые относятся к **заявленным** путям или общим поверхностям скоупа, — блокер до фикса, сужения скоупа с правкой плана, или **явного** человеческого исключения в issue/plan.
@@ -84,7 +84,7 @@ Pipeline owner for:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
     - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
 22. If review returns `medium` or `high`, the next mandatory action is another fix loop:
-    - go back to build
+    - go back to implement
     - fix the findings
     - rerun scoped test and verify evidence (and refresh the repo-wide OOS note if full lint/verify is still red outside scope)
     - rerun review
@@ -112,7 +112,7 @@ Pipeline owner for:
 - No valid plan artifact for non-trivial work
 - Missing or invalid `Claimed Write Scope`
 - Drift between source request, plan, and implementation
-- Attempt to build outside the assigned orchestrator worktree
+- Attempt to implement outside the assigned orchestrator worktree
 - Runtime state is `queued` or `blocked-by-conflict`
 - Missing verify evidence for **in-scope** work (scoped runs +, при красном full lint/verify, явная запись OOS в progress — см. пункт 16)
 - Missing clean review verdict

@@ -21,7 +21,7 @@ Please analyze this project and produce only the project-specific additions I st
 - Orchestrator worktree root: \`${config.orchestrator.worktreeRoot}\`
 - Plan/progress local root: \`${config.artifacts.planProgressRoot}\` (per issue: \`plan.md\`, \`progress.md\`)
 - Canonical tasks:
-  - build: \`${config.task.command} ${config.task.tasks.build}\`
+  - implement: \`${config.task.command} ${config.task.tasks.implement}\`
   - test: \`${config.task.command} ${config.task.tasks.test}\`
   - lint: \`${config.task.command} ${config.task.tasks.lint}\`
   - verify: \`${config.task.command} ${config.task.tasks.verify}\`
@@ -83,7 +83,7 @@ Please analyze this project and produce only the project-specific additions I st
 Examples:
 
 - architecture constraints specific to this repo
-- stack-specific test/lint/build commands
+- stack-specific test/lint/implement commands
 - tracker phase state names if the team does not use Todo / In Progress / In Review
 - orchestrator worktree location / branch naming rules
 - docker/container names

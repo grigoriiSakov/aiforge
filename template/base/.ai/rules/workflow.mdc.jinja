@@ -12,7 +12,7 @@ alwaysApply: true
 - `.ai/rules/project-profile.mdc` is the canonical repo-local rule layer generated from `ai.config.yaml`; always read it before executing any skill.
 - If `.ai/rules/project-profile.mdc` contains `## Project-Specific Rules`, treat them as mandatory repository overrides on top of the generic workflow rules.
 - Use canonical tasks only:
-  - `{{ task_command }} {{ task_build_name }}`
+  - `{{ task_command }} {{ task_implement_name }}`
   - `{{ task_command }} {{ task_test_name }}`
   - `{{ task_command }} {{ task_lint_name }}`
   - `{{ task_command }} {{ task_verify_name }}`
@@ -37,4 +37,4 @@ alwaysApply: true
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
 - Completion means all required spec, plan, verification, and review points are done; partial completion is not completion.
-- If review produces `high` or `medium` findings, the workflow must loop back through `build -> test -> verify -> review` until those severities are eliminated.
+- If review produces `high` or `medium` findings, the workflow must loop back through `implement -> test -> verify -> review` until those severities are eliminated.

@@ -11,7 +11,7 @@ export const TASK_COMMAND_PLACEHOLDER = "{{task_command}}";
 
 export function renderTaskCommands(taskCommands: TaskCommands, taskCommand: string): TaskCommands {
   return {
-    build: renderCommandList(taskCommands.build, taskCommand),
+    implement: renderCommandList(taskCommands.implement, taskCommand),
     test: renderCommandList(taskCommands.test, taskCommand),
     lint: renderCommandList(taskCommands.lint, taskCommand),
     verify: renderCommandList(taskCommands.verify, taskCommand),

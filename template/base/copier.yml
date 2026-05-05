@@ -107,9 +107,9 @@ task_command:
   type: str
   default: .ai/bin/go-task
 
-task_build_name:
+task_implement_name:
   type: str
-  default: build
+  default: implement
 
 task_test_name:
   type: str
@@ -139,9 +139,9 @@ execution_worktree_strategy:
   type: str
   default: direct
 
-execution_build_entrypoint:
+execution_implement_entrypoint:
   type: str
-  default: .ai/bin/go-task build
+  default: .ai/bin/go-task implement
 
 execution_test_entrypoint:
   type: str
@@ -162,7 +162,7 @@ execution_review_entrypoint:
 commands:
   type: yaml
   default:
-    build: []
+    implement: []
     test: []
     lint: []
     verify: []

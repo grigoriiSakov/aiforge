@@ -14,7 +14,7 @@ export interface LinearScope {
 }
 
 export interface TaskCommands {
-  build: string[];
+  implement: string[];
   test: string[];
   lint: string[];
   verify: string[];
@@ -24,7 +24,7 @@ export interface TaskCommands {
 export type WorktreeExecutionStrategy = "direct" | "overlay";
 
 export interface ExecutionEntrypoints {
-  build: string;
+  implement: string;
   test: string;
   lint: string;
   verify: string;
@@ -84,7 +84,7 @@ export interface ProjectConfig {
   task: {
     command: string;
     tasks: {
-      build: string;
+      implement: string;
       test: string;
       lint: string;
       verify: string;

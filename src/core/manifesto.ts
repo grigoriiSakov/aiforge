@@ -29,7 +29,7 @@ export function generateManifesto(repoRoot: string): string {
 
 ## Command Contract
 
-- Build: \`${config.task.command} ${config.task.tasks.build}\`
+- Implement: \`${config.task.command} ${config.task.tasks.implement}\`
 - Test: \`${config.task.command} ${config.task.tasks.test}\`
 - Lint: \`${config.task.command} ${config.task.tasks.lint}\`
 - Verify: \`${config.task.command} ${config.task.tasks.verify}\`

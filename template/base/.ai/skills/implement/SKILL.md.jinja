@@ -1,9 +1,9 @@
 ---
-name: build
-description: Implement the planned change step by step without drifting from the request or plan. Use when the user asks for build, implementation, coding, or /build.
+name: implement
+description: Implement the planned change step by step without drifting from the request or plan. Use when the user asks for implement, implementation, coding, or /implement.
 ---
 
-# Build
+# Implement
 
 Use this skill to implement the planned change step by step.
 
@@ -17,7 +17,7 @@ Use this skill to implement the planned change step by step.
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
 - Treat those files as hard constraints for this run, not background reference.
-- Do not continue with build until this preflight read is complete.
+- Do not continue with implementation until this preflight read is complete.
 
 ## Mandatory protocol
 
@@ -55,7 +55,7 @@ Use this skill to implement the planned change step by step.
    - update `## Дальше`
    - update `## Spec Conformance`
    - append short decisions to `## Решения по ходу`
-9. Build abstraction-first:
+9. Implement abstraction-first:
    - prefer extending existing abstractions over introducing parallel branches
    - prefer strategy/polymorphism/composition/data-driven dispatch over long `if/else` ladders
    - if branching starts growing, extract an explicit abstraction instead of stacking conditionals
@@ -82,7 +82,7 @@ Use this skill to implement the planned change step by step.
    - do not create a second branch/worktree
    - update run state through the orchestrator runtime helper
 15. All reasoning, progress notes, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-16. If the latest review produced `high` or `medium` findings, build must resume from those findings and continue the loop:
+16. If the latest review produced `high` or `medium` findings, implementation must resume from those findings and continue the loop:
    - fix the findings
    - run `{{ task_command }} {{ task_test_name }}`
    - run `{{ task_command }} {{ task_verify_name }}`

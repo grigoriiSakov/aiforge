@@ -155,7 +155,7 @@ process.stdin.on("end", () => {
   const activeSupervisor = getCurrentSupervisorRun();
   const taskCommand = String(manifest?.task?.command ?? "task");
   const tasks = manifest?.task?.tasks ?? {};
-  const canonicalTaskNames = [tasks.verify, tasks.review, tasks.test, tasks.lint, tasks.build].filter(
+  const canonicalTaskNames = [tasks.verify, tasks.review, tasks.test, tasks.lint, tasks.implement].filter(
     (taskName) => typeof taskName === "string" && taskName.trim()
   );
   const touchedOrchestrator =

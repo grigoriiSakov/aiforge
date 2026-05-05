@@ -103,7 +103,7 @@ describe("config lifecycle", () => {
         "    review: review",
         "commands:",
         "  build:",
-        "    - echo \"No dedicated build step for FastAPI profile\"",
+        "    - echo \"No dedicated implement step for FastAPI profile\"",
         "  test:",
         "    - cd ../docker && docker compose exec app uv run python scripts/run_pytest_isolated.py -v",
         "  lint:",
@@ -144,9 +144,15 @@ describe("config lifecycle", () => {
     const config = loadConfig(repoRoot);
 
     expect(config.task.command).toBe(DEFAULT_TASK_COMMAND);
+    expect(config.workflow.phases).toEqual(["issue", "plan", "implement", "test", "review"]);
+    expect(config.task.tasks.implement).toBe("implement");
+    expect(config.commands.implement).toEqual([
+      'echo "No dedicated implement step for FastAPI profile"'
+    ]);
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} lint`);
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} test`);
     expect(config.commands.review).toContain(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.execution.entrypoints.implement).toBe(`${DEFAULT_TASK_COMMAND} implement`);
     expect(config.execution.entrypoints.lint).toBe(`${DEFAULT_TASK_COMMAND} lint`);
     expect(config.execution.entrypoints.test).toBe(`${DEFAULT_TASK_COMMAND} test`);
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);

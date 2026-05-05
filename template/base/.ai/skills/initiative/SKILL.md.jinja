@@ -5,7 +5,7 @@ description: Discovery-first planning for large multi-issue initiatives (researc
 
 # Initiative
 
-Full **pre-build** cycle for a large initiative when a correct project-level PRD + issue set does not exist yet.
+Full **pre-implement** cycle for a large initiative when a correct project-level PRD + issue set does not exist yet.
 
 ## When to use
 
@@ -104,7 +104,7 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
 
 10. **Project hygiene** — when PRD + project docs + atomic issue set are complete, set the **project** (and individual issues per tracker rules) to appropriate states; there is no dedicated planning issue to advance.
 
-11. **Verification** — confirm PRD and initiative spec/execution map are visible on the project, atomic issues are build-ready, blockers and order are unambiguous, and `.ai/context/initiatives/<slug>/issues-manifest.json` matches the final ordering exactly.
+11. **Verification** — confirm PRD and initiative spec/execution map are visible on the project, atomic issues are implement-ready, blockers and order are unambiguous, and `.ai/context/initiatives/<slug>/issues-manifest.json` matches the final ordering exactly.
 {% else %}
 7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier). Do **not** model a fake “planning issue” that only exists to describe how you will open other issues — keep initiative-level narrative in files you attach to a **project** / wiki / epic, not as a standalone meta-ticket template:
 
@@ -132,7 +132,7 @@ Full **pre-build** cycle for a large initiative when a correct project-level PRD
 - Linear MCP unavailable while on the Linear path → stop; do not fake tracker completion (user may disable Linear in config and rerun for a local bundle).
 - PRD not creatable or not attachable to the Linear project → stop; workflow not complete on that path.
 {% endif %}
-- PRD exists but atomic issues lack build-ready spec → extend issues until they match `issue-spec-template` + per-issue spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` / `technical-spec.md` before handoff.
+- PRD exists but atomic issues lack implement-ready spec → extend issues until they match `issue-spec-template` + per-issue spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` / `technical-spec.md` before handoff.
 - `issues-manifest.json` missing or drifted from the real issue order / dependencies → fix it before handoff.
 
 ## Outcome

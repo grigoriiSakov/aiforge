@@ -36,7 +36,7 @@ Findings first.
    - default expectation is scoped tests for the behavior that changed
    - do not require a full project run unless the user explicitly asked for it, repository rules require it, or the change is too broad for scoped evidence
 
-**Orchestrator / repo-wide lint-verify:** If the issue is orchestrator-managed and `PROGRESS` documents that full `{{ task_command }} {{ task_lint_name }}` or `{{ task_command }} {{ task_verify_name }}` is red **only** outside `Claimed Write Scope`, do not block the review loop on that alone: validate the OOS justification (claimed paths vs failure locations, logs). Scoped evidence for the change must remain credible. If the split is honest and in-scope work is complete, complete review (and when Linear is on, `{{ tracker_status_review }}` after no `high`/`medium`) and state **residual risk** (repo-wide red) explicitly in the summary when signing off clean for the issue scope. If failures actually touch claimed paths, that is a finding or a forced return to build — not an OOS waiver.
+**Orchestrator / repo-wide lint-verify:** If the issue is orchestrator-managed and `PROGRESS` documents that full `{{ task_command }} {{ task_lint_name }}` or `{{ task_command }} {{ task_verify_name }}` is red **only** outside `Claimed Write Scope`, do not block the review loop on that alone: validate the OOS justification (claimed paths vs failure locations, logs). Scoped evidence for the change must remain credible. If the split is honest and in-scope work is complete, complete review (and when Linear is on, `{{ tracker_status_review }}` after no `high`/`medium`) and state **residual risk** (repo-wide red) explicitly in the summary when signing off clean for the issue scope. If failures actually touch claimed paths, that is a finding or a forced return to implement — not an OOS waiver.
 
 5. Review not only the diff, but also:
    - `Spec Coverage Matrix`
@@ -57,8 +57,8 @@ Findings first.
    - missing or false plan coverage
 8. Severity loop is mandatory:
    - if findings include `high` or `medium`, the current task is not done
-   - return to `build`, fix the findings, then rerun the cycle:
-     - `{{ task_command }} {{ task_build_name }}` when applicable to the project flow
+   - return to `implement`, fix the findings, then rerun the cycle:
+     - `{{ task_command }} {{ task_implement_name }}` when applicable to the project flow
      - `{{ task_command }} {{ task_test_name }}` (scoped as appropriate; refresh OOS note if full verify stays red outside scope)
      - `{{ task_command }} {{ task_verify_name }}` when it adds signal for the touched scope; do not treat full-pipeline red outside `Claimed Write Scope` as blocking the loop by itself if orchestrator rules already documented OOS
      - `/review`
@@ -83,4 +83,4 @@ Findings first.
 - Brief summary last.
 - If no findings exist, say so explicitly and mention residual risk.
 - A clean verdict is valid only when the task is 100% complete against the source spec and plan **within the effective scope** (orchestrator: `Claimed Write Scope` + honest OOS documentation when full lint/verify stays red outside it).
-- `high` or `medium` findings require another build/test/verify/review loop before the task can be considered complete.
+- `high` or `medium` findings require another implement/test/verify/review loop before the task can be considered complete.

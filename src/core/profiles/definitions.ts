@@ -7,7 +7,7 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     label: "Python + FastAPI + Docker",
     detectionHints: ["pyproject.toml", "uv.lock", "alembic", "fastapi", "docker-compose.yml"],
     taskCommands: {
-      build: ["echo \"No dedicated build step for FastAPI profile\""],
+      implement: ["echo \"No dedicated implement step for FastAPI profile\""],
       test: ["cd ../docker && docker compose exec app uv run python scripts/run_pytest_isolated.py -v"],
       lint: ["cd ../docker && docker compose exec app uv run ruff check ."],
       verify: [
@@ -51,7 +51,7 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     label: "Laravel + Docker",
     detectionHints: ["composer.json", "artisan", "bootstrap/app.php", "laravel/framework"],
     taskCommands: {
-      build: ["echo \"No standalone build step for Laravel profile\""],
+      implement: ["echo \"No standalone implement step for Laravel profile\""],
       test: ["docker compose exec php php artisan test --compact"],
       lint: [
         "docker compose exec php vendor/bin/pint --dirty --format=agent",
@@ -94,7 +94,7 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     label: "Vue + Quasar + Capacitor",
     detectionHints: ["quasar", "capacitor", "vite", "yarn.lock", "package.json"],
     taskCommands: {
-      build: ["yarn build"],
+      implement: ["yarn build"],
       test: ["yarn test"],
       lint: ["yarn typecheck:ci"],
       verify: ["yarn gate:prepush"],

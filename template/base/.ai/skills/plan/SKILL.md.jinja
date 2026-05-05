@@ -1,11 +1,11 @@
 ---
 name: plan
-description: Build a deterministic implementation plan before code changes. Use when the user asks for plan, /plan, or equivalent planning intent.
+description: Create a deterministic implementation plan before code changes. Use when the user asks for plan, /plan, or equivalent planning intent.
 ---
 
 # Plan
 
-Use this skill to produce a build-ready implementation plan before code changes.
+Use this skill to produce an implement-ready implementation plan before code changes.
 
 ## Rule preflight
 
@@ -21,7 +21,7 @@ Use this skill to produce a build-ready implementation plan before code changes.
 
 ## Goal
 
-Turn the current request or issue into an execution artifact that is specific enough for `/build`.
+Turn the current request or issue into an execution artifact that is specific enough for `/implement`.
 
 ## Mandatory protocol
 
@@ -33,8 +33,8 @@ Turn the current request or issue into an execution artifact that is specific en
    - `.ai/reference/orchestrator-claimed-scope-template.md`
 3. Load relevant `llms` artifacts and existing code surfaces before planning so the plan reuses the current system instead of reinventing it.
 4. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
-5. Build the plan around canonical tasks only:
-   - `{{ task_command }} {{ task_build_name }}`
+5. Anchor the plan around canonical tasks only:
+   - `{{ task_command }} {{ task_implement_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
@@ -63,9 +63,9 @@ Turn the current request or issue into an execution artifact that is specific en
 11. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
 12. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
 {% if linear_enabled %}
-13. When the plan is build-ready, move the Linear issue toward `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md` (if MCP is up).
+13. When the plan is implement-ready, move the Linear issue toward `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md` (if MCP is up).
 {% else %}
-13. Do **not** use Linear MCP for planning. Persist the build-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` as the single source of truth for this mode.
+13. Do **not** use Linear MCP for planning. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` as the single source of truth for this mode.
 {% endif %}
 
 ## Storage contract
