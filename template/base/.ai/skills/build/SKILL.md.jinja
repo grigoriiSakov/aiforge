@@ -31,11 +31,11 @@ Use this skill to implement the planned change step by step.
    - relevant `llms` artifacts declared by `ai.config.yaml`
    - nearby canonical code that can be reused instead of reimplemented
 4. Load the current plan artifact:
-{% if linear_enabled -%}
+{% if linear_enabled %}
    - prefer `PLAN::ISSUE-ID` in Linear when MCP is available; always keep `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` aligned when you read/write locally
-{% else -%}
+{% else %}
    - use only `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (no Linear `PLAN::` reads or writes)
-{% endif -%}
+{% endif %}
 5. Do not start medium/large work without a plan artifact.
 6. Before changing code, extract from the plan:
    - `Execution Contract`
@@ -44,11 +44,11 @@ Use this skill to implement the planned change step by step.
    - `Acceptance Traceability`
    - current step boundaries
 7. Before the first code change, create or update execution memory:
-{% if linear_enabled -%}
+{% if linear_enabled %}
    - `PROGRESS::ISSUE-ID` in Linear when MCP is available, and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (keep them consistent when both are used)
-{% else -%}
+{% else %}
    - only `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
-{% endif -%}
+{% endif %}
 8. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
    - update `## Текущий шаг`
@@ -88,11 +88,11 @@ Use this skill to implement the planned change step by step.
    - run `{{ task_command }} {{ task_verify_name }}`
    - run `/review` again
    - do not consider the task complete until review no longer reports `high` or `medium`
-{% if linear_enabled -%}
+{% if linear_enabled %}
 17. When execution starts and Linear MCP is available, move the issue to `{{ tracker_status_active }}` per tracker rules.
-{% else -%}
+{% else %}
 17. Do not change Linear issue state; execution state lives in local artifacts only.
-{% endif -%}
+{% endif %}
 
 ## Do not do this
 

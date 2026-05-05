@@ -23,11 +23,11 @@ Findings first.
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Read the current plan and progress:
-{% if linear_enabled -%}
+{% if linear_enabled %}
    - `PLAN::ISSUE-ID` and `PROGRESS::ISSUE-ID` in Linear when MCP is available, and keep consistency with `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` / `progress.md` if those mirrors exist
-{% else -%}
+{% else %}
    - only `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`
-{% endif -%}
+{% endif %}
 3. Confirm recent evidence for:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
@@ -70,11 +70,11 @@ Findings first.
     - `node .ai/runtime/review-state.mjs verdict issues-found "short summary"`
 10. If the issue is orchestrator-managed, record review evidence through `node .ai/runtime/orchestrator-state.mjs record-review ...`.
 11. All review notes, findings, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-{% if linear_enabled -%}
+{% if linear_enabled %}
 12. When the implementation is review-ready and Linear MCP is available, move the issue to `{{ tracker_status_review }}` only after there are no `high` or `medium` findings left.
-{% else -%}
+{% else %}
 12. Do not change Linear issue state; record the review outcome in local/runtime artifacts only.
-{% endif -%}
+{% endif %}
 
 ## Output contract
 

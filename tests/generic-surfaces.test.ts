@@ -104,6 +104,24 @@ describe("generic reusable surfaces", () => {
     expect(content).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
   });
 
+  test("SKILL.md.jinja must not use trailing trim on if/else/endif around indented markdown sublists", () => {
+    const skillsRoot = path.join(process.cwd(), "template", "base", ".ai", "skills");
+    for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const skillMd = path.join(skillsRoot, entry.name, "SKILL.md.jinja");
+      if (!fs.existsSync(skillMd)) {
+        continue;
+      }
+      const content = fs.readFileSync(skillMd, "utf8");
+      // `-%}` after `if linear_enabled` / `else` / `endif` can strip the indent before `   -` nested bullets.
+      expect(content).not.toMatch(/\{%\s*if\s+linear_enabled\s*-\s*%\}/);
+      expect(content).not.toMatch(/\{%\s*else\s*-\s*%\}/);
+      expect(content).not.toMatch(/\{%\s*endif\s*-\s*%\}/);
+    }
+  });
+
   test("testing policy defaults to touched scope, not full suite", () => {
     const root = path.join(process.cwd(), "template", "base");
     const workflowGates = fs.readFileSync(path.join(root, ".ai", "rules", "workflow-gates.mdc.jinja"), "utf8");

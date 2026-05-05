@@ -32,11 +32,11 @@ It must **not** quietly drift into editing product code in the manager checkout.
   - `.ai/skills/orchestrator/SKILL.md`
   - `.ai/skills/initiative/SKILL.md`
 - Treat those files as hard constraints for this run.
-{% if linear_enabled -%}
+{% if linear_enabled %}
 - Before tracker actions, also read:
   - `.ai/skills/tracker/SKILL.md`
   - `.ai/rules/linear-mcp.mdc`
-{% endif -%}
+{% endif %}
 
 ## Runtime source of truth
 
@@ -76,12 +76,12 @@ The normal chat UX is:
 
 1. Rehydrate rules and current context.
 2. Resolve initiative/project context:
-{% if linear_enabled -%}
+{% if linear_enabled %}
    - prefer tracker-backed project/issues via `.ai/skills/tracker/SKILL.md`
    - if a local `.ai/context/initiatives/<slug>/issues-manifest.json` already exists, it may be reused as the initial source snapshot
-{% else -%}
+{% else %}
    - use the local initiative bundle under `.ai/context/initiatives/<slug>/` when present
-{% endif -%}
+{% endif %}
 3. Write or refresh a normalized local snapshot through:
 
 ```bash
