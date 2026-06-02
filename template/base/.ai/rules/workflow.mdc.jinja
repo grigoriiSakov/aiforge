@@ -18,9 +18,10 @@ alwaysApply: true
   - `{{ task_command }} {{ task_verify_name }}`
   - `{{ task_command }} {{ task_review_name }}`
 - Do not hardcode stack-specific commands in generic workflow prompts or status updates.
-- For non-trivial work, planning and execution memory must live in explicit artifacts:
-  - `PLAN::ISSUE-ID` (tracker and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`)
-  - `PROGRESS::ISSUE-ID` (tracker and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`)
+- For non-trivial work, planning and execution memory must live in explicit **local** artifacts:
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (`PLAN::ISSUE-ID` marker block inside the file)
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (`PROGRESS::ISSUE-ID` marker block inside the file)
+- When a tracker is enabled, use it for issue workflow **states** only; do not mirror plan/progress bodies into tracker comments.
 - Plan quality minimum:
   - `Execution Contract`
   - `Spec Coverage Matrix`

@@ -1,8 +1,8 @@
 # Tracker Degraded Mode
 
-If the primary tracker is unavailable:
+If the primary tracker MCP is unavailable:
 
 1. Keep working only if a valid local issue/spec artifact exists.
-2. Mirror plan/progress locally as `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`.
-3. Do not pretend tracker sync succeeded.
-4. At the end, report exact follow-up action required to sync back.
+2. Continue using local plan/progress as the sole source of truth: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`.
+3. Do not pretend tracker **workflow state** updates succeeded.
+4. At the end, report exact follow-up: which Linear states still need to be applied (plan-ready / active / review). Do not bulk-copy plan/progress into Linear comments.

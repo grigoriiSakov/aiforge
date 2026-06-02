@@ -1,0 +1,40 @@
+---
+title: "Verify And Fix Loop"
+---
+
+# Verify And Fix Loop
+
+Use after implement/test when acceptance or scoped verify fails, or when review/audit returns actionable findings.
+
+## Artifact
+
+Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix Loop` (create section on first failure):
+
+```markdown
+## Fix Loop
+
+### Trigger
+- source: verify | review | audit
+- at: ISO-8601 timestamp
+- summary: one line
+
+### Diagnosis
+- symptom:
+- likely cause:
+- in_scope: yes | no
+
+### Fix plan
+1. Step — files — verify command
+2. Step — files — verify command
+
+### Re-verify
+- scoped: `{{ task_command }} {{ task_verify_name }}` (paths from Claimed Write Scope)
+- gate: re-run orchestrator review+audit subagents when code changed
+```
+
+## Rules
+
+- Fix plans target **Claimed Write Scope** only unless the plan is amended.
+- Do not close the issue on chat-only “looks fine”; require command evidence from the plan.
+- After a fix loop, update `Spec Conformance` in progress and shrink open items.
+- Orchestrator: after implement fixes, repeat `record-test` then review+audit gate (see orchestrator skill).

@@ -22,58 +22,49 @@ Use this skill to implement the planned change step by step.
 ## Mandatory protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
-2. Read:
+2. Use model tier `{{ agent_model_implement }}` (`.ai/reference/model-profiles.md`).
+3. Read:
    - `.ai/reference/plan-template.md`
    - `.ai/reference/plan-progress-template.md`
    - `.ai/reference/context-artifacts.md`
-3. Before changing code, load the relevant context and existing implementation surfaces:
+4. Before changing code, load the relevant context and existing implementation surfaces:
    - `.ai/context/current.md`
    - relevant `llms` artifacts declared by `ai.config.yaml`
    - nearby canonical code that can be reused instead of reimplemented
-4. Load the current plan artifact:
-{% if linear_enabled %}
-   - prefer `PLAN::ISSUE-ID` in Linear when MCP is available; always keep `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` aligned when you read/write locally
-{% else %}
-   - use only `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (no Linear `PLAN::` reads or writes)
-{% endif %}
-5. Do not start medium/large work without a plan artifact.
-6. Before changing code, extract from the plan:
+5. Load the current plan artifact from `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` only (no Linear plan comment reads or writes).
+6. Do not start medium/large work without a plan artifact.
+7. Before changing code, extract from the plan:
    - `Execution Contract`
    - `Spec Coverage Matrix`
    - `Do Not Break`
    - `Acceptance Traceability`
    - current step boundaries
-7. Before the first code change, create or update execution memory:
-{% if linear_enabled %}
-   - `PROGRESS::ISSUE-ID` in Linear when MCP is available, and/or `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (keep them consistent when both are used)
-{% else %}
-   - only `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
-{% endif %}
-8. Execute strictly step by step. On every step transition:
+8. Before the first code change, create or update execution memory in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments).
+9. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
    - update `## Текущий шаг`
    - update `## Дальше`
    - update `## Spec Conformance`
    - append short decisions to `## Решения по ходу`
-9. Implement abstraction-first:
+10. Implement abstraction-first:
    - prefer extending existing abstractions over introducing parallel branches
    - prefer strategy/polymorphism/composition/data-driven dispatch over long `if/else` ladders
    - if branching starts growing, extract an explicit abstraction instead of stacking conditionals
-10. For database or query-heavy paths, keep the implementation production-grade:
+11. For database or query-heavy paths, keep the implementation production-grade:
    - avoid N+1 lookups
    - avoid fetch-all + filter/map/reduce loops when the storage/query layer can do the work
    - return only the fields and rows actually required
    - avoid in-memory post-processing of oversized datasets
-11. Use canonical tasks instead of stack-specific guesses:
+12. Use canonical tasks instead of stack-specific guesses:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-12. Testing policy:
+13. Testing policy:
    - default to the smallest credible test scope that covers the touched behavior
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
-   - if an orchestrator run has `Claimed Write Scope` and full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails only outside that scope, record command output + rationale in `PROGRESS` / `progress.md` and still attach scoped green evidence for the task; do not stall review solely on repo-wide red (orchestrator skill defines the bar)
-13. If implementation drifts from source request or plan:
+   - if an orchestrator run has `Claimed Write Scope` and full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails only outside that scope, record command output + rationale in `progress.md` and still attach scoped green evidence for the task; do not stall review solely on repo-wide red (orchestrator skill defines the bar)
+14. If implementation drifts from source request or plan:
    - either fix the code
    - or update the plan first
    - otherwise stop
@@ -89,7 +80,7 @@ Use this skill to implement the planned change step by step.
    - run `/review` again
    - do not consider the task complete until review no longer reports `high` or `medium`
 {% if linear_enabled %}
-17. When execution starts and Linear MCP is available, move the issue to `{{ tracker_status_active }}` per tracker rules.
+17. When execution starts and Linear MCP is available, move the issue workflow state to `{{ tracker_status_active }}` per tracker rules (state only — no progress comment sync).
 {% else %}
 17. Do not change Linear issue state; execution state lives in local artifacts only.
 {% endif %}

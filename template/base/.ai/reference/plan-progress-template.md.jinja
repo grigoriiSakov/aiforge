@@ -54,6 +54,10 @@ Minimal structure:
 - invariant 1
 - invariant 2
 
+## Fix Loop
+
+Optional; required when verify/review/audit returns actionable failures. Template: `.ai/reference/verify-fix-loop.md`.
+
 ## Spec Conformance
 - Closed:
   - requirement X -> code/tests/evidence
@@ -78,8 +82,9 @@ Minimal structure:
 
 ## Update protocol
 
-- `/plan` creates or updates `PLAN::ISSUE-ID` and keeps `plan.md` aligned when using local mirrors.
-- `/implement` creates or updates `PROGRESS::ISSUE-ID` and keeps `progress.md` aligned when using local mirrors.
+- `/plan` creates or updates `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact).
+- `/implement` creates or updates `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact).
+- When a tracker is enabled, advance issue **workflow state** via MCP; never duplicate plan/progress body into tracker comments.
 - Orchestrator-ready plans must also include `## Claimed Write Scope`.
 - If `.ai/runtime/orchestrator-state.mjs` manages the issue, progress updates must stay aligned with orchestrator run state.
 - Progress must be updated at every step transition, not only at the end.

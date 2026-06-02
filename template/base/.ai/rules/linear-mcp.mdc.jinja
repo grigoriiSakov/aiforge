@@ -21,16 +21,21 @@ alwaysApply: false
 
 - get issue
 - update issue state
-- create comment
 - create issue
 - list issues
 - list issue statuses
+- create comment (general discussion only — **not** for `PLAN::` / `PROGRESS::` plan or progress bodies)
+
+## Plan / progress storage
+
+- Canonical plan/progress artifacts are always local: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`.
+- Do not create or update Linear issue comments to mirror `PLAN::ISSUE-ID` or `PROGRESS::ISSUE-ID` content.
 
 ## Stop / degraded mode
 
 {% if linear_enabled %}
-- If Linear MCP is unavailable and issue flow requires tracker-first execution, stop and ask to restore MCP connectivity or prepare a local fallback artifact.
-- If degraded mode is used, mirror plan/progress under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md` (see `artifacts.planProgressRoot` in `ai.config.yaml`).
+- If Linear MCP is unavailable and the step needs a **workflow state** change, stop or enter degraded mode explicitly; keep editing local `plan.md` / `progress.md` and report pending state sync.
+- Local plan/progress files remain source of truth; there is no sync-back of plan body into Linear when connectivity returns.
 {% else %}
 - Linear is not enabled by default for this profile.
 - If the team wants Linear-first workflow, fill `.ai/linear-scope.json`, enable the plugin in `.cursor/settings.json`, and wire MCP locally.

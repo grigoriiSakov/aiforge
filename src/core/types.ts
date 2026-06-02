@@ -39,6 +39,37 @@ export interface RuntimeFlags {
   agents: boolean;
 }
 
+/** Runtime-agnostic cost/quality knob; map to concrete model IDs per IDE in `agents.runtimeModels`. */
+export type AgentModelTier = "quality" | "balanced" | "budget";
+
+export type AgentModelRole =
+  | "orchestrator"
+  | "plan"
+  | "clarify"
+  | "implement"
+  | "review"
+  | "audit"
+  | "tracker";
+
+export interface AgentModelTiers {
+  orchestrator: AgentModelTier;
+  plan: AgentModelTier;
+  clarify: AgentModelTier;
+  implement: AgentModelTier;
+  review: AgentModelTier;
+  audit: AgentModelTier;
+  tracker: AgentModelTier;
+}
+
+export type RuntimeModelHints = Partial<Record<AgentModelTier, string>>;
+
+export interface AgentsConfig {
+  markdown?: string;
+  modelTiers: AgentModelTiers;
+  /** Optional per-runtime tier -> vendor model slug hints (skills read these; CLIs do not enforce). */
+  runtimeModels?: Partial<Record<keyof RuntimeFlags, RuntimeModelHints>>;
+}
+
 export interface ProjectConfig {
   schemaVersion: number;
   project: {
@@ -76,7 +107,7 @@ export interface ProjectConfig {
     worktreeStrategy: WorktreeExecutionStrategy;
     entrypoints: ExecutionEntrypoints;
   };
-  /** Local PLAN:: / PROGRESS:: mirror layout; per-issue files live under `{planProgressRoot}/{ISSUE-ID}/`. */
+  /** Local PLAN:: / PROGRESS:: artifact layout; per-issue files live under `{planProgressRoot}/{ISSUE-ID}/`. */
   artifacts: {
     planProgressRoot: string;
   };
@@ -97,9 +128,7 @@ export interface ProjectConfig {
     title: string;
     markdown?: string;
   };
-  agents?: {
-    markdown?: string;
-  };
+  agents: AgentsConfig;
   llms: {
     rootDir: string;
     txtPath: string;

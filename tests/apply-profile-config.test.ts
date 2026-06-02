@@ -26,7 +26,7 @@ describe("applyProfileToConfig", () => {
     base.workflow.tracker = "linear";
     base.manifesto.markdown = "## Architecture\n\n- Custom rule\n";
     base.manifesto.title = "Laravel Domain Workflow Manifesto";
-    base.agents = { markdown: "- Agent note\n" };
+    base.agents = { ...base.agents, markdown: "- Agent note\n" };
     base.projectRules = { markdown: "- Rule one\n" };
 
     const next = applyProfileToConfig(base, "python-fastapi-docker");

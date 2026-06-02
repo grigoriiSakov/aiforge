@@ -35,14 +35,12 @@ Pipeline owner for:
 5. Accept exactly one issue ID per orchestrator run.
 6. Do not start implementation until the current plan contains machine-readable `Claimed Write Scope`.
 7. Ensure the workflow keeps a single source of truth for:
-{% if linear_enabled %}
-   - plan memory: `PLAN::ISSUE-ID` in Linear together with `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` when both are used (degraded mode: see `.ai/reference/tracker-degraded-mode.md`)
-   - execution memory: `PROGRESS::ISSUE-ID` in Linear together with `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` when both are used
-{% else %}
-   - plan memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` only (no Linear `PLAN::` via MCP)
-   - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (no Linear `PROGRESS::` via MCP)
-{% endif %}
+   - plan memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact; never mirror plan body into Linear comments)
+   - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments)
    - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+{% if linear_enabled %}
+   - tracker issue **state** only via Linear MCP (plan-ready / active / review-ready); see item 24
+{% endif %}
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
    - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
@@ -78,25 +76,33 @@ Pipeline owner for:
    - `test` -> canonical task evidence (see scope split below)
    - `review` -> findings-first output plus recorded clean review verdict
    - **Quality bar (in-scope):** нельзя считать `test`/pre-review этап завершённым и уходить в review, пока для **Claimed Write Scope** нет честного зелёного сигнала по затронутому поведению: scoped тесты/проверки по задаче, затронутые файлы из `paths` / `shared_surfaces` без новых регрессий, которые вы ввели. Ошибки линта/типов/тестов, которые относятся к **заявленным** путям или общим поверхностям скоупа, — блокер до фикса, сужения скоупа с правкой плана, или **явного** человеческого исключения в issue/plan.
-   - **Repo-wide red вне скоупа:** если полный `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` падает из‑за уже существующего baseline, других пакетов или файлов **вне** `Claimed Write Scope`, это **не** повод вечно стопорить пайплайн. Обязательно: (1) зафиксировать в `PROGRESS::` / `progress.md` и при необходимости в плане — какая команда красная, выдержка/лог, почему сбои **вне** claimed paths; (2) приложить **scoped** evidence по задаче (как узкий прогон тестов под изменение); (3) перейти в **review loop** — review проверяет, что разделение «в скоупе / вне скоупа» корректно и что в скоупе работа действительно готова. Если review согласен с остаточным repo-wide долгом, можно дать чистый вердикт по задаче с явным **residual risk** в выводе. Нельзя использовать эту лазейку, если красное относится к вашим файлам скоупа или вы не можете аргументированно отделить сбои от claim.
+   - **Repo-wide red вне скоупа:** если полный `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` падает из‑за уже существующего baseline, других пакетов или файлов **вне** `Claimed Write Scope`, это **не** повод вечно стопорить пайплайн. Обязательно: (1) зафиксировать в `progress.md` и при необходимости в плане — какая команда красная, выдержка/лог, почему сбои **вне** claimed paths; (2) приложить **scoped** evidence по задаче (как узкий прогон тестов под изменение); (3) перейти в **review gate** (делегированные subagent'ы `review` + `audit`) — review проверяет, что разделение «в скоупе / вне скоупа» корректно и что в скоупе работа действительно готова. Если review согласен с остаточным repo-wide долгом, можно дать чистый вердикт по задаче с явным **residual risk** в выводе. Нельзя использовать эту лазейку, если красное относится к вашим файлам скоупа или вы не можете аргументированно отделить сбои от claim.
    - **«Старые» ошибки внутри скоупа:** не отмазка. Если падение в claimed path — чините, сужайте claim, или эскалируйте человеку; не закрывайте этап фразой «было до меня».
-21. Record test/review evidence through the runtime helper:
-    - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass`
-    - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low|medium|high`
-22. If review returns `medium` or `high`, the next mandatory action is another fix loop:
-    - go back to implement
-    - fix the findings
-    - rerun scoped test and verify evidence (and refresh the repo-wide OOS note if full lint/verify is still red outside scope)
-    - rerun review
-    - repeat until no `medium` or `high` findings remain
-23. Re-check managed runtime state before stopping the turn.
+21. Record test evidence through the runtime helper:
+    - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail`
+22. **Post-implement gate (review + audit as separate agents):** после успешного `record-test --result pass` и перехода run в `reviewing` (`set-status --status reviewing`) оркестратор **не** выполняет review/audit inline в том же агенте. Вместо этого:
+    - запусти **два параллельных** subagent'а через Task tool:
+      - **review**: промпт со ссылкой на `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, пути к `plan.md` / `progress.md`; model tier `{{ agent_model_review }}` (см. `.ai/reference/model-profiles.md` — при Cursor передай `model` из `agents.runtimeModels.cursor` для tier `{{ agent_model_review }}`, если задан);
+      - **audit**: промпт со ссылкой на `.ai/skills/audit/SKILL.md`, режим `orchestrator-delegate`, те же контекстные пути; model tier `{{ agent_model_audit }}` (аналогично runtime hint для `{{ agent_model_audit }}`).
+    - main-session orchestrator остаётся на tier `{{ agent_model_orchestrator }}`; implement-фаза — `{{ agent_model_implement }}`.
+    - дождись обоих ответов; каждый subagent обязан вернуть machine-readable блок вердикта (см. skills).
+    - **только оркестратор** вызывает `record-review`, `set-status`, Linear state и fix-loop; subagent'ы не трогают orchestrator runtime.
+23. Решение оркестратора по вердиктам:
+    - review `high` или `medium` **или** audit `blocking` -> fix loop:
+      - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result medium|high` (если review уже дал severity; иначе `high` при blocking-only audit)
+      - implement в worktree -> scoped test/verify -> снова `reviewing` -> повторить gate (п. 22); веди `## Fix Loop` в `progress.md` по `.ai/reference/verify-fix-loop.md`
+    - review `clean` или `low` **и** audit не `blocking` -> финализация пайплайна:
+      - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low`
+      - run переходит в `awaiting-finalize` (ожидание человека: merge/PR/закрытие issue)
+    - audit `advisory` при чистом review не блокирует переход; зафиксируй advisory в summary для человека.
+24. Re-check managed runtime state before stopping the turn.
 {% if linear_enabled %}
-24. Keep Linear issue states aligned with the workflow (when MCP is available):
-    - plan-ready -> `{{ tracker_status_plan_ready }}`
+25. Keep Linear issue **workflow states** aligned (MCP state updates only — no plan/progress comment sync):
+    - plan implement-ready -> `{{ tracker_status_plan_ready }}`
     - active execution -> `{{ tracker_status_active }}`
-    - review-ready -> `{{ tracker_status_review }}`
+    - review-ready (после чистого gate, перед/вместе с `awaiting-finalize`) -> `{{ tracker_status_review }}`
 {% else %}
-24. Do not drive Linear issue states via MCP; rely on local plan/progress artifacts and orchestrator runtime JSON for phase truth.
+25. Do not drive Linear issue states via MCP; rely on local plan/progress artifacts and orchestrator runtime JSON for phase truth.
 {% endif %}
 
 ## Conflict policy

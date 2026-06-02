@@ -21,6 +21,8 @@ Use this skill when the current request is too ambiguous for safe planning or im
 
 ## Protocol
 
-1. List exact ambiguities.
-2. Ask only the minimum focused questions needed to unblock `/plan`.
-3. Do not start coding while blockers remain unresolved.
+1. Read `.ai/reference/model-profiles.md`; use tier `{{ agent_model_clarify }}`.
+2. List exact ambiguities.
+3. Ask only the minimum focused questions needed to unblock `/plan`.
+4. Summarize answers as bullet **Implementation Decisions** candidates for the planner (do not write the full plan here).
+5. Do not start coding while blockers remain unresolved.

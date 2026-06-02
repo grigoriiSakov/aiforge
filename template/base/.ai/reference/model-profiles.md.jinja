@@ -1,0 +1,50 @@
+---
+title: "Model Profiles"
+---
+
+# Model Profiles
+
+## Why this exists
+
+`ai.config.yaml` stores **runtime-agnostic** tiers (`quality`, `balanced`, `budget`). Each IDE (Cursor, Codex, Claude Code, …) names models differently and exposes different knobs. This file is the contract skills follow; optional concrete slugs live in `agents.runtimeModels` and `.ai/project.model-profiles.json`.
+
+## Semantic tiers
+
+| Tier | When to use |
+|------|-------------|
+| `quality` | Architecture, risky refactors, wide blast radius |
+| `balanced` | Planning, orchestration main session, tracker, clarify |
+| `budget` | Parallel review/audit, narrow checklists, reruns |
+
+## Role → tier (from `ai.config.yaml`)
+
+| Role | Tier |
+|------|------|
+| orchestrator | `{{ agent_model_orchestrator }}` |
+| plan | `{{ agent_model_plan }}` |
+| clarify | `{{ agent_model_clarify }}` |
+| implement | `{{ agent_model_implement }}` |
+| review | `{{ agent_model_review }}` |
+| audit | `{{ agent_model_audit }}` |
+| tracker | `{{ agent_model_tracker }}` |
+
+## Runtime hints (optional)
+
+If `agents.runtimeModels` is set, prefer the mapped slug when the active tool supports explicit model selection (e.g. Cursor Task `model` parameter). Example structure:
+
+```json
+{{ agent_runtime_models_json }}
+```
+
+When no mapping exists for the active runtime, **do not guess vendor IDs** — stay on the semantic tier and keep context lean per `.ai/reference/context-budget.md`.
+
+## Multi-runtime rule
+
+1. Read tier from `ai.config.yaml` for the skill role.
+2. Load `.ai/project.model-profiles.json` if present (machine mirror after `sync` / `save`).
+3. Apply runtime-specific slug only when executing in that runtime and the hint exists.
+4. Subagents (review, audit) **must** use `budget` tier unless the user overrides config.
+
+## Editing
+
+Change tiers in `ai.config.yaml` under `agents.modelTiers`. Add optional slugs under `agents.runtimeModels.<runtime>.<tier>`. Re-run project `sync` to refresh `.ai/project.model-profiles.json` and this reference.

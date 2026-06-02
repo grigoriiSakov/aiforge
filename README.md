@@ -1,6 +1,6 @@
 # aiforge
 
-MVP CLI для стандартизации AI-facing слоя в новых и существующих репозиториях: единый `ai.config.yaml`, шаблон через Copier, task-runner, MCP, расширения и remote skills.
+MVP CLI для стандартизации AI-facing слоя в новых и существующих репозиториях: единый `ai.config.yaml`, шаблон через Copier, task-runner, семантические model tiers для skills, MCP, расширения и remote skills.
 
 ## Стек
 
@@ -91,12 +91,13 @@ node /path/to/aiforge-repo/dist/src/cli/index.js doctor --repo /path/to/your-app
 
 | Поверхность | Назначение |
 |-------------|------------|
-| `ai.config.yaml` | Контракт процесса: профиль, runtimes, entrypoints, `manifesto` / `agents` / `projectRules` |
+| `ai.config.yaml` | Контракт процесса: профиль, runtimes, entrypoints, `agents.modelTiers`, `manifesto` / `projectRules` |
 | `.ai/**` | Skills, rules, reference, runtime |
 | `AGENTS.md`, `MANIFESTO.md` | Собираются из YAML (не править как SoT вручную) |
 | `.cursor/**`, `.codex/**`, `.claude/**`, `.agent/**`, `.agents/**` | Runtime-обвязка и symlinks на `.ai` |
 | `Taskfile.yml`, `llms.txt`, `llms/**` | Task layer и LLM context |
 | `.ai/project.manifest.json` | Зеркало YAML для хуков без парсера |
+| `.ai/project.model-profiles.json` | Зеркало `agents.modelTiers` + optional `runtimeModels` (после `sync` / `saveConfig`) |
 | `.aiforge.json` | Installer state: MCP, extensions, remote skills, security log, runtimes для `doctor` |
 | MCP JSON | `.cursor/mcp.json`, `.mcp.json`, `.codex/mcp.json` — серверы с префиксом `aiforge-*` |
 
@@ -106,9 +107,10 @@ node /path/to/aiforge-repo/dist/src/cli/index.js doctor --repo /path/to/your-app
 
 - **`ai.config.yaml`** — durable process contract.
 - **`.ai/project.manifest.json`** — зеркало для инструментов без YAML.
+- **`.ai/project.model-profiles.json`** — machine-readable роли → tier → semantics; пишется вместе с manifest.
 - **`.aiforge.json`** — то, чем владеет CLI (MCP managed blocks, extensions, remote skills, последний security scan, согласованность runtimes с YAML).
 
-После `saveConfig` / `writeMachineManifest` installer state подтягивается; `aiforge doctor` требует `.aiforge.json` и проверяет runtimes.
+После `saveConfig` / `writeMachineManifest` обновляются manifest, model-profiles и installer state; `aiforge doctor` требует `.aiforge.json` и проверяет runtimes.
 
 ---
 
@@ -123,7 +125,7 @@ aiforge sync
 aiforge update
 ```
 
-В этом режиме **`ai.config.yaml` не перезаписывается** — обновляются managed surfaces (Copier + post-steps), плюс манифест/`.aiforge.json`. Твои секции вроде `manifesto.markdown`, `linear.scopes`, `agents`, `projectRules`, кастомные `commands` для **того же** `profile.id` сохраняются.
+В этом режиме **`ai.config.yaml` не перезаписывается** — обновляются managed surfaces (Copier + post-steps), плюс манифест / model-profiles / `.aiforge.json`. Твои секции вроде `manifesto.markdown`, `linear.scopes`, `agents.modelTiers`, `agents.runtimeModels`, `agents.markdown`, `projectRules`, кастомные `commands` для **того же** `profile.id` сохраняются. Старые репо без `agents.modelTiers` получают дефолты при load/sync (YAML на диске не трогается, пока сам не сохранишь конфиг).
 
 Явная смена профиля (редкий случай):
 
@@ -223,6 +225,65 @@ Stdin: выбор профиля (если детект слабый), имя п
 
 Общий слой (не привязан к конкретному стеку): `.ai/rules`, `.ai/skills`, `.ai/reference`, `.ai/context`, линки из `.cursor` / `.codex` / `.claude` / `.agent` / `.agents` на эти деревья. Профильные ограничения — отдельными rules и `ai.config.yaml`.
 
+Канонический issue-flow: `issue → plan → implement → test → review` (skills `/plan`, `/implement`, `/orchestrator` и т.д.). Plan/progress — только локально под `artifacts.planProgressRoot` (по умолчанию `.ai/context/runtime/ISSUE-ID/`).
+
+---
+
+## Model tiers (бюджет между Cursor / Codex / Claude)
+
+IDE не дают единого API «поставь модель X». В aiforge бюджет — **семантические tier'ы** в YAML + опциональные slug'и per-runtime; skills и reference переводят tier в действие.
+
+| Tier | Назначение |
+|------|------------|
+| `quality` | Архитектура, рискованные рефакторы, implement |
+| `balanced` | Plan, orchestrator main session, tracker, clarify |
+| `budget` | Параллельные review + audit subagent'ы |
+
+Дефолты при `init` (можно переопределить):
+
+```yaml
+agents:
+  modelTiers:
+    orchestrator: balanced
+    plan: balanced
+    clarify: balanced
+    implement: quality
+    review: budget
+    audit: budget
+    tracker: balanced
+```
+
+Опционально — конкретные model ID там, где runtime умеет явный выбор (например Cursor Task `model`):
+
+```yaml
+agents:
+  runtimeModels:
+    cursor:
+      quality: claude-opus-4-8-thinking-high
+      balanced: composer-2.5-fast
+      budget: gpt-5-mini
+    codex:
+      budget: o4-mini
+```
+
+CLI **не переключает** модели в IDE — только нормализует конфиг и пишет `.ai/project.model-profiles.json`. В рантайме читай:
+
+- `.ai/reference/model-profiles.md` — таблица ролей и правила multi-runtime;
+- skills (`orchestrator`, `plan`, `review`, …) — tier из `ai.config.yaml`.
+
+Для Codex/Claude без mapping в `runtimeModels` агент остаётся на tier в промпте и на дефолтах UI/CLI пользователя.
+
+---
+
+## Усиления пайплайна (reference + skills)
+
+| Артефакт / skill | Что добавляет |
+|------------------|---------------|
+| `plan-template` → `## Implementation Decisions` | discuss-before-plan без отдельного трекера |
+| `/clarify` | Вопросы до плана; ответы → bullets для planner |
+| `verify-fix-loop.md` | Секция `## Fix Loop` в `progress.md` после verify/review/audit |
+| orchestrator gate | review + audit параллельно на `budget` tier; fix-loop по reference |
+
 ---
 
 ## Project-specific: YAML и `project-stub`
@@ -258,14 +319,23 @@ manifesto:
     - All externally visible behavior changes require spec notes.
 ```
 
-**`agents`:**
+**`agents` (prose + model tiers):**
 
 ```yaml
 agents:
   markdown: |
     ## Repo-Specific Constraints
     - Always treat `apps/api` as the system-of-record boundary.
+  modelTiers:
+    implement: quality
+    review: budget
+    audit: budget
+  runtimeModels:
+    cursor:
+      budget: gpt-5-mini
 ```
+
+`agents.markdown` попадает в `AGENTS.md` при `sync`. `modelTiers` / `runtimeModels` — только контракт для skills (не подмешиваются в AGENTS автоматически).
 
 ---
 

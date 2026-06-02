@@ -22,9 +22,13 @@ Use this skill for a read-only architecture and quality audit.
 ## Mandatory protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
-2. Read `.ai/context/current.md` if it exists.
-3. Confirm the selected profile and its canonical verify commands.
-4. Audit only:
+2. Use model tier `{{ agent_model_audit }}` (`.ai/reference/model-profiles.md`); in `orchestrator-delegate` mode stay read-only.
+3. Read `.ai/context/current.md` if it exists.
+4. For issue-scoped audits, read local plan/progress:
+   - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+   - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+5. Confirm the selected profile and its canonical verify commands.
+6. Audit only:
    - workflow rule compliance
    - task evidence
    - plan/progress artifact quality
@@ -37,3 +41,26 @@ Use this skill for a read-only architecture and quality audit.
 - Markdown report only.
 - Findings first.
 - No code edits.
+
+## Orchestrator-delegate mode
+
+Use when the parent `/orchestrator` launched this run as a **separate** audit subagent alongside review.
+
+- Read only the assigned issue context (local plan/progress, orchestrator worktree path, test/review evidence referenced in the prompt).
+- Do **not** edit code, call orchestrator runtime helpers, or use Linear MCP.
+- Return a verdict to the parent orchestrator only.
+
+End the response with this exact machine-readable block:
+
+```yaml
+orchestrator_audit_verdict:
+  result: pass | advisory | blocking
+  top_findings:
+    - severity: high | medium | low
+      summary: "..."
+  summary: "one short sentence for the orchestrator"
+```
+
+- `blocking`: workflow/process violation or `high`/`medium` compliance gap that must be fixed before finalize.
+- `advisory`: real issues that should be noted but must not alone force a fix loop if review is clean.
+- `pass`: no blocking or material compliance gaps.

@@ -31,20 +31,24 @@ Turn the current request or issue into an execution artifact that is specific en
    - `.ai/reference/plan-progress-template.md`
    - `.ai/reference/context-artifacts.md`
    - `.ai/reference/orchestrator-claimed-scope-template.md`
-3. Load relevant `llms` artifacts and existing code surfaces before planning so the plan reuses the current system instead of reinventing it.
-4. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
-5. Anchor the plan around canonical tasks only:
+   - `.ai/reference/model-profiles.md`
+3. If requirements have material gray areas, run `/clarify` first or fill `## Implementation Decisions` in the plan (see `.ai/reference/plan-template.md`); do not hide ambiguity inside step titles.
+4. Load relevant `llms` artifacts and existing code surfaces before planning so the plan reuses the current system instead of reinventing it.
+5. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
+6. Use model tier `{{ agent_model_plan }}` for this skill (see `.ai/reference/model-profiles.md`).
+7. Anchor the plan around canonical tasks only:
    - `{{ task_command }} {{ task_implement_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
    - `{{ task_command }} {{ task_review_name }}`
-6. Before writing the plan, extract:
+8. Before writing the plan, extract:
    - source request / issue requirements
    - explicit non-goals
    - adjacent behavior that must remain stable
    - existing reusable surfaces
-7. The plan is invalid if it does not contain:
+9. The plan is invalid if it does not contain:
+   - `Implementation Decisions`
    - `Execution Contract`
    - `Current State Snapshot`
    - `Spec Coverage Matrix`
@@ -54,30 +58,25 @@ Turn the current request or issue into an execution artifact that is specific en
    - `Step Plan`
    - `Risk Registry`
    - `Open Questions / Blockers`
-8. The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.
-9. The plan must call out query/storage-heavy steps that need industrial handling:
+10. The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.
+11. The plan must call out query/storage-heavy steps that need industrial handling:
    - no N+1
    - no oversized reads
    - no avoidable in-memory loops over raw datasets
-10. If requirements are ambiguous, stop and ask focused clarification before coding.
-11. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
-12. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+12. If requirements are ambiguous, stop and ask focused clarification before coding.
+13. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
+14. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+15. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact). Do **not** create or update Linear comments for plan body sync.
 {% if linear_enabled %}
-13. When the plan is implement-ready, move the Linear issue toward `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md` (if MCP is up).
-{% else %}
-13. Do **not** use Linear MCP for planning. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` as the single source of truth for this mode.
+16. When the plan is implement-ready and Linear MCP is available, move the issue workflow state to `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md`.
+17. If Linear MCP is unavailable for **state** updates, follow `.ai/reference/tracker-degraded-mode.md`; keep working on `plan.md` locally and report pending state sync.
 {% endif %}
 
 ## Storage contract
 
 - Canonical local directory: `{{ plan_progress_runtime_root }}/ISSUE-ID/` (from `ai.config.yaml` -> `artifacts.planProgressRoot`).
-- Local plan file: `plan.md` (body must match the `PLAN::ISSUE-ID` comment when Linear is enabled), including `<!-- AI_SIMPLE_PLAN:START/END -->` markers from `.ai/reference/plan-template.md`.
-{% if linear_enabled %}
-- Keep one updatable `PLAN::ISSUE-ID` in Linear and keep `plan.md` in sync whenever anything reads from disk.
-- If Linear MCP is temporarily unavailable, follow `.ai/reference/tracker-degraded-mode.md` and treat `plan.md` as source of truth until sync-back.
-{% else %}
-- `plan.md` is the sole source of truth; do not create or update Linear plan comments via MCP.
-{% endif %}
+- Local plan file: `plan.md` is the **sole** source of truth for plan content, including `<!-- AI_SIMPLE_PLAN:START/END -->` and `# PLAN::ISSUE-ID` markers from `.ai/reference/plan-template.md`.
+- Never mirror plan body into Linear issue comments via MCP.
 
 ## Quality bar
 

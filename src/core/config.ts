@@ -2,6 +2,11 @@ import path from "node:path";
 
 import YAML from "yaml";
 
+import {
+  DEFAULT_AGENT_MODEL_TIERS,
+  normalizeAgentsConfig,
+  writeModelProfilesManifest
+} from "./agent-models.js";
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
 import { ensureInstallerState } from "./state.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
@@ -84,7 +89,8 @@ export function createConfig(params: {
       markdown: ""
     },
     agents: {
-      markdown: ""
+      markdown: "",
+      modelTiers: { ...DEFAULT_AGENT_MODEL_TIERS }
     },
     llms: {
       rootDir: "llms",
@@ -100,6 +106,7 @@ export function createConfig(params: {
     },
     managedSurfaces: [
       { path: ".aiforge.json", policy: "managed" },
+      { path: ".ai/project.model-profiles.json", policy: "managed" },
       { path: ".ai", policy: "managed" },
       { path: "AGENTS.md", policy: "managed" },
       { path: "MANIFESTO.md", policy: "managed" },
@@ -151,6 +158,7 @@ export function writeMachineManifest(repoRoot: string, config: ProjectConfig): s
   ensureDir(path.dirname(manifestPath));
   writeTextFile(manifestPath, `${JSON.stringify(normalized, null, 2)}\n`);
   ensureInstallerState(repoRoot, normalized);
+  writeModelProfilesManifest(repoRoot, normalized);
   return manifestPath;
 }
 
@@ -200,7 +208,15 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     profile_notes: getProfileDefinition(config.profile.id).notes,
     mcp_placeholders: config.mcp.placeholders,
     project_rules_markdown: config.projectRules?.markdown ?? "",
-    agents_markdown: config.agents?.markdown ?? ""
+    agents_markdown: config.agents?.markdown ?? "",
+    agent_model_orchestrator: config.agents.modelTiers.orchestrator,
+    agent_model_plan: config.agents.modelTiers.plan,
+    agent_model_clarify: config.agents.modelTiers.clarify,
+    agent_model_implement: config.agents.modelTiers.implement,
+    agent_model_review: config.agents.modelTiers.review,
+    agent_model_audit: config.agents.modelTiers.audit,
+    agent_model_tracker: config.agents.modelTiers.tracker,
+    agent_runtime_models_json: JSON.stringify(config.agents.runtimeModels ?? {}, null, 2)
   };
 }
 
@@ -270,12 +286,18 @@ function validateConfig(config: ProjectConfig): void {
     throw new Error("Config manifesto.markdown must be a string when provided");
   }
 
-  if (config.agents && typeof config.agents !== "object") {
-    throw new Error("Config agents must be an object when provided");
+  if (!config.agents || typeof config.agents !== "object") {
+    throw new Error("Config agents is required");
   }
 
-  if (config.agents?.markdown !== undefined && typeof config.agents.markdown !== "string") {
+  if (config.agents.markdown !== undefined && typeof config.agents.markdown !== "string") {
     throw new Error("Config agents.markdown must be a string when provided");
+  }
+
+  for (const [role, tier] of Object.entries(config.agents.modelTiers)) {
+    if (!["quality", "balanced", "budget"].includes(tier)) {
+      throw new Error(`Config agents.modelTiers.${role} must be quality, balanced, or budget`);
+    }
   }
 
   if (config.projectRules && typeof config.projectRules !== "object") {
@@ -300,12 +322,13 @@ function validateConfig(config: ProjectConfig): void {
 export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectProfileId): ProjectConfig {
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
-  const task = normalizeTaskConfig(config.task, createConfig({
+  const profileDefaults = createConfig({
     repoRoot: "",
     projectSlug: config.project?.slug ?? "project",
     projectName: config.project?.name ?? "Project",
     profileId
-  }).task, taskCommand);
+  });
+  const task = normalizeTaskConfig(config.task, profileDefaults.task, taskCommand);
   const profileCommands = renderTaskCommands(profile.taskCommands, taskCommand);
   const userGlobs = config.llms?.sourceGlobs;
   const sourceGlobs =
@@ -335,9 +358,7 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
     manifesto: {
       ...config.manifesto
     },
-    agents: {
-      ...config.agents
-    },
+    agents: normalizeAgentsConfig(config.agents, profileDefaults.agents),
     llms: {
       ...config.llms,
       sourceGlobs
@@ -404,10 +425,7 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
       ...defaults.manifesto,
       ...config.manifesto
     },
-    agents: {
-      ...defaults.agents,
-      ...config.agents
-    },
+    agents: normalizeAgentsConfig(config.agents, defaults.agents),
     llms: {
       ...defaults.llms,
       ...config.llms

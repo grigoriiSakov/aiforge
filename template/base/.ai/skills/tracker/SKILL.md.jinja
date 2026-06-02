@@ -30,5 +30,7 @@ Use the configured tracker as the source of issue state when tracker-first workf
 ## Rules
 
 - do not mix foreign team/project scopes
-- degraded mode must be explicit, not silent
-- keep tracker phase transitions aligned with plan-ready, active execution, and review-ready states
+- plan and progress **content** live only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`; never sync plan/progress body into Linear comments
+- use Linear MCP for issue lifecycle: get/create issues, **workflow state** transitions, and ordinary comments — not for `PLAN::` / `PROGRESS::` artifact mirrors
+- degraded mode must be explicit, not silent (see `.ai/reference/tracker-degraded-mode.md`)
+- keep tracker **workflow states** aligned with plan-ready, active execution, and review-ready phases

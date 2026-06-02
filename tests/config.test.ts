@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { MODEL_PROFILES_MANIFEST_PATH } from "../src/core/agent-models.js";
 import {
   CONFIG_FILE_NAME,
   MACHINE_MANIFEST_PATH,
@@ -28,7 +29,9 @@ describe("config lifecycle", () => {
     expect(configPath).toBe(path.join(repoRoot, CONFIG_FILE_NAME));
     expect(fs.existsSync(configPath)).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, MACHINE_MANIFEST_PATH))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, MODEL_PROFILES_MANIFEST_PATH))).toBe(true);
     expect(loadConfig(repoRoot).profile.id).toBe("laravel-docker");
+    expect(loadConfig(repoRoot).agents.modelTiers.implement).toBe("quality");
   });
 
   test("profile carries linear defaults", () => {

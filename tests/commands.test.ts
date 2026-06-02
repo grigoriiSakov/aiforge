@@ -1066,7 +1066,6 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
 
     const legacyConfig = loadConfig(repoRoot);
     delete legacyConfig.projectRules;
-    delete legacyConfig.agents;
     delete legacyConfig.manifesto.markdown;
     legacyConfig.managedSurfaces = legacyConfig.managedSurfaces.filter((entry) => entry.path !== ".ai");
     const legacyConfigYaml = [
@@ -1149,7 +1148,9 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
 
     const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, ".ai", "project.manifest.json"), "utf8"));
     expect(manifest.projectRules).toEqual({ markdown: "" });
-    expect(manifest.agents).toEqual({ markdown: "" });
+    expect(manifest.agents.markdown).toBe("");
+    expect(manifest.agents.modelTiers.review).toBe("budget");
+    expect(manifest.agents.modelTiers.implement).toBe("quality");
     expect(manifest.manifesto.markdown).toBe("");
     expect(manifest.managedSurfaces.some((entry: { path: string }) => entry.path === ".ai")).toBe(true);
     expect(manifest.workflow.trackerStates).toBeTruthy();
@@ -1311,6 +1312,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
 
     const config = loadConfig(repoRoot);
     config.agents = {
+      ...config.agents,
       markdown: [
         "# AGENTS.md",
         "",

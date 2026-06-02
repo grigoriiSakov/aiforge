@@ -12,8 +12,8 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 
 - `.ai/context/current.md`
 - `.ai/context/initiatives/<slug>/issues-manifest.json`
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` mirror)
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` mirror)
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (canonical `PLAN::ISSUE-ID` artifact)
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (canonical `PROGRESS::ISSUE-ID` artifact)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 - `.ai/runtime/supervisor/runs/<slug>.json`
@@ -33,14 +33,14 @@ Use as a short digest only:
 
 Do not dump large research or full code excerpts into `current.md`.
 
-## Runtime mirrors
+## Plan / progress layout
 
-If tracker-backed `PLAN::` / `PROGRESS::` artifacts are unavailable — or as a durable local copy while the tracker holds the live comment — write them under the configured root, **one directory per issue**:
+Always write plan and progress under the configured root, **one directory per issue**:
 
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 
-Use the same markers and body structure as the tracker artifacts (see `.ai/reference/plan-progress-template.md`). Do not use repo-root `docs/ai/` for these; keep plan/progress under `.ai` only.
+Use marker blocks from `.ai/reference/plan-progress-template.md`. The tracker (e.g. Linear) carries workflow **state** only, not duplicated plan/progress bodies. Do not use repo-root `docs/ai/` for these; keep plan/progress under `.ai` only.
 
 ## Orchestrator runtime
 

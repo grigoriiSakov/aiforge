@@ -23,8 +23,8 @@
 - Cursor may auto-inject context through hooks.
 - Codex and other tools should read the same runtime artifacts:
   - `.ai/context/current.md`
-  - `PLAN::ISSUE-ID`
-  - `PROGRESS::ISSUE-ID`
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 - Do not rely on Cursor-only hook behavior as the sole context path.
 
 ## Routing Strategy
