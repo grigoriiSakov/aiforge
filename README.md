@@ -268,12 +268,16 @@ agents:
       budget: o4-mini
 ```
 
-CLI **не переключает** модели в IDE — только нормализует конфиг и пишет `.ai/project.model-profiles.json`. В рантайме читай:
+CLI нормализует конфиг, валидирует что `runtimeModels.codex` не содержит Cursor-slug'ов (и наоборот), пишет `.ai/project.model-profiles.json`.
 
-- `.ai/reference/model-profiles.md` — таблица ролей и правила multi-runtime;
-- skills (`orchestrator`, `plan`, `review`, …) — tier из `ai.config.yaml`.
+В рантайме:
 
-Для Codex/Claude без mapping в `runtimeModels` агент остаётся на tier в промпте и на дефолтах UI/CLI пользователя.
+```bash
+node .ai/runtime/orchestrator-state.mjs active-runtime   # codex | cursor | claude
+node .ai/runtime/orchestrator-state.mjs model-hint --role review   # без --runtime cursor!
+```
+
+Override: `AIFORGE_ACTIVE_RUNTIME=codex`. **Не смешивать** namespace: Codex → `codex -m gpt-5.5`; Cursor → Task `model=…` из `runtimeModels.cursor` only.
 
 ---
 

@@ -104,16 +104,19 @@ Pipeline owner for:
 
 Конфиг: `orchestrator.auditGate` = **`{{ orchestrator_audit_gate }}`** (`never` | `process-layer-only` | `always`).
 
-26. **Subagent model (review, обязательно):** перед Task tool:
+26. **Subagent model (review, обязательно):** определи **текущий** runtime (Codex ≠ Cursor ≠ Claude):
     ```bash
-    node .ai/runtime/orchestrator-state.mjs model-hint --role review --runtime cursor
+    node .ai/runtime/orchestrator-state.mjs active-runtime
+    node .ai/runtime/orchestrator-state.mjs model-hint --role review
     ```
-    - если JSON содержит `model` — передай **только его** в Task (`model="..."`);
-    - если `model` = null (`auto` и т.п.) — **не** передавай `model`, но **не** делегируй review на той же дорогой модели, что main-session orchestrator; укажи tier `{{ agent_model_review }}` и «minimal diff review, no re-implementation».
+    - **Никогда** не передавай `--runtime cursor` из Codex-сессии и наоборот.
+    - `model-hint` читает **только** `agents.runtimeModels.<activeRuntime>` из `ai.config.yaml` / `.ai/project.model-profiles.json`.
+    - следуй полю `instruction` в JSON (Cursor → Task `model=`; Codex → `codex -m …`; не смешивать).
+    - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
 27. После scoped `record-test --result pass` и `set-status --status reviewing`:
     - **всегда один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
 {% if orchestrator_audit_gate == "always" %}
-    - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед Task — `model-hint --role audit --runtime cursor`.
+    - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
 {% elif orchestrator_audit_gate == "process-layer-only" %}
     - **audit только если** в `Claimed Write Scope` JSON `touches_process_layer: true` **или** есть claimed paths под `.ai/`, `.cursor/`, `.codex/`, `.claude/`, `.agent/`, `.agents/`, либо process files (`ai.config.yaml`, `AGENTS.md`, …): тогда второй subagent audit параллельно review; иначе **не** запускай audit.
 {% else %}

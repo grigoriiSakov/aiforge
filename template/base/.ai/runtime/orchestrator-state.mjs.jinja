@@ -25,6 +25,9 @@ const HUMAN_GATE_STATUSES = new Set(["awaiting-human-approval"]);
 const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
 const TEST_SCOPES = new Set(["scoped", "full"]);
 const MODEL_HINT_SKIP = new Set(["auto", "default", "none", ""]);
+const AGENT_RUNTIME_IDS = ["cursor", "codex", "claude", "agent", "agents"];
+const CURSOR_ONLY_SLUG = /^(auto|composer[\w.-]*|gpt-5\.5-(medium|fast)|claude-opus-4-8-thinking-high)$/i;
+const CODEX_ONLY_SLUG = /^gpt-5\.3-codex/i;
 const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".claude/", ".agent/", ".agents/"];
 const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.md", "Taskfile.yml"]);
 const ALLOWED_STATUS_TRANSITIONS = {
@@ -695,30 +698,166 @@ function modelProfilesPath() {
   return path.join(repoRoot(), ".ai", "project.model-profiles.json");
 }
 
+function machineManifestPath() {
+  return path.join(repoRoot(), ".ai", "project.manifest.json");
+}
+
+function isAgentRuntimeId(value) {
+  return AGENT_RUNTIME_IDS.includes(String(value ?? "").toLowerCase());
+}
+
+function detectActiveRuntime() {
+  const env = process.env;
+  const explicit = env.AIFORGE_ACTIVE_RUNTIME?.trim().toLowerCase();
+  if (explicit && isAgentRuntimeId(explicit)) {
+    return explicit;
+  }
+  const provider = env.AIFORGE_RUNTIME_PROVIDER?.trim().toLowerCase();
+  if (provider && isAgentRuntimeId(provider)) {
+    return provider;
+  }
+  if (env.CLAUDECODE || env.CLAUDE_CODE) {
+    return "claude";
+  }
+  if (env.CODEX_SANDBOX || env.CODEX_ENV || env.CODEX_ROOT) {
+    return "codex";
+  }
+  if (env.CURSOR_TRACE_ID || env.CURSOR_AGENT || env.CURSOR_SESSION_ID) {
+    return "cursor";
+  }
+  return null;
+}
+
+function loadEnabledRuntimes() {
+  const manifest = readJson(machineManifestPath(), null);
+  return manifest?.runtimes ?? manifest?.enabledRuntimes ?? null;
+}
+
+function validateModelSlugForRuntime(runtime, slug) {
+  const normalized = String(slug ?? "").trim();
+  if (!normalized || MODEL_HINT_SKIP.has(normalized.toLowerCase())) {
+    return {
+      model: null,
+      rejectedReason: normalized ? "reserved-ui-mode" : "no-runtime-mapping"
+    };
+  }
+  if (
+    runtime === "codex" &&
+    (CURSOR_ONLY_SLUG.test(normalized) || /\bgpt-5\.5-(medium|fast)\b/i.test(normalized))
+  ) {
+    return {
+      model: null,
+      rejectedReason: `slug "${normalized}" is a Cursor-style id; configure agents.runtimeModels.codex with Codex CLI ids (gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, …)`
+    };
+  }
+  if (runtime === "cursor" && CODEX_ONLY_SLUG.test(normalized)) {
+    return {
+      model: null,
+      rejectedReason: `slug "${normalized}" is Codex-only; use agents.runtimeModels.cursor`
+    };
+  }
+  return { model: normalized, rejectedReason: null };
+}
+
+function delegationInstruction(runtime, tier, model) {
+  if (runtime === "cursor") {
+    return model
+      ? `Cursor only: Task tool model="${model}". Never use codex -m or agents.runtimeModels.codex slugs.`
+      : `Cursor only: omit Task model param; tier ${tier} via UI. Never pass Codex slugs.`;
+  }
+  if (runtime === "codex") {
+    return model
+      ? `Codex only: codex -m ${model} or /model. Never Cursor Task model= or composer/gpt-5.5-medium slugs.`
+      : `Codex only: tier ${tier} via config.toml or /model. Never read agents.runtimeModels.cursor.`;
+  }
+  if (runtime === "claude") {
+    return model
+      ? `Claude Code: use ${model} when supported.`
+      : `Claude Code: tier ${tier} default; never Cursor Task model= or codex slugs from wrong block.`;
+  }
+  return `Runtime ${runtime}, tier ${tier}. Use only agents.runtimeModels.${runtime}.`;
+}
+
+function resolveActiveRuntime(requestedRuntime) {
+  const detected = detectActiveRuntime();
+  const enabled = loadEnabledRuntimes();
+  const warnings = [];
+  let runtime = requestedRuntime ? String(requestedRuntime).toLowerCase() : null;
+
+  if (runtime && !isAgentRuntimeId(runtime)) {
+    throw new Error(`unknown --runtime ${runtime}; expected one of: ${AGENT_RUNTIME_IDS.join(", ")}`);
+  }
+
+  if (detected && runtime && runtime !== detected) {
+    warnings.push(`--runtime ${runtime} ignored; active runtime is ${detected}`);
+    runtime = detected;
+  } else if (!runtime) {
+    runtime = detected;
+  }
+
+  if (!runtime) {
+    throw new Error(
+      "Cannot detect agent runtime. Export AIFORGE_ACTIVE_RUNTIME=codex|cursor|claude or pass --runtime explicitly."
+    );
+  }
+
+  if (enabled && enabled[runtime] === false) {
+    throw new Error(`runtime "${runtime}" is disabled in ai.config.yaml runtimes`);
+  }
+
+  return { runtime, detected, warnings };
+}
+
 function resolveModelHint(role, runtime) {
   const manifest = readJson(modelProfilesPath(), null);
   const tier = manifest?.roles?.[role]?.tier ?? null;
-  const slug = manifest?.runtimeModels?.[runtime]?.[tier] ?? null;
-  const normalized = String(slug ?? "").trim();
-  const usable = normalized.length > 0 && !MODEL_HINT_SKIP.has(normalized.toLowerCase());
+  const block = manifest?.runtimeModels?.[runtime] ?? {};
+  const slug = tier ? block[tier] : null;
+  const validated = validateModelSlugForRuntime(runtime, slug);
   return {
     role,
     runtime,
     tier,
-    model: usable ? normalized : null,
-    skipReason: usable ? null : normalized ? "reserved-ui-mode" : "no-runtime-mapping"
+    model: validated.model,
+    configuredSlug: slug ?? null,
+    skipReason: validated.rejectedReason,
+    availableRuntimes: Object.keys(manifest?.runtimeModels ?? {})
   };
+}
+
+function commandActiveRuntime() {
+  const detected = detectActiveRuntime();
+  const enabled = loadEnabledRuntimes();
+  const runtimeModels = readJson(modelProfilesPath(), null)?.runtimeModels ?? {};
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        detected,
+        enabledRuntimes: enabled,
+        configuredModelNamespaces: Object.keys(runtimeModels),
+        hint: detected
+          ? `Use model-hint without --runtime (reads agents.runtimeModels.${detected} only)`
+          : "Set AIFORGE_ACTIVE_RUNTIME or run from Cursor/Codex/Claude so detection works"
+      },
+      null,
+      2
+    )}\n`
+  );
 }
 
 function commandModelHint(args) {
   const role = requireOption(args, "--role");
-  const runtime = getOption(args, "--runtime", "cursor");
+  const requestedIdx = args.indexOf("--runtime");
+  const requestedRuntime =
+    requestedIdx !== -1 ? args[requestedIdx + 1] : null;
+  const { runtime, detected, warnings } = resolveActiveRuntime(requestedRuntime);
   const hint = resolveModelHint(role, runtime);
   const payload = {
     ...hint,
-    instruction: hint.model
-      ? `Task tool: pass model="${hint.model}" (required; do not use the main-session model).`
-      : `Task tool: omit the model parameter (tier ${String(hint.tier)}; UI/default handles cost). Never delegate review/audit on the orchestrator main-session model.`
+    activeRuntime: runtime,
+    detectedRuntime: detected,
+    warnings,
+    instruction: delegationInstruction(runtime, String(hint.tier ?? "budget"), hint.model)
   };
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
@@ -894,6 +1033,9 @@ function main() {
         throw new Error("supported graph subcommand: next");
       }
       commandGraphNext(args);
+      return;
+    case "active-runtime":
+      commandActiveRuntime();
       return;
     case "model-hint":
       commandModelHint(args);

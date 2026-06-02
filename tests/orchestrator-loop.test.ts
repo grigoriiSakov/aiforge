@@ -142,6 +142,84 @@ describe("orchestrator loop guards", () => {
     expect(afterFull.status).toBe("awaiting-finalize");
   });
 
+  test("model-hint uses codex block when CODEX_ENV is set", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-model-codex-");
+    fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "project.model-profiles.json"),
+      `${JSON.stringify(
+        {
+          roles: { review: { tier: "budget" } },
+          runtimeModels: {
+            cursor: { budget: "gpt-5-mini" },
+            codex: { budget: "gpt-5.4-mini" }
+          }
+        },
+        null,
+        2
+      )}\n`
+    );
+    const runtimePath = renderOrchestratorRuntime(repoRoot);
+
+    const prev = process.env.CODEX_ENV;
+    process.env.CODEX_ENV = "1";
+    delete process.env.CURSOR_AGENT;
+    try {
+      const hint = JSON.parse(
+        runNodeScript(runtimePath, ["model-hint", "--role", "review"], repoRoot)
+      );
+      expect(hint.activeRuntime).toBe("codex");
+      expect(hint.model).toBe("gpt-5.4-mini");
+      expect(hint.instruction).toContain("codex -m");
+    } finally {
+      if (prev === undefined) {
+        delete process.env.CODEX_ENV;
+      } else {
+        process.env.CODEX_ENV = prev;
+      }
+    }
+  });
+
+  test("model-hint ignores --runtime cursor when codex is active", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-model-mismatch-");
+    fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "project.model-profiles.json"),
+      `${JSON.stringify(
+        {
+          roles: { review: { tier: "budget" } },
+          runtimeModels: {
+            cursor: { budget: "gpt-5-mini" },
+            codex: { budget: "gpt-5.4-mini" }
+          }
+        },
+        null,
+        2
+      )}\n`
+    );
+    const runtimePath = renderOrchestratorRuntime(repoRoot);
+    const prev = process.env.CODEX_ENV;
+    process.env.CODEX_ENV = "1";
+    try {
+      const hint = JSON.parse(
+        runNodeScript(
+          runtimePath,
+          ["model-hint", "--role", "review", "--runtime", "cursor"],
+          repoRoot
+        )
+      );
+      expect(hint.activeRuntime).toBe("codex");
+      expect(hint.model).toBe("gpt-5.4-mini");
+      expect(hint.warnings.length).toBeGreaterThan(0);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.CODEX_ENV;
+      } else {
+        process.env.CODEX_ENV = prev;
+      }
+    }
+  });
+
   test("model-hint skips auto and returns usable slug", () => {
     const repoRoot = makeTempRepo("aiforge-orch-model-");
     fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });

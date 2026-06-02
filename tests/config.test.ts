@@ -61,6 +61,20 @@ describe("config lifecycle", () => {
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
   });
 
+  test("rejects cursor model slug under runtimeModels.codex", () => {
+    const repoRoot = makeTempRepo("aiforge-config-codex-slug-");
+    const config = createConfig({
+      repoRoot,
+      projectSlug: "demo",
+      projectName: "Demo",
+      profileId: "python-fastapi-docker"
+    });
+    config.agents.runtimeModels = {
+      codex: { budget: "gpt-5.5-medium" }
+    };
+    expect(() => saveConfig(repoRoot, config)).toThrow(/Cursor/);
+  });
+
   test("legacy task command config migrates to repo-local go-task runner", () => {
     const repoRoot = makeTempRepo("aiforge-config-legacy-task-");
     fs.writeFileSync(

@@ -6,7 +6,9 @@ title: "Model Profiles"
 
 ## Why this exists
 
-`ai.config.yaml` stores **runtime-agnostic** tiers (`quality`, `balanced`, `budget`). Each IDE (Cursor, Codex, Claude Code, …) names models differently and exposes different knobs. This file is the contract skills follow; optional concrete slugs live in `agents.runtimeModels` and `.ai/project.model-profiles.json`.
+`ai.config.yaml` stores **runtime-agnostic** tiers (`quality`, `balanced`, `budget`). Each host (**cursor**, **codex**, **claude**, …) has **its own** model namespace under `agents.runtimeModels.<runtime>`.
+
+**Never copy Cursor slugs into `runtimeModels.codex` or vice versa.**
 
 ## Semantic tiers
 
@@ -28,24 +30,33 @@ title: "Model Profiles"
 | audit | `{{ agent_model_audit }}` |
 | tracker | `{{ agent_model_tracker }}` |
 
-## Runtime hints (optional)
-
-If `agents.runtimeModels` is set, prefer the mapped slug when the active tool supports explicit model selection (e.g. Cursor Task `model` parameter). Example structure:
+## Per-runtime slugs (examples)
 
 ```json
 {{ agent_runtime_models_json }}
 ```
 
-When no mapping exists for the active runtime, **do not guess vendor IDs** — stay on the semantic tier and keep context lean per `.ai/reference/context-budget.md`.
+| Runtime | Typical CLI / UI | Example ids |
+|---------|------------------|-------------|
+| `cursor` | Cursor Task `model=` | `composer-2.5-fast`, `gpt-5-mini`, … |
+| `codex` | `codex -m …` / `config.toml` | `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.3-codex` |
+| `claude` | Claude Code model picker | per your account |
 
-## Multi-runtime rule
+Reserved in any block: `auto` (UI-only, not passed to tools).
 
-1. Read tier from `ai.config.yaml` for the skill role.
-2. Load `.ai/project.model-profiles.json` if present (machine mirror after `sync` / `save`).
-3. Apply runtime-specific slug only when executing in that runtime and the hint exists.
-4. Orchestrator review subagent **must** use `budget` tier unless overridden.
-5. Orchestrator **must** call `model-hint --role review` before review Task; optional audit only per `orchestrator.auditGate`.
+## Orchestrator delegation
+
+```bash
+node .ai/runtime/orchestrator-state.mjs active-runtime
+node .ai/runtime/orchestrator-state.mjs model-hint --role review
+```
+
+- **Do not** pass `--runtime cursor` when you are in Codex (or the reverse).
+- Override detection: `AIFORGE_ACTIVE_RUNTIME=codex` (or `cursor`, `claude`).
+- Follow JSON `instruction` — Cursor uses Task `model=`; Codex uses `codex -m`; they are **not** interchangeable.
 
 ## Editing
 
-Change tiers in `ai.config.yaml` under `agents.modelTiers`. Add optional slugs under `agents.runtimeModels.<runtime>.<tier>`. Re-run project `sync` to refresh `.ai/project.model-profiles.json` and this reference.
+Change tiers in `agents.modelTiers`. Add slugs under `agents.runtimeModels.<runtime>.<tier>`. Re-run `sync` to refresh `.ai/project.model-profiles.json`.
+
+`saveConfig` / `loadConfig` rejects obvious cross-runtime slug mistakes (e.g. `gpt-5.5-medium` under `codex`).

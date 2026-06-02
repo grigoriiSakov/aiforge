@@ -7,6 +7,7 @@ import {
   normalizeAgentsConfig,
   writeModelProfilesManifest
 } from "./agent-models.js";
+import { AGENT_RUNTIME_IDS, isAgentRuntimeId, validateModelSlugForRuntime } from "./active-runtime.js";
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
 import { ensureInstallerState } from "./state.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
@@ -310,6 +311,22 @@ function validateConfig(config: ProjectConfig): void {
   for (const [role, tier] of Object.entries(config.agents.modelTiers)) {
     if (!["quality", "balanced", "budget"].includes(tier)) {
       throw new Error(`Config agents.modelTiers.${role} must be quality, balanced, or budget`);
+    }
+  }
+
+  if (config.agents.runtimeModels) {
+    for (const [runtime, hints] of Object.entries(config.agents.runtimeModels)) {
+      if (!isAgentRuntimeId(runtime)) {
+        throw new Error(
+          `Config agents.runtimeModels.${runtime} is unknown; expected one of: ${AGENT_RUNTIME_IDS.join(", ")}`
+        );
+      }
+      for (const [tier, slug] of Object.entries(hints ?? {})) {
+        const { rejectedReason } = validateModelSlugForRuntime(runtime, slug);
+        if (rejectedReason && slug && rejectedReason !== "reserved-ui-mode") {
+          throw new Error(`Config agents.runtimeModels.${runtime}.${tier}: ${rejectedReason}`);
+        }
+      }
     }
   }
 
