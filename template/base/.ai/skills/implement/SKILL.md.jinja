@@ -60,6 +60,7 @@ Use this skill to implement the planned change step by step.
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
 13. Testing policy:
+   - under `/orchestrator`, run **scoped** tests only until the orchestrator runs the single end-of-pipeline full verify (see `.ai/reference/orchestrator-test-strategy.md`)
    - default to the smallest credible test scope that covers the touched behavior
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately

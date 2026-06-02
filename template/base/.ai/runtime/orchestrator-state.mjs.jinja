@@ -15,11 +15,16 @@ const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
   "testing",
   "reviewing",
   "fix-loop",
+  "pre-finalize",
+  "awaiting-human-approval",
   "awaiting-finalize"
 ]);
 const PENDING_STATUSES = new Set(["queued", "blocked-by-conflict"]);
 const FLOW_COMPLETE_STATUSES = new Set(["awaiting-finalize", "done"]);
+const HUMAN_GATE_STATUSES = new Set(["awaiting-human-approval"]);
 const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
+const TEST_SCOPES = new Set(["scoped", "full"]);
+const MODEL_HINT_SKIP = new Set(["auto", "default", "none", ""]);
 const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".claude/", ".agent/", ".agents/"];
 const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.md", "Taskfile.yml"]);
 const ALLOWED_STATUS_TRANSITIONS = {
@@ -27,8 +32,16 @@ const ALLOWED_STATUS_TRANSITIONS = {
   reserved: new Set(["building", "testing", "aborted"]),
   building: new Set(["building", "testing", "fix-loop", "aborted"]),
   testing: new Set(["testing", "reviewing", "fix-loop", "aborted"]),
-  reviewing: new Set(["reviewing", "fix-loop", "awaiting-finalize", "aborted"]),
-  "fix-loop": new Set(["fix-loop", "testing", "aborted"]),
+  reviewing: new Set(["reviewing", "fix-loop", "pre-finalize", "awaiting-human-approval", "aborted"]),
+  "fix-loop": new Set(["fix-loop", "testing", "awaiting-human-approval", "aborted"]),
+  "pre-finalize": new Set(["pre-finalize", "testing", "awaiting-finalize", "awaiting-human-approval", "aborted"]),
+  "awaiting-human-approval": new Set([
+    "awaiting-human-approval",
+    "fix-loop",
+    "building",
+    "aborted",
+    "awaiting-finalize"
+  ]),
   "awaiting-finalize": new Set(["fix-loop", "awaiting-finalize", "done", "aborted"]),
   queued: new Set(["queued", "reserved", "blocked-by-conflict", "aborted"]),
   "blocked-by-conflict": new Set(["blocked-by-conflict", "queued", "reserved", "aborted"]),
@@ -210,6 +223,7 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     currentStep: overrides.currentStep ?? existingRun?.currentStep ?? "awaiting-admission",
     conflictsWith: overrides.conflictsWith ?? existingRun?.conflictsWith ?? [],
     reviewIteration: overrides.reviewIteration ?? existingRun?.reviewIteration ?? 0,
+    lastTestScope: overrides.lastTestScope ?? existingRun?.lastTestScope ?? null,
     lastTestResult: overrides.lastTestResult ?? existingRun?.lastTestResult ?? null,
     lastTestFingerprint: overrides.lastTestFingerprint ?? existingRun?.lastTestFingerprint ?? null,
     lastReviewResult: overrides.lastReviewResult ?? existingRun?.lastReviewResult ?? null,
@@ -525,6 +539,7 @@ function commandSetStatus(args) {
 function commandRecordTest(args) {
   const issueId = requireOption(args, "--issue");
   const result = requireOption(args, "--result");
+  const scope = getOption(args, "--scope", "scoped");
   const currentStep = getOption(args, "--current-step", null);
   const registry = loadRegistry();
   const run = loadRun(issueId);
@@ -535,15 +550,25 @@ function commandRecordTest(args) {
   if (!["pass", "fail"].includes(result)) {
     throw new Error("record-test result must be pass or fail");
   }
+  if (!TEST_SCOPES.has(scope)) {
+    throw new Error("record-test --scope must be scoped or full");
+  }
 
+  run.lastTestScope = scope;
   run.lastTestResult = result;
   run.lastTestFingerprint = currentWorkspaceFingerprint(run);
   run.lastReviewResult = null;
   run.lastReviewFingerprint = null;
 
-  if (result === "fail") {
+  if (result === "fail" && scope === "full") {
+    run.status = "awaiting-human-approval";
+    run.currentStep = currentStep ?? "full-suite-failed";
+  } else if (result === "fail") {
     run.status = "fix-loop";
-    run.currentStep = currentStep ?? "tests failed";
+    run.currentStep = currentStep ?? "scoped-tests-failed";
+  } else if (scope === "full" && run.status === "pre-finalize") {
+    run.status = "awaiting-finalize";
+    run.currentStep = currentStep ?? "awaiting-user-finalize";
   } else if (currentStep) {
     run.currentStep = currentStep;
   }
@@ -576,15 +601,26 @@ function commandRecordReview(args) {
   run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
 
   if (["clean", "low"].includes(result)) {
-    run.status = "awaiting-finalize";
-    run.currentStep = currentStep ?? "awaiting-user-finalize";
-  } else {
-    run.reviewIteration = Number(run.reviewIteration ?? 0) + 1;
-    if (run.reviewIteration > MAX_REVIEW_ITERATIONS) {
-      throw new Error(`review fix-loop exceeded limit (${String(MAX_REVIEW_ITERATIONS)}); re-plan before continuing`);
+    if (run.lastTestScope === "full" && run.lastTestResult === "pass") {
+      run.status = "awaiting-finalize";
+      run.currentStep = currentStep ?? "awaiting-user-finalize";
+    } else {
+      run.status = "pre-finalize";
+      run.currentStep = currentStep ?? "run-full-suite";
     }
-    run.status = "fix-loop";
-    run.currentStep = currentStep ?? `review-fix-${String(run.reviewIteration)}`;
+  } else {
+    const nextIteration = Number(run.reviewIteration ?? 0) + 1;
+    if (nextIteration > MAX_REVIEW_ITERATIONS) {
+      run.reviewIteration = nextIteration;
+      run.status = "awaiting-human-approval";
+      run.currentStep =
+        currentStep ??
+        `fix-loop-limit-${String(MAX_REVIEW_ITERATIONS)}-ask-user`;
+    } else {
+      run.reviewIteration = nextIteration;
+      run.status = "fix-loop";
+      run.currentStep = currentStep ?? `review-fix-${String(run.reviewIteration)}`;
+    }
   }
 
   saveRun(run);
@@ -655,6 +691,71 @@ function commandStatus(args) {
   process.stdout.write(`${JSON.stringify(loadRegistry(), null, 2)}\n`);
 }
 
+function modelProfilesPath() {
+  return path.join(repoRoot(), ".ai", "project.model-profiles.json");
+}
+
+function resolveModelHint(role, runtime) {
+  const manifest = readJson(modelProfilesPath(), null);
+  const tier = manifest?.roles?.[role]?.tier ?? null;
+  const slug = manifest?.runtimeModels?.[runtime]?.[tier] ?? null;
+  const normalized = String(slug ?? "").trim();
+  const usable = normalized.length > 0 && !MODEL_HINT_SKIP.has(normalized.toLowerCase());
+  return {
+    role,
+    runtime,
+    tier,
+    model: usable ? normalized : null,
+    skipReason: usable ? null : normalized ? "reserved-ui-mode" : "no-runtime-mapping"
+  };
+}
+
+function commandModelHint(args) {
+  const role = requireOption(args, "--role");
+  const runtime = getOption(args, "--runtime", "cursor");
+  const hint = resolveModelHint(role, runtime);
+  const payload = {
+    ...hint,
+    instruction: hint.model
+      ? `Task tool: pass model="${hint.model}" (required; do not use the main-session model).`
+      : `Task tool: omit the model parameter (tier ${String(hint.tier)}; UI/default handles cost). Never delegate review/audit on the orchestrator main-session model.`
+  };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function commandApproveFixLoop(args) {
+  const issueId = requireOption(args, "--issue");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (run.status !== "awaiting-human-approval") {
+    throw new Error(
+      `approve-fix-loop requires status awaiting-human-approval (current: ${run.status})`
+    );
+  }
+
+  run.status = "fix-loop";
+  run.currentStep = "human-approved-fix-loop";
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function orchestratorLimits(run) {
+  return {
+    maxReviewIterations: MAX_REVIEW_ITERATIONS,
+    reviewIteration: Number(run?.reviewIteration ?? 0),
+    reviewIterationsRemaining: Math.max(
+      0,
+      MAX_REVIEW_ITERATIONS - Number(run?.reviewIteration ?? 0)
+    )
+  };
+}
+
 function commandGraphNext(args) {
   const issueId = args[2] ?? null;
   if (!issueId) {
@@ -662,6 +763,7 @@ function commandGraphNext(args) {
   }
 
   const run = loadRun(issueId);
+  const limits = orchestratorLimits(run);
   let payload;
 
   if (!run) {
@@ -676,21 +778,49 @@ function commandGraphNext(args) {
       step: "pending",
       action: "start_worktree",
       issue: issueId,
-      worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT)
+      worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT),
+      ...limits
+    };
+  } else if (run.status === "pre-finalize") {
+    payload = {
+      step: "pending",
+      action: "run_full_verify",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      testScope: "full",
+      message:
+        "Review gate passed. Run full project verify once, then record-test --scope full.",
+      ...limits
+    };
+  } else if (HUMAN_GATE_STATUSES.has(run.status)) {
+    payload = {
+      step: "human_gate",
+      action: "await_human_decision",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      currentStep: run.currentStep,
+      message:
+        "Stop automation. Ask the user what to do next. To resume fix-loop after approval: approve-fix-loop.",
+      ...limits
     };
   } else if (["reserved", "building", "testing", "fix-loop"].includes(run.status)) {
     payload = {
       step: "pending",
       action: "run_build",
       issue: issueId,
-      worktreePath: run.worktreePath
+      worktreePath: run.worktreePath,
+      testScope: "scoped",
+      message: "Use scoped lint/tests only — not the full project suite.",
+      ...limits
     };
   } else if (run.status === "reviewing") {
     payload = {
       step: "pending",
       action: "run_review",
       issue: issueId,
-      worktreePath: run.worktreePath
+      worktreePath: run.worktreePath,
+      testScope: run.lastTestScope ?? "scoped",
+      ...limits
     };
   } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
     payload = {
@@ -764,6 +894,12 @@ function main() {
         throw new Error("supported graph subcommand: next");
       }
       commandGraphNext(args);
+      return;
+    case "model-hint":
+      commandModelHint(args);
+      return;
+    case "approve-fix-loop":
+      commandApproveFixLoop(args);
       return;
     default:
       throw new Error(`unknown orchestrator command: ${String(command ?? "")}`);

@@ -18,6 +18,8 @@ Pipeline owner for:
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
+  - `.ai/reference/orchestrator-test-strategy.md`
+  - `.ai/reference/model-profiles.md`
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with orchestration until this preflight read is complete.
 
@@ -39,7 +41,7 @@ Pipeline owner for:
    - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments)
    - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 {% if linear_enabled %}
-   - tracker issue **state** only via Linear MCP (plan-ready / active / review-ready); see item 24
+   - tracker issue **state** only via Linear MCP (plan-ready / active / review-ready); see item 28
 {% endif %}
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
@@ -55,6 +57,7 @@ Pipeline owner for:
 11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов и файлов из `Claimed Write Scope` выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
 12. After every side effect, re-check the next machine action through:
     - `node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID`
+    - если `action` = `await_human_decision` — **остановись** и спроси пользователя; не продолжай цикл без ответа
 13. Use canonical task names from `ai.config.yaml`.
 14. Execution contract for this repo:
     - canonical task root: `{{ execution_canonical_root }}`
@@ -70,39 +73,60 @@ Pipeline owner for:
 17. If the strategy is `overlay`, the validation command may run from the main checkout task root while still testing the worktree overlay selected by `{{ execution_worktree_env_var }}`. If the strategy is `direct`, treat the configured entrypoint itself as the source of truth for how the worktree is executed.
 18. Do not hand-roll long `docker compose run` lines or stack-specific validation commands in prompts or artifacts when the project already provides canonical wrappers/tasks.
 19. Do not invent stack-specific commands in prompts, artifacts, or status transitions.
-20. A phase is not complete without evidence:
+
+## Test strategy (token guard)
+
+20. **Между фазами и в fix-loop — только scoped:** узкий lint/test по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite между review-итерациями.
+21. Запись scoped evidence:
+    - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped`
+22. Перед review gate: scoped pass обязателен; затем `set-status --status reviewing`.
+23. **Полный suite — один раз в конце:** только после clean/low review + non-blocking audit, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
+    - `{{ execution_verify_entrypoint }}` (full)
+    - `record-test --issue ISSUE-ID --result pass|fail --scope full`
+    - при **fail** full — **стоп**, статус `awaiting-human-approval`; пользователь решает; **не** начинай новый fix-loop автоматически
+    - при **pass** full — runtime переводит в `awaiting-finalize`
+24. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** (счётчик review-fix в runtime). После превышения — `awaiting-human-approval`; спроси пользователя, продолжать ли. Продолжение только после явного «да» и:
+    - `node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID`
+    - снова только **scoped** тесты до следующего review gate
+
+## Phase evidence
+
+25. A phase is not complete without evidence:
    - `plan` -> complete plan artifact
    - `implement` -> code changes aligned with plan
-   - `test` -> canonical task evidence (see scope split below)
-   - `review` -> findings-first output plus recorded clean review verdict
-   - **Quality bar (in-scope):** нельзя считать `test`/pre-review этап завершённым и уходить в review, пока для **Claimed Write Scope** нет честного зелёного сигнала по затронутому поведению: scoped тесты/проверки по задаче, затронутые файлы из `paths` / `shared_surfaces` без новых регрессий, которые вы ввели. Ошибки линта/типов/тестов, которые относятся к **заявленным** путям или общим поверхностям скоупа, — блокер до фикса, сужения скоупа с правкой плана, или **явного** человеческого исключения в issue/plan.
-   - **Repo-wide red вне скоупа:** если полный `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` падает из‑за уже существующего baseline, других пакетов или файлов **вне** `Claimed Write Scope`, это **не** повод вечно стопорить пайплайн. Обязательно: (1) зафиксировать в `progress.md` и при необходимости в плане — какая команда красная, выдержка/лог, почему сбои **вне** claimed paths; (2) приложить **scoped** evidence по задаче (как узкий прогон тестов под изменение); (3) перейти в **review gate** (делегированные subagent'ы `review` + `audit`) — review проверяет, что разделение «в скоупе / вне скоупа» корректно и что в скоупе работа действительно готова. Если review согласен с остаточным repo-wide долгом, можно дать чистый вердикт по задаче с явным **residual risk** в выводе. Нельзя использовать эту лазейку, если красное относится к вашим файлам скоупа или вы не можете аргументированно отделить сбои от claim.
-   - **«Старые» ошибки внутри скоупа:** не отмазка. Если падение в claimed path — чините, сужайте claim, или эскалируйте человеку; не закрывайте этап фразой «было до меня».
-21. Record test evidence through the runtime helper:
-    - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail`
-22. **Post-implement gate (review + audit as separate agents):** после успешного `record-test --result pass` и перехода run в `reviewing` (`set-status --status reviewing`) оркестратор **не** выполняет review/audit inline в том же агенте. Вместо этого:
-    - запусти **два параллельных** subagent'а через Task tool:
-      - **review**: промпт со ссылкой на `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, пути к `plan.md` / `progress.md`; model tier `{{ agent_model_review }}` (см. `.ai/reference/model-profiles.md` — при Cursor передай `model` из `agents.runtimeModels.cursor` для tier `{{ agent_model_review }}`, если задан);
-      - **audit**: промпт со ссылкой на `.ai/skills/audit/SKILL.md`, режим `orchestrator-delegate`, те же контекстные пути; model tier `{{ agent_model_audit }}` (аналогично runtime hint для `{{ agent_model_audit }}`).
-    - main-session orchestrator остаётся на tier `{{ agent_model_orchestrator }}`; implement-фаза — `{{ agent_model_implement }}`.
-    - дождись обоих ответов; каждый subagent обязан вернуть machine-readable блок вердикта (см. skills).
-    - **только оркестратор** вызывает `record-review`, `set-status`, Linear state и fix-loop; subagent'ы не трогают orchestrator runtime.
-23. Решение оркестратора по вердиктам:
-    - review `high` или `medium` **или** audit `blocking` -> fix loop:
-      - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result medium|high` (если review уже дал severity; иначе `high` при blocking-only audit)
-      - implement в worktree -> scoped test/verify -> снова `reviewing` -> повторить gate (п. 22); веди `## Fix Loop` в `progress.md` по `.ai/reference/verify-fix-loop.md`
-    - review `clean` или `low` **и** audit не `blocking` -> финализация пайплайна:
-      - `node .ai/runtime/orchestrator-state.mjs record-review --issue ISSUE-ID --result clean|low`
-      - run переходит в `awaiting-finalize` (ожидание человека: merge/PR/закрытие issue)
-    - audit `advisory` при чистом review не блокирует переход; зафиксируй advisory в summary для человека.
-24. Re-check managed runtime state before stopping the turn.
+   - `test` -> scoped canonical evidence (п. 20–21)
+   - `review` -> delegated subagent verdicts + recorded review
+   - **Quality bar (in-scope):** нельзя уходить в review без scoped green по затронутому поведению в `Claimed Write Scope`.
+   - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
+   - **«Старые» ошибки внутри скоупа:** не отмазка.
+
+## Review gate + models
+
+26. **Subagent models (обязательно):** перед Task tool для review и audit:
+    ```bash
+    node .ai/runtime/orchestrator-state.mjs model-hint --role review --runtime cursor
+    node .ai/runtime/orchestrator-state.mjs model-hint --role audit --runtime cursor
+    ```
+    - если JSON содержит `model` — передай **только его** в Task (`model="..."`);
+    - если `model` = null (`auto` и т.п.) — **не** передавай `model`, но **не** делегируй review/audit в subagent на той же дорогой модели, что main-session orchestrator; явно укажи в промпте tier `{{ agent_model_review }}` / `{{ agent_model_audit }}` и «minimal diff review, no re-implementation».
+    - **Запрещено** запускать review/audit subagent без `model-hint` и без упоминания budget-tier.
+27. После scoped `record-test --result pass` и `set-status --status reviewing`:
+    - **review**: `.ai/skills/review/SKILL.md`, `orchestrator-delegate`, paths + worktree;
+    - **audit**: `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`;
+    - main-session orchestrator: tier `{{ agent_model_orchestrator }}`; implement: `{{ agent_model_implement }}`.
+    - только оркестратор вызывает `record-review`, `set-status`, Linear, fix-loop.
+28. По вердиктам:
+    - `medium`/`high` или audit `blocking` -> `record-review` (runtime ведёт в fix-loop или human gate) -> scoped fix -> scoped test -> снова reviewing (п. 27); `## Fix Loop` в progress по `.ai/reference/verify-fix-loop.md`
+    - `clean`/`low` + audit не `blocking` -> `record-review --result clean|low` -> если `pre-finalize`, выполни п. 23 (full suite), иначе уже `awaiting-finalize`
+    - audit `advisory` при чистом review — не блокирует
+29. Re-check managed runtime state before stopping the turn.
 {% if linear_enabled %}
-25. Keep Linear issue **workflow states** aligned (MCP state updates only — no plan/progress comment sync):
+30. Linear workflow states (MCP state only):
     - plan implement-ready -> `{{ tracker_status_plan_ready }}`
     - active execution -> `{{ tracker_status_active }}`
-    - review-ready (после чистого gate, перед/вместе с `awaiting-finalize`) -> `{{ tracker_status_review }}`
+    - review-ready -> `{{ tracker_status_review }}`
 {% else %}
-25. Do not drive Linear issue states via MCP; rely on local plan/progress artifacts and orchestrator runtime JSON for phase truth.
+30. Do not drive Linear issue states via MCP; rely on local artifacts and orchestrator JSON.
 {% endif %}
 
 ## Conflict policy
@@ -120,6 +144,7 @@ Pipeline owner for:
 - Drift between source request, plan, and implementation
 - Attempt to implement outside the assigned orchestrator worktree
 - Runtime state is `queued` or `blocked-by-conflict`
-- Missing verify evidence for **in-scope** work (scoped runs +, при красном full lint/verify, явная запись OOS в progress — см. пункт 16)
+- `graph next` → `await_human_decision` (fix-loop limit or full-suite fail) without user answer
+- Missing scoped verify evidence before review
 - Missing clean review verdict
-- Advancing `test`/pre-review while failures still hit **Claimed Write Scope** without fix, scope shrink, or human exception (см. пункт 16; repo-wide red **вне** скоупа сам по себе не стопор)
+- Full suite failed at end (`awaiting-human-approval` / `full-suite-failed`)

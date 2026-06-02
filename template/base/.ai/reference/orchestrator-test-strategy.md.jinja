@@ -1,0 +1,51 @@
+---
+title: "Orchestrator Test Strategy"
+---
+
+# Orchestrator Test Strategy
+
+## Goal
+
+Cut token burn from `implement -> full test -> review -> fix` loops. Default: **scoped** validation between phases; **full** project verify once after a clean review gate.
+
+## Scoped runs (default)
+
+During `building`, `testing`, `fix-loop`, and before the first `record-test` for a review gate:
+
+- Run **only** tests/checks tied to `Claimed Write Scope` and the active plan step.
+- Examples: Pest `--filter=…`, single test file, path from plan `Verify:` line, scoped lint on touched paths.
+- Do **not** run full `{{ task_command }} {{ task_verify_name }}` / full project suite unless the user explicitly asked in this turn.
+
+Record evidence:
+
+```bash
+node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped
+```
+
+Document the exact scoped command in `progress.md`.
+
+## Full suite (once per issue, end of pipeline)
+
+After review+audit return **clean/low** and audit is not **blocking**:
+
+1. Run full canonical verify: `{{ execution_verify_entrypoint }}` (with worktree env exported).
+2. Record:
+
+```bash
+node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope full
+```
+
+3. On **pass** + clean review already recorded: runtime moves to `awaiting-finalize`.
+4. On **fail**: runtime sets `awaiting-human-approval` — **stop**. Do not start another fix loop. Summarize failures; the user decides next steps.
+
+## Fix-loop limit
+
+`orchestrator.maxReviewIterations` in `ai.config.yaml` (template default: **{{ orchestrator_max_review_iterations }}**).
+
+When review returns `medium`/`high` or audit is `blocking` beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
+
+```bash
+node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID
+```
+
+Then resume with **scoped** tests only until the next review gate.

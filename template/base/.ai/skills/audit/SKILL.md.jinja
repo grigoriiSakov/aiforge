@@ -47,6 +47,8 @@ Use this skill for a read-only architecture and quality audit.
 Use when the parent `/orchestrator` launched this run as a **separate** audit subagent alongside review.
 
 - Read only the assigned issue context (local plan/progress, orchestrator worktree path, test/review evidence referenced in the prompt).
+- Do **not** run full-project verify or full test suite in delegate mode.
+- Stay read-only; minimal context.
 - Do **not** edit code, call orchestrator runtime helpers, or use Linear MCP.
 - Return a verdict to the parent orchestrator only.
 

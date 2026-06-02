@@ -76,7 +76,7 @@ orchestrator_branch_prefix:
 
 orchestrator_max_review_iterations:
   type: int
-  default: 3
+  default: 2
 
 plan_progress_runtime_root:
   type: str

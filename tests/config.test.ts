@@ -52,7 +52,7 @@ describe("config lifecycle", () => {
       review: "In Review"
     });
     expect(config.orchestrator.branchPrefix).toBe("agent/");
-    expect(config.orchestrator.maxReviewIterations).toBe(3);
+    expect(config.orchestrator.maxReviewIterations).toBe(2);
     expect(config.artifacts.planProgressRoot).toBe(".ai/context/runtime");
     expect(config.execution.canonicalRoot).toBe(".");
     expect(config.execution.worktreeEnvVar).toBe("AIFORGE_WORKTREE_PATH");

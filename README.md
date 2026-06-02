@@ -282,7 +282,7 @@ CLI **не переключает** модели в IDE — только нор�
 | `plan-template` → `## Implementation Decisions` | discuss-before-plan без отдельного трекера |
 | `/clarify` | Вопросы до плана; ответы → bullets для planner |
 | `verify-fix-loop.md` | Секция `## Fix Loop` в `progress.md` после verify/review/audit |
-| orchestrator gate | review + audit параллельно на `budget` tier; fix-loop по reference |
+| orchestrator gate | review + audit на `budget` + `model-hint`; scoped tests между фазами; full verify один раз; лимит fix-loop (default 2) → спросить пользователя |
 
 ---
 

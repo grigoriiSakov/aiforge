@@ -52,7 +52,14 @@ function getCurrentOrchestratorRun() {
     return null;
   }
 
-  const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
+  const activeStatuses = new Set([
+    "reserved",
+    "building",
+    "testing",
+    "fix-loop",
+    "reviewing",
+    "pre-finalize"
+  ]);
   const branchName = currentBranch();
   const orderedIssueIds = [
     ...Object.keys(registry.activeReservations ?? {}),

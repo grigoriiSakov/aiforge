@@ -44,6 +44,7 @@ When no mapping exists for the active runtime, **do not guess vendor IDs** — s
 2. Load `.ai/project.model-profiles.json` if present (machine mirror after `sync` / `save`).
 3. Apply runtime-specific slug only when executing in that runtime and the hint exists.
 4. Subagents (review, audit) **must** use `budget` tier unless the user overrides config.
+5. Orchestrator **must** call `node .ai/runtime/orchestrator-state.mjs model-hint --role review|audit --runtime cursor` before Task delegation; pass `model` only when hint returns a non-null slug (never `auto`).
 
 ## Editing
 

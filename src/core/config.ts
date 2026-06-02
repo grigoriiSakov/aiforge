@@ -68,7 +68,7 @@ export function createConfig(params: {
     orchestrator: {
       worktreeRoot: `~/worktrees/${params.projectSlug}`,
       branchPrefix: "agent/",
-      maxReviewIterations: 3
+      maxReviewIterations: 2
     },
     execution: createDefaultExecutionConfig(task),
     artifacts: {
