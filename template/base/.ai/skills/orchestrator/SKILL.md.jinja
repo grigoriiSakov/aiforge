@@ -80,7 +80,7 @@ Pipeline owner for:
 21. Запись scoped evidence:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped`
 22. Перед review gate: scoped pass обязателен; затем `set-status --status reviewing`.
-23. **Полный suite — один раз в конце:** только после clean/low review + non-blocking audit, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
+23. **Полный suite — один раз в конце:** только после clean/low review gate, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
     - `{{ execution_verify_entrypoint }}` (full)
     - `record-test --issue ISSUE-ID --result pass|fail --scope full`
     - при **fail** full — **стоп**, статус `awaiting-human-approval`; пользователь решает; **не** начинай новый fix-loop автоматически
@@ -95,30 +95,38 @@ Pipeline owner for:
    - `plan` -> complete plan artifact
    - `implement` -> code changes aligned with plan
    - `test` -> scoped canonical evidence (п. 20–21)
-   - `review` -> delegated subagent verdicts + recorded review
+   - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
    - **Quality bar (in-scope):** нельзя уходить в review без scoped green по затронутому поведению в `Claimed Write Scope`.
    - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
    - **«Старые» ошибки внутри скоупа:** не отмазка.
 
 ## Review gate + models
 
-26. **Subagent models (обязательно):** перед Task tool для review и audit:
+Конфиг: `orchestrator.auditGate` = **`{{ orchestrator_audit_gate }}`** (`never` | `process-layer-only` | `always`).
+
+26. **Subagent model (review, обязательно):** перед Task tool:
     ```bash
     node .ai/runtime/orchestrator-state.mjs model-hint --role review --runtime cursor
-    node .ai/runtime/orchestrator-state.mjs model-hint --role audit --runtime cursor
     ```
     - если JSON содержит `model` — передай **только его** в Task (`model="..."`);
-    - если `model` = null (`auto` и т.п.) — **не** передавай `model`, но **не** делегируй review/audit в subagent на той же дорогой модели, что main-session orchestrator; явно укажи в промпте tier `{{ agent_model_review }}` / `{{ agent_model_audit }}` и «minimal diff review, no re-implementation».
-    - **Запрещено** запускать review/audit subagent без `model-hint` и без упоминания budget-tier.
+    - если `model` = null (`auto` и т.п.) — **не** передавай `model`, но **не** делегируй review на той же дорогой модели, что main-session orchestrator; укажи tier `{{ agent_model_review }}` и «minimal diff review, no re-implementation».
 27. После scoped `record-test --result pass` и `set-status --status reviewing`:
-    - **review**: `.ai/skills/review/SKILL.md`, `orchestrator-delegate`, paths + worktree;
-    - **audit**: `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`;
+    - **всегда один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
+{% if orchestrator_audit_gate == "always" %}
+    - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед Task — `model-hint --role audit --runtime cursor`.
+{% elif orchestrator_audit_gate == "process-layer-only" %}
+    - **audit только если** в `Claimed Write Scope` JSON `touches_process_layer: true` **или** есть claimed paths под `.ai/`, `.cursor/`, `.codex/`, `.claude/`, `.agent/`, `.agents/`, либо process files (`ai.config.yaml`, `AGENTS.md`, …): тогда второй subagent audit параллельно review; иначе **не** запускай audit.
+{% else %}
+    - **отдельный audit subagent не запускать** — process/compliance checks входят в review-delegate (см. review skill).
+{% endif %}
     - main-session orchestrator: tier `{{ agent_model_orchestrator }}`; implement: `{{ agent_model_implement }}`.
     - только оркестратор вызывает `record-review`, `set-status`, Linear, fix-loop.
 28. По вердиктам:
-    - `medium`/`high` или audit `blocking` -> `record-review` (runtime ведёт в fix-loop или human gate) -> scoped fix -> scoped test -> снова reviewing (п. 27); `## Fix Loop` в progress по `.ai/reference/verify-fix-loop.md`
-    - `clean`/`low` + audit не `blocking` -> `record-review --result clean|low` -> если `pre-finalize`, выполни п. 23 (full suite), иначе уже `awaiting-finalize`
-    - audit `advisory` при чистом review — не блокирует
+    - review `medium`/`high`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking` (если audit запускался){% endif %} -> `record-review` с соответствующим result -> fix-loop или human gate (п. 24) -> scoped fix -> scoped test -> снова reviewing (п. 27); `## Fix Loop` в `progress.md`
+    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking` (или audit не запускался){% endif %} -> `record-review --result clean|low` -> `pre-finalize` / full suite (п. 23)
+{% if orchestrator_audit_gate != "never" %}
+    - audit `advisory` при чистом review — не блокирует; зафиксируй в summary
+{% endif %}
 29. Re-check managed runtime state before stopping the turn.
 {% if linear_enabled %}
 30. Linear workflow states (MCP state only):

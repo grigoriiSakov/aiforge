@@ -26,7 +26,7 @@ Document the exact scoped command in `progress.md`.
 
 ## Full suite (once per issue, end of pipeline)
 
-After review+audit return **clean/low** and audit is not **blocking**:
+After the review gate returns **clean/low** (and optional audit is not **blocking** when `auditGate` ≠ `never`):
 
 1. Run full canonical verify: `{{ execution_verify_entrypoint }}` (with worktree env exported).
 2. Record:
@@ -42,7 +42,7 @@ node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pa
 
 `orchestrator.maxReviewIterations` in `ai.config.yaml` (template default: **{{ orchestrator_max_review_iterations }}**).
 
-When review returns `medium`/`high` or audit is `blocking` beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
+When review returns `medium`/`high` (or audit `blocking` when audit ran) beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
 
 ```bash
 node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID

@@ -53,6 +53,7 @@ describe("config lifecycle", () => {
     });
     expect(config.orchestrator.branchPrefix).toBe("agent/");
     expect(config.orchestrator.maxReviewIterations).toBe(2);
+    expect(config.orchestrator.auditGate).toBe("never");
     expect(config.artifacts.planProgressRoot).toBe(".ai/context/runtime");
     expect(config.execution.canonicalRoot).toBe(".");
     expect(config.execution.worktreeEnvVar).toBe("AIFORGE_WORKTREE_PATH");

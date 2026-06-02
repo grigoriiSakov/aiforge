@@ -78,6 +78,14 @@ orchestrator_max_review_iterations:
   type: int
   default: 2
 
+orchestrator_audit_gate:
+  type: str
+  default: never
+  choices:
+    - never
+    - process-layer-only
+    - always
+
 plan_progress_runtime_root:
   type: str
   default: .ai/context/runtime

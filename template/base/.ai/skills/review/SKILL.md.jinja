@@ -81,6 +81,11 @@ Use when the parent `/orchestrator` launched this run as a **separate** review s
 - Do **not** run full-project `{{ task_command }} {{ task_verify_name }}` or the full test suite; use scoped evidence from `progress.md` only.
 - Do **not** start another implement loop yourself; return a verdict to the parent orchestrator only.
 - Stay read-only; minimal context — no re-implementation.
+- **Single gate (default):** when orchestrator `auditGate` is `never`, you also cover the former audit checklist:
+  - workflow rule compliance (`.ai/rules/*`, gates, worktree/write path)
+  - plan/progress artifact quality (markers, Fix Loop, scoped evidence documented)
+  - dangerous or out-of-contract commands (full suite when only scoped allowed, edits outside worktree)
+  - architecture/process drift vs manifesto for claimed paths
 
 End the response with this exact machine-readable block:
 

@@ -11,7 +11,12 @@ import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js"
 import { ensureInstallerState } from "./state.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
 import { DEFAULT_TASK_COMMAND, renderTaskCommands } from "./task-runner.js";
-import type { DetectionResult, ProjectConfig, ProjectProfileId } from "./types.js";
+import type {
+  DetectionResult,
+  OrchestratorAuditGate,
+  ProjectConfig,
+  ProjectProfileId
+} from "./types.js";
 
 export const CONFIG_FILE_NAME = "ai.config.yaml";
 export const MACHINE_MANIFEST_PATH = path.join(".ai", "project.manifest.json");
@@ -68,7 +73,8 @@ export function createConfig(params: {
     orchestrator: {
       worktreeRoot: `~/worktrees/${params.projectSlug}`,
       branchPrefix: "agent/",
-      maxReviewIterations: 2
+      maxReviewIterations: 2,
+      auditGate: "never"
     },
     execution: createDefaultExecutionConfig(task),
     artifacts: {
@@ -179,6 +185,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     orchestrator_worktree_root: config.orchestrator.worktreeRoot,
     orchestrator_branch_prefix: config.orchestrator.branchPrefix,
     orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
+    orchestrator_audit_gate: config.orchestrator.auditGate,
     execution_canonical_root: config.execution.canonicalRoot,
     execution_worktree_env_var: config.execution.worktreeEnvVar,
     execution_worktree_strategy: config.execution.worktreeStrategy,
@@ -250,6 +257,12 @@ function validateConfig(config: ProjectConfig): void {
     config.orchestrator.maxReviewIterations < 1
   ) {
     throw new Error("Config orchestrator.maxReviewIterations must be an integer >= 1");
+  }
+
+  if (!["never", "process-layer-only", "always"].includes(config.orchestrator.auditGate ?? "")) {
+    throw new Error(
+      "Config orchestrator.auditGate must be one of: never, process-layer-only, always"
+    );
   }
 
   if (!config.execution?.canonicalRoot?.trim()) {
@@ -369,6 +382,14 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
   };
 }
 
+function normalizeOrchestratorAuditGate(value: string | undefined): OrchestratorAuditGate {
+  if (value === "always" || value === "process-layer-only" || value === "never") {
+    return value;
+  }
+
+  return "never";
+}
+
 function normalizeConfig(config: ProjectConfig): ProjectConfig {
   const defaults = createConfig({
     repoRoot: "",
@@ -408,7 +429,8 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     },
     orchestrator: {
       ...defaults.orchestrator,
-      ...config.orchestrator
+      ...config.orchestrator,
+      auditGate: normalizeOrchestratorAuditGate(config.orchestrator?.auditGate)
     },
     artifacts: {
       ...defaults.artifacts,

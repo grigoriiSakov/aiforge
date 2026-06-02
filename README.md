@@ -227,6 +227,8 @@ Stdin: выбор профиля (если детект слабый), имя п
 
 Канонический issue-flow: `issue → plan → implement → test → review` (skills `/plan`, `/implement`, `/orchestrator` и т.д.). Plan/progress — только локально под `artifacts.planProgressRoot` (по умолчанию `.ai/context/runtime/ISSUE-ID/`).
 
+`orchestrator.auditGate` (default `never`): отдельный `/audit` subagent в gate только при `process-layer-only` (`.ai/`, hooks, …) или `always`. Standalone `/audit` по запросу — всегда доступен.
+
 ---
 
 ## Model tiers (бюджет между Cursor / Codex / Claude)
@@ -282,7 +284,7 @@ CLI **не переключает** модели в IDE — только нор�
 | `plan-template` → `## Implementation Decisions` | discuss-before-plan без отдельного трекера |
 | `/clarify` | Вопросы до плана; ответы → bullets для planner |
 | `verify-fix-loop.md` | Секция `## Fix Loop` в `progress.md` после verify/review/audit |
-| orchestrator gate | review + audit на `budget` + `model-hint`; scoped tests между фазами; full verify один раз; лимит fix-loop (default 2) → спросить пользователя |
+| orchestrator gate | **только review** subagent по умолчанию (`orchestrator.auditGate: never`); optional audit при `process-layer-only` / `always`; scoped tests между фазами; full verify один раз; лимит fix-loop (default 2) |
 
 ---
 

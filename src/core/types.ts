@@ -23,6 +23,9 @@ export interface TaskCommands {
 
 export type WorktreeExecutionStrategy = "direct" | "overlay";
 
+/** When the orchestrator runs a separate /audit subagent alongside /review. */
+export type OrchestratorAuditGate = "never" | "process-layer-only" | "always";
+
 export interface ExecutionEntrypoints {
   implement: string;
   test: string;
@@ -100,6 +103,7 @@ export interface ProjectConfig {
     worktreeRoot: string;
     branchPrefix: string;
     maxReviewIterations: number;
+    auditGate: OrchestratorAuditGate;
   };
   execution: {
     canonicalRoot: string;
