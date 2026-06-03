@@ -1,0 +1,56 @@
+---
+title: "Orchestrator Fix-Loop Decision"
+---
+
+# Orchestrator Fix-Loop Decision
+
+`maxReviewIterations` is a **ceiling**, not a target. Do **not** burn a review subagent after every trivial fix.
+
+## When fix-loop status + scoped test pass
+
+1. Read the last `orchestrator_review_verdict` in the review subagent output (or `progress.md` Fix Loop).
+2. Map each `medium`/`high` finding → concrete change in the worktree.
+3. Choose **one** path:
+
+| Path | When | Next commands |
+|------|------|----------------|
+| **Skip re-review** | All blocking findings addressed; scoped green; localized diff; review said `after_fix_re_review: not_needed` or `optional` and you can attest closure | `record-fix-resolution --decision skip-rereview --note "..."` → `pre-finalize` / full suite |
+| **Require re-review** | Partial fix, ambiguous closure, architecture/spec risk, security, cross-cutting change, or review said `after_fix_re_review: required` | `record-fix-resolution --decision require-rereview --note "..."` → `set-status reviewing` → **one** review subagent |
+
+## Skip re-review (default for trivial fixes)
+
+OK when **all** apply:
+
+- Every `medium`/`high` finding has a matching fix in claimed paths (or plan amended).
+- Scoped lint/test pass recorded (`record-test --scope scoped --result pass`).
+- No new behavior outside `Claimed Write Scope`.
+- Fix is not a refactor — comment, test, typo, single guard, import, type hint.
+
+**Not OK** to skip:
+
+- Any finding still open or only “probably fixed”.
+- Reviewer flagged missing tests and you did not add/run them.
+- Process-layer / security / API contract / multi-file behavior change.
+
+## Require re-review
+
+Mandatory when any:
+
+- `after_fix_re_review: required` in review YAML (unless you escalate to human with reason).
+- You are unsure the fix matches the finding.
+- First review was `high` on correctness/security.
+- Fix touched more than finding cited paths.
+
+## Machine steps
+
+```bash
+# After scoped fix + record-test pass:
+node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID
+# → decide_fix_loop when lastTestResult=pass in fix-loop
+
+node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "finding F1: added test X; scoped green"
+# OR
+node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision require-rereview --note "architecture finding needs second pair of eyes"
+```
+
+Document the decision under `### Fix resolution` in `progress.md` (see verify-fix-loop.md).

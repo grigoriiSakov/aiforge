@@ -226,6 +226,10 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     currentStep: overrides.currentStep ?? existingRun?.currentStep ?? "awaiting-admission",
     conflictsWith: overrides.conflictsWith ?? existingRun?.conflictsWith ?? [],
     reviewIteration: overrides.reviewIteration ?? existingRun?.reviewIteration ?? 0,
+    afterFixRereviewHint:
+      overrides.afterFixRereviewHint ?? existingRun?.afterFixRereviewHint ?? null,
+    lastFixResolution:
+      overrides.lastFixResolution ?? existingRun?.lastFixResolution ?? null,
     lastTestScope: overrides.lastTestScope ?? existingRun?.lastTestScope ?? null,
     lastTestResult: overrides.lastTestResult ?? existingRun?.lastTestResult ?? null,
     lastTestFingerprint: overrides.lastTestFingerprint ?? existingRun?.lastTestFingerprint ?? null,
@@ -602,6 +606,14 @@ function commandRecordReview(args) {
   requirePassingTest(run);
   run.lastReviewResult = result;
   run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
+  const hintIdx = args.indexOf("--after-fix-rereview");
+  if (hintIdx !== -1) {
+    const hint = args[hintIdx + 1];
+    if (!["required", "optional", "not_needed"].includes(hint)) {
+      throw new Error("--after-fix-rereview must be required, optional, or not_needed");
+    }
+    run.afterFixRereviewHint = hint;
+  }
 
   if (["clean", "low"].includes(result)) {
     if (run.lastTestScope === "full" && run.lastTestResult === "pass") {
@@ -862,6 +874,60 @@ function commandModelHint(args) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
+const FIX_RESOLUTION_DECISIONS = new Set(["skip-rereview", "require-rereview"]);
+
+function commandRecordFixResolution(args) {
+  const issueId = requireOption(args, "--issue");
+  const decision = requireOption(args, "--decision");
+  const note = getOption(args, "--note", "");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (run.status !== "fix-loop") {
+    throw new Error(
+      `record-fix-resolution requires status fix-loop (current: ${run.status})`
+    );
+  }
+  if (!FIX_RESOLUTION_DECISIONS.has(decision)) {
+    throw new Error("record-fix-resolution --decision must be skip-rereview or require-rereview");
+  }
+  if (run.lastTestResult !== "pass" || run.lastTestScope !== "scoped") {
+    throw new Error(
+      "record-fix-resolution requires scoped test pass first (record-test --scope scoped --result pass)"
+    );
+  }
+  if (!["medium", "high", "low"].includes(run.lastReviewResult ?? "")) {
+    throw new Error(
+      "record-fix-resolution applies after a review with findings (lastReviewResult medium/high/low)"
+    );
+  }
+
+  run.lastFixResolution = {
+    decision,
+    note,
+    at: utcNow(),
+    afterFixRereviewHint: run.afterFixRereviewHint ?? null
+  };
+
+  if (decision === "skip-rereview") {
+    run.lastReviewResult = "low";
+    run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
+    run.status = "pre-finalize";
+    run.currentStep = "fix-resolved-without-rereview";
+  } else {
+    run.status = "reviewing";
+    run.currentStep = "rereview-after-fix";
+  }
+
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
 function commandApproveFixLoop(args) {
   const issueId = requireOption(args, "--issue");
   const registry = loadRegistry();
@@ -940,6 +1006,18 @@ function commandGraphNext(args) {
       currentStep: run.currentStep,
       message:
         "Stop automation. Ask the user what to do next. To resume fix-loop after approval: approve-fix-loop.",
+      ...limits
+    };
+  } else if (run.status === "fix-loop" && run.lastTestResult === "pass" && run.lastTestScope === "scoped") {
+    payload = {
+      step: "pending",
+      action: "decide_fix_loop",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      lastReviewResult: run.lastReviewResult,
+      afterFixRereviewHint: run.afterFixRereviewHint,
+      message:
+        "Scoped tests passed after fix. Read review findings + diff; choose skip-rereview or require-rereview (see orchestrator-fix-loop-decision.md). Do not auto-launch review subagent.",
       ...limits
     };
   } else if (["reserved", "building", "testing", "fix-loop"].includes(run.status)) {
@@ -1039,6 +1117,9 @@ function main() {
       return;
     case "model-hint":
       commandModelHint(args);
+      return;
+    case "record-fix-resolution":
+      commandRecordFixResolution(args);
       return;
     case "approve-fix-loop":
       commandApproveFixLoop(args);

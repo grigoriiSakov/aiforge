@@ -95,12 +95,19 @@ orchestrator_review_verdict:
   top_findings:
     - severity: high | medium | low
       summary: "..."
+      addressed_by_fix_hint: "file or change type orchestrator should verify after fix"
+  after_fix_re_review: required | optional | not_needed
+  after_fix_re_review_reason: "one line for orchestrator decision"
   residual_risk: "none or explicit repo-wide / process risk"
   summary: "one short sentence for the orchestrator"
 ```
 
-- `result: clean|low` only when the task is complete within effective scope (and OOS split is honest when applicable).
+- `result: clean|low` only when the task is complete within effective scope (and OOS split is honest when applicable). Use `after_fix_re_review: not_needed`.
 - `result: medium|high` when any blocking finding remains.
+- `after_fix_re_review`:
+  - `not_needed` — trivial fixes (typos, single test, obvious one-liner); orchestrator may `skip-rereview` after scoped green.
+  - `optional` — orchestrator decides using diff + findings (see orchestrator-fix-loop-decision.md).
+  - `required` — non-trivial correctness, architecture, security, or incomplete fix; orchestrator must run review subagent unless human overrides.
 
 ## Output contract
 

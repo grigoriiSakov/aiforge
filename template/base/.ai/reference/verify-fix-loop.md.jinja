@@ -29,7 +29,12 @@ Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix 
 
 ### Re-verify
 - scoped: `{{ task_command }} {{ task_verify_name }}` (paths from Claimed Write Scope)
-- gate: re-run orchestrator review subagent when code changed (audit only if `auditGate` requires it)
+- then: orchestrator **decides** skip-rereview vs require-rereview (`.ai/reference/orchestrator-fix-loop-decision.md`)
+
+### Fix resolution
+- decision: skip-rereview | require-rereview
+- rationale: map each review finding → fix or open item
+- command evidence: `record-fix-resolution --issue ISSUE-ID --decision … --note "…"`
 ```
 
 ## Rules
@@ -37,4 +42,4 @@ Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix 
 - Fix plans target **Claimed Write Scope** only unless the plan is amended.
 - Do not close the issue on chat-only “looks fine”; require command evidence from the plan.
 - After a fix loop, update `Spec Conformance` in progress and shrink open items.
-- Orchestrator: after implement fixes, repeat `record-test` then review gate (see orchestrator skill).
+- Orchestrator: after scoped `record-test pass`, use `record-fix-resolution` — **not** automatic review subagent every time.

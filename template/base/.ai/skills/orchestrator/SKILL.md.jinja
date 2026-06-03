@@ -19,6 +19,7 @@ Pipeline owner for:
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
   - `.ai/reference/orchestrator-test-strategy.md`
+  - `.ai/reference/orchestrator-fix-loop-decision.md`
   - `.ai/reference/model-profiles.md`
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with orchestration until this preflight read is complete.
@@ -85,9 +86,7 @@ Pipeline owner for:
     - `record-test --issue ISSUE-ID --result pass|fail --scope full`
     - при **fail** full — **стоп**, статус `awaiting-human-approval`; пользователь решает; **не** начинай новый fix-loop автоматически
     - при **pass** full — runtime переводит в `awaiting-finalize`
-24. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** (счётчик review-fix в runtime). После превышения — `awaiting-human-approval`; спроси пользователя, продолжать ли. Продолжение только после явного «да» и:
-    - `node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID`
-    - снова только **scoped** тесты до следующего review gate
+24. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** — **потолок** полных review→fix циклов, не цель. Счётчик растёт только на `record-review` с `medium`/`high`, **не** на `skip-rereview`. После потолка — `awaiting-human-approval` + `approve-fix-loop`.
 
 ## Phase evidence
 
@@ -124,20 +123,31 @@ Pipeline owner for:
 {% endif %}
     - main-session orchestrator: tier `{{ agent_model_orchestrator }}`; implement: `{{ agent_model_implement }}`.
     - только оркестратор вызывает `record-review`, `set-status`, Linear, fix-loop.
+    - после ответа review subagent распарсь `after_fix_re_review` из YAML и при `record-review` передай:  
+      `--after-fix-rereview required|optional|not_needed` (как в вердикте).
 28. По вердиктам:
-    - review `medium`/`high`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking` (если audit запускался){% endif %} -> `record-review` с соответствующим result -> fix-loop или human gate (п. 24) -> scoped fix -> scoped test -> снова reviewing (п. 27); `## Fix Loop` в `progress.md`
-    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking` (или audit не запускался){% endif %} -> `record-review --result clean|low` -> `pre-finalize` / full suite (п. 23)
+    - review `medium`/`high`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking`{% endif %} -> `record-review` (+ опционально `--after-fix-rereview required|optional|not_needed` из YAML review) -> `fix-loop` → scoped fix → `record-test --scope scoped --result pass` → **`graph next` → `decide_fix_loop`** (п. 29), **не** автоматический повтор review.
+    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> `pre-finalize` / full suite (п. 23)
+29. **После фикса — решение оркестратора (обязательно):** см. `.ai/reference/orchestrator-fix-loop-decision.md`. Кратко:
+    - прочитай `orchestrator_review_verdict` и diff; сопоставь каждый finding с правкой;
+    - **`skip-rereview`** (типичный trivial fix): все findings закрыты, scoped green, локальный diff →  
+      `node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "..."`  
+      → `pre-finalize` / full suite (п. 23) **без** нового review subagent;
+    - **`require-rereview`**: сомнение, partial fix, `after_fix_re_review: required`, security/architecture →  
+      `record-fix-resolution --decision require-rereview` → затем **один** review subagent (п. 27);
+    - зафиксируй выбор в `progress.md` → `### Fix resolution`;
+    - **запрещено** крутить `maxReviewIterations` подряд «по привычке», если findings уже закрыты scoped evidence.
+30. Re-check managed runtime state before stopping the turn.
 {% if orchestrator_audit_gate != "never" %}
     - audit `advisory` при чистом review — не блокирует; зафиксируй в summary
 {% endif %}
-29. Re-check managed runtime state before stopping the turn.
 {% if linear_enabled %}
-30. Linear workflow states (MCP state only):
+31. Linear workflow states (MCP state only):
     - plan implement-ready -> `{{ tracker_status_plan_ready }}`
     - active execution -> `{{ tracker_status_active }}`
     - review-ready -> `{{ tracker_status_review }}`
 {% else %}
-30. Do not drive Linear issue states via MCP; rely on local artifacts and orchestrator JSON.
+31. Do not drive Linear issue states via MCP; rely on local artifacts and orchestrator JSON.
 {% endif %}
 
 ## Conflict policy

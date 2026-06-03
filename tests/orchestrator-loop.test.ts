@@ -220,6 +220,46 @@ describe("orchestrator loop guards", () => {
     }
   });
 
+  test("record-fix-resolution skip-rereview moves to pre-finalize without new review iteration", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-skip-rereview-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "2");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-11");
+
+    const runPath = path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-11.json");
+    const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
+    run.worktreePath = repoRoot;
+    run.status = "fix-loop";
+    run.lastReviewResult = "medium";
+    run.reviewIteration = 1;
+    run.lastTestResult = "pass";
+    run.lastTestScope = "scoped";
+    fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
+
+    const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-11"], repoRoot));
+    expect(graph.action).toBe("decide_fix_loop");
+
+    const resolved = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "record-fix-resolution",
+          "--issue",
+          "APP-11",
+          "--decision",
+          "skip-rereview",
+          "--note",
+          "all findings addressed"
+        ],
+        repoRoot
+      )
+    );
+    expect(resolved.status).toBe("pre-finalize");
+    expect(resolved.reviewIteration).toBe(1);
+    expect(resolved.lastFixResolution?.decision).toBe("skip-rereview");
+  });
+
   test("model-hint skips auto and returns usable slug", () => {
     const repoRoot = makeTempRepo("aiforge-orch-model-");
     fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });
