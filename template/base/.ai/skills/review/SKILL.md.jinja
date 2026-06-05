@@ -18,6 +18,28 @@ Findings first.
   - `.ai/rules/project-profile.mdc`
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with review until this preflight read is complete.
+- Skipping preflight or reviewing only the diff without rule compliance is a workflow defect.
+
+## Project rules compliance check (mandatory)
+
+Before any clean verdict, explicitly audit:
+
+1. Every bullet in `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`
+2. Applicable manifesto non-negotiables from `{{ manifesto_path }}`
+3. Applicable workflow gates from `.ai/rules/workflow-gates.mdc` for the touched scope
+4. `## Project Rules Compliance` in `progress.md` (if present) — cross-check claims against diff and evidence
+
+Required output section in every review (before summary):
+
+### Project Rules Compliance
+
+| Rule | Status | Evidence |
+|------|--------|----------|
+| ... | pass / fail / N/A | file:line, test name, or command output |
+
+- Any `fail` on a project-specific rule → at least `medium` finding (often `high` for architecture/invariant breaks).
+- A clean verdict is **forbidden** while any project-specific rule is `fail`.
+- If `## Project-Specific Rules` is empty, state that explicitly and still verify manifesto + workflow gates for the touched scope.
 
 ## Mandatory protocol
 
@@ -42,6 +64,7 @@ Findings first.
    - `Do Not Break`
    - `Acceptance Traceability`
    - `Spec Conformance`
+   - `Project Rules Compliance` in `progress.md` and the mandatory `### Project Rules Compliance` table in this review output
 7. Review for completion, not just local code quality:
    - confirm every requirement in the spec is implemented or explicitly marked as non-goal/follow-up
    - confirm every planned item that should be done in this task is actually done
@@ -83,7 +106,8 @@ Use when the parent `/orchestrator` launched this run as a **separate** review s
 - Stay read-only; minimal context — no re-implementation.
 - **Single gate (default):** when orchestrator `auditGate` is `never`, you also cover the former audit checklist:
   - workflow rule compliance (`.ai/rules/*`, gates, worktree/write path)
-  - plan/progress artifact quality (markers, Fix Loop, scoped evidence documented)
+  - **project rules compliance** — per-rule `pass|fail|N/A` for every bullet in `## Project-Specific Rules` plus applicable manifesto/gate constraints
+  - plan/progress artifact quality (markers, Fix Loop, scoped evidence documented, `## Project Rules Compliance` present and accurate)
   - dangerous or out-of-contract commands (full suite when only scoped allowed, edits outside worktree)
   - architecture/process drift vs manifesto for claimed paths
 

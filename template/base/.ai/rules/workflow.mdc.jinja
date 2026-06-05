@@ -11,6 +11,7 @@ alwaysApply: true
 - Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
 - `.ai/rules/project-profile.mdc` is the canonical repo-local rule layer generated from `ai.config.yaml`; always read it before executing any skill.
 - If `.ai/rules/project-profile.mdc` contains `## Project-Specific Rules`, treat them as mandatory repository overrides on top of the generic workflow rules.
+- `/implement` must track per-rule compliance in `progress.md` (`## Project Rules Compliance`); `/review` must verify each rule with explicit pass/fail evidence before a clean verdict.
 - Use canonical tasks only:
   - `{{ task_command }} {{ task_implement_name }}`
   - `{{ task_command }} {{ task_test_name }}`
@@ -34,6 +35,7 @@ alwaysApply: true
   - `Текущий шаг`
   - `Дальше`
   - `Spec Conformance`
+  - `Project Rules Compliance`
   - `Решения по ходу`
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.

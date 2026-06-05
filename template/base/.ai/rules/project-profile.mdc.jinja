@@ -12,6 +12,14 @@
 - They must not weaken manifesto-level non-negotiables or generic workflow completion gates.
 - Provider runtimes consume this same file through shared `.ai/rules` links; do not maintain separate provider-specific copies of the same project rule.
 
+## Enforcement (mandatory for implement and review)
+
+- Every bullet under `## Project-Specific Rules` is a **hard gate**, not background guidance.
+- `/implement` must extract applicable rules here, track them in `progress.md` under `## Project Rules Compliance`, and mark each rule `[x]` only with concrete code/test evidence — or `N/A (reason)` when truly out of scope.
+- `/review` must verify every applicable project-specific rule **before** any clean verdict; output a per-rule `pass | fail | N/A` table with evidence (`file:line`, test name, or command output).
+- Any `fail` on a project-specific rule is a workflow defect: at least `medium` severity (often `high` for architecture/invariant breaks). A clean review is forbidden while any project-specific rule is `fail`.
+- If `## Project-Specific Rules` is empty, `/implement` and `/review` must still explicitly confirm compliance with manifesto, `ai.config.yaml`, and `.ai/rules/workflow-gates.mdc` for the touched scope.
+
 ## Workflow Language Contract
 
 - All workflow reasoning, planning notes, progress updates, review outputs, and user-facing workflow dialogue must use `{{ workflow_language }}` unless the user explicitly asks for another language.

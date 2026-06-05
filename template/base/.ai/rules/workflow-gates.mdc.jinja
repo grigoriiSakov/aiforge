@@ -27,8 +27,10 @@ alwaysApply: true
 
 ## Gate 2: Implement
 
-- Implementation must follow the approved plan and source request exactly.
+- Before the first code change, complete project-rules preflight: read `.ai/rules/project-profile.mdc`, extract every applicable rule from `## Project-Specific Rules`, and seed `## Project Rules Compliance` in `progress.md`.
+- Implementation must follow the approved plan, source request, and project-specific rules exactly.
 - Implementer must not silently reinterpret requirements during coding.
+- Before each step transition and before review handoff, re-read `.ai/rules/project-profile.mdc` and update `## Project Rules Compliance`; no open `fail` or unchecked applicable rule is allowed.
 - Implementer must study relevant existing code and `llms` context first, then reuse or extend canonical implementation instead of cloning logic into a new branch/path.
 - Before and after coding, compare implementation against:
   - source request/spec
@@ -72,6 +74,10 @@ alwaysApply: true
 
 - Findings first; classify by severity.
 - Review must treat the source request/spec as a first-class contract.
+- Before any clean verdict, run an explicit **Project Rules Compliance** pass:
+  - every bullet in `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`
+  - applicable manifesto and workflow-gate constraints for the touched scope
+  - per-rule `pass | fail | N/A` with evidence; any `fail` blocks a clean verdict (minimum `medium` finding)
 - Review must verify:
   - implementation-vs-spec conformance
   - `Do Not Break` invariants

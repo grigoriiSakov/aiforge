@@ -18,6 +18,22 @@ Use this skill to implement the planned change step by step.
   - `.ai/rules/project-profile.mdc`
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with implementation until this preflight read is complete.
+- Skipping preflight or treating rules as optional background is a workflow defect.
+
+## Project rules compliance (mandatory)
+
+After Rule preflight, **before the first code change**:
+
+1. Extract every bullet from `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`.
+2. Extract manifesto and workflow-gate constraints that apply to the touched scope.
+3. Add `## Project Rules Compliance` to `progress.md` — one line per rule:
+   - `- [ ] <rule text> — evidence: pending`
+4. On every step transition and before `/review` handoff:
+   - re-read `.ai/rules/project-profile.mdc`
+   - update each line to `[x]` with concrete evidence (`file:line`, test, command) or `N/A (reason)` if truly out of scope
+5. An unchecked applicable rule or a known violation blocks progress — fix code or update the plan first; do not hand off to review with open violations.
+
+If `## Project-Specific Rules` is empty, still record explicit compliance checks for manifesto, `ai.config.yaml`, and workflow gates in `## Project Rules Compliance`.
 
 ## Mandatory protocol
 
@@ -45,6 +61,7 @@ Use this skill to implement the planned change step by step.
    - update `## Текущий шаг`
    - update `## Дальше`
    - update `## Spec Conformance`
+   - update `## Project Rules Compliance` (per-rule pass/N/A with evidence)
    - append short decisions to `## Решения по ходу`
 10. Implement abstraction-first:
    - prefer extending existing abstractions over introducing parallel branches

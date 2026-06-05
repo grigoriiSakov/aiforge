@@ -122,6 +122,27 @@ describe("generic reusable surfaces", () => {
     }
   });
 
+  test("implement and review enforce explicit project rules compliance", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const implementSkill = fs.readFileSync(
+      path.join(root, ".ai", "skills", "implement", "SKILL.md.jinja"),
+      "utf8"
+    );
+    const reviewSkill = fs.readFileSync(path.join(root, ".ai", "skills", "review", "SKILL.md.jinja"), "utf8");
+    const projectProfile = fs.readFileSync(path.join(root, ".ai", "rules", "project-profile.mdc.jinja"), "utf8");
+    const progressTemplate = fs.readFileSync(
+      path.join(root, ".ai", "reference", "plan-progress-template.md.jinja"),
+      "utf8"
+    );
+
+    expect(implementSkill).toContain("## Project rules compliance (mandatory)");
+    expect(implementSkill).toContain("## Project Rules Compliance");
+    expect(reviewSkill).toContain("## Project rules compliance check (mandatory)");
+    expect(reviewSkill).toContain("### Project Rules Compliance");
+    expect(projectProfile).toContain("## Enforcement (mandatory for implement and review)");
+    expect(progressTemplate).toContain("## Project Rules Compliance");
+  });
+
   test("testing policy defaults to touched scope, not full suite", () => {
     const root = path.join(process.cwd(), "template", "base");
     const workflowGates = fs.readFileSync(path.join(root, ".ai", "rules", "workflow-gates.mdc.jinja"), "utf8");
