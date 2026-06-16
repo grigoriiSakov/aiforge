@@ -16,6 +16,9 @@ Use this skill to implement the planned change step by step.
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with implementation until this preflight read is complete.
 - Skipping preflight or treating rules as optional background is a workflow defect.
@@ -55,6 +58,11 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - `Do Not Break`
    - `Acceptance Traceability`
    - current step boundaries
+{% if minimalism_enabled and minimalism_level != "off" %}
+7a. **Before the first code change**, re-run the minimal solution ladder from the plan against the actual codebase (not plan assumptions). If a higher rung works:
+   - shrink the step and update `File Map` / `Minimal Solution Ladder` in `plan.md` before coding
+   - record the decision in `progress.md` → `## Minimal Solution Conformance`
+{% endif %}
 8. Before the first code change, create or update execution memory in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments).
 9. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
@@ -63,10 +71,14 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - update `## Spec Conformance`
    - update `## Project Rules Compliance` (per-rule pass/N/A with evidence)
    - append short decisions to `## Решения по ходу`
-10. Implement abstraction-first:
+10. Implement abstraction-first **and** minimal-solution aligned:
    - prefer extending existing abstractions over introducing parallel branches
+   - do not add a new abstraction layer with one implementation (see `.ai/rules/minimal-solution.mdc`)
    - prefer strategy/polymorphism/composition/data-driven dispatch over long `if/else` ladders
    - if branching starts growing, extract an explicit abstraction instead of stacking conditionals
+{% if minimalism_enabled and minimalism_level != "off" %}
+   - mark deliberate simplifications with `ponytail:` comments per minimal-solution rule
+{% endif %}
 11. For database or query-heavy paths, keep the implementation production-grade:
    - avoid N+1 lookups
    - avoid fetch-all + filter/map/reduce loops when the storage/query layer can do the work

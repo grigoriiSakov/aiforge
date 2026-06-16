@@ -1,0 +1,77 @@
+---
+name: simplify-review
+description: Review the diff for over-engineering only — what to delete, replace with stdlib/native, or shrink. Use for /simplify-review or orchestrator simplify gate.
+---
+
+# Simplify Review
+
+Complexity-only review. Find what to cut. The diff's best outcome is getting shorter.
+
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `ai.config.yaml` (check `minimalism.*`, `orchestrator.simplifyGate`)
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
+  - `.ai/context/current.md` if it exists
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue until preflight is complete.
+
+## Mandatory protocol
+
+1. Review **only** the current diff (orchestrator worktree path when delegated).
+2. One line per finding: location, what to cut, what replaces it.
+3. Use tags:
+   - `delete:` dead code, unused flexibility, speculative feature. Replacement: nothing.
+   - `stdlib:` hand-rolled thing the standard library ships. Name the function.
+   - `native:` dependency or code doing what the platform already does. Name the feature.
+   - `yagni:` abstraction with one implementation, config nobody sets, layer with one caller.
+   - `shrink:` same logic, fewer lines. Show the shorter form.
+4. End with: `net: -N lines possible.` If nothing to cut: `Lean already. Ship.`
+5. Do **not** apply fixes — list only.
+6. Do **not** flag correctness bugs, security holes, or performance (normal `/review` handles those).
+7. Do **not** flag the ponytail minimum smoke test / assert self-check as bloat.
+
+## Severity for orchestrator
+
+| Tag | Default severity |
+|-----|------------------|
+| `yagni` new abstraction / new dependency for stdlib task | `blocking` |
+| `stdlib` / `native` with clear drop-in | `blocking` when >5 lines saved |
+| `delete` speculative code in claimed scope | `blocking` |
+| `shrink` style-only | `advisory` |
+
+## Orchestrator-delegate mode
+
+Use when the parent `/orchestrator` launched this run before `/review`.
+
+- Read only assigned issue `plan.md`, `progress.md`, and diff from `worktreePath` in the prompt.
+- Stay read-only. Do not edit code or call orchestrator runtime helpers.
+- Return a verdict to the parent orchestrator only.
+
+End the response with this exact machine-readable block:
+
+```yaml
+orchestrator_simplify_verdict:
+  result: lean | advisory | blocking
+  net_lines_cut_possible: 0
+  top_findings:
+    - tag: yagni | stdlib | native | delete | shrink
+      severity: advisory | blocking
+      location: "file:L.."
+      summary: "one line"
+  return_to_implement: required | optional | not_needed
+  summary: "one short sentence for the orchestrator"
+```
+
+- `result: lean` when `net_lines_cut_possible` is 0 or findings are advisory only.
+- `return_to_implement: required` when any `blocking` finding remains and `orchestrator.simplifyGate` is `always`.
+- `return_to_implement: optional` when gate is `optional` — parent orchestrator decides.
+
+## Output contract
+
+Findings first (one line each). `net:` line last. No essays.

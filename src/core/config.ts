@@ -14,7 +14,10 @@ import { getProfileDefinition } from "./profiles/definitions.js";
 import { DEFAULT_TASK_COMMAND, renderTaskCommands } from "./task-runner.js";
 import type {
   DetectionResult,
+  MinimalismLevel,
+  MinimalismReviewGate,
   OrchestratorAuditGate,
+  OrchestratorSimplifyGate,
   ProjectConfig,
   ProjectProfileId
 } from "./types.js";
@@ -75,7 +78,13 @@ export function createConfig(params: {
       worktreeRoot: `~/worktrees/${params.projectSlug}`,
       branchPrefix: "agent/",
       maxReviewIterations: 2,
-      auditGate: "never"
+      auditGate: "never",
+      simplifyGate: "optional"
+    },
+    minimalism: {
+      enabled: true,
+      level: "full",
+      reviewGate: "before-review"
     },
     execution: createDefaultExecutionConfig(task),
     artifacts: {
@@ -187,6 +196,10 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     orchestrator_branch_prefix: config.orchestrator.branchPrefix,
     orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
     orchestrator_audit_gate: config.orchestrator.auditGate,
+    orchestrator_simplify_gate: config.orchestrator.simplifyGate,
+    minimalism_enabled: config.minimalism.enabled,
+    minimalism_level: config.minimalism.level,
+    minimalism_review_gate: config.minimalism.reviewGate,
     execution_canonical_root: config.execution.canonicalRoot,
     execution_worktree_env_var: config.execution.worktreeEnvVar,
     execution_worktree_strategy: config.execution.worktreeStrategy,
@@ -223,6 +236,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     agent_model_implement: config.agents.modelTiers.implement,
     agent_model_review: config.agents.modelTiers.review,
     agent_model_audit: config.agents.modelTiers.audit,
+    agent_model_simplify_review: config.agents.modelTiers.simplifyReview,
     agent_model_tracker: config.agents.modelTiers.tracker,
     agent_runtime_models_json: JSON.stringify(config.agents.runtimeModels ?? {}, null, 2)
   };
@@ -263,6 +277,26 @@ function validateConfig(config: ProjectConfig): void {
   if (!["never", "process-layer-only", "always"].includes(config.orchestrator.auditGate ?? "")) {
     throw new Error(
       "Config orchestrator.auditGate must be one of: never, process-layer-only, always"
+    );
+  }
+
+  if (!["never", "optional", "always"].includes(config.orchestrator.simplifyGate ?? "")) {
+    throw new Error(
+      "Config orchestrator.simplifyGate must be one of: never, optional, always"
+    );
+  }
+
+  if (typeof config.minimalism?.enabled !== "boolean") {
+    throw new Error("Config minimalism.enabled must be a boolean");
+  }
+
+  if (!["lite", "full", "ultra", "off"].includes(config.minimalism?.level ?? "")) {
+    throw new Error("Config minimalism.level must be one of: lite, full, ultra, off");
+  }
+
+  if (!["never", "optional", "before-review"].includes(config.minimalism?.reviewGate ?? "")) {
+    throw new Error(
+      "Config minimalism.reviewGate must be one of: never, optional, before-review"
     );
   }
 
@@ -399,6 +433,44 @@ export function applyProfileToConfig(config: ProjectConfig, profileId: ProjectPr
   };
 }
 
+function normalizeOrchestratorSimplifyGate(value: string | undefined): OrchestratorSimplifyGate {
+  if (value === "always" || value === "optional" || value === "never") {
+    return value;
+  }
+
+  return "optional";
+}
+
+function normalizeMinimalismLevel(value: string | undefined): MinimalismLevel {
+  if (value === "lite" || value === "full" || value === "ultra" || value === "off") {
+    return value;
+  }
+
+  return "full";
+}
+
+function normalizeMinimalismReviewGate(value: string | undefined): MinimalismReviewGate {
+  if (value === "never" || value === "optional" || value === "before-review") {
+    return value;
+  }
+
+  return "before-review";
+}
+
+function normalizeMinimalismConfig(
+  current: ProjectConfig["minimalism"] | undefined,
+  defaults: ProjectConfig["minimalism"]
+): ProjectConfig["minimalism"] {
+  const enabled = current?.enabled ?? defaults.enabled;
+  return {
+    enabled,
+    level: enabled ? normalizeMinimalismLevel(current?.level) : "off",
+    reviewGate: enabled
+      ? normalizeMinimalismReviewGate(current?.reviewGate)
+      : normalizeMinimalismReviewGate("never")
+  };
+}
+
 function normalizeOrchestratorAuditGate(value: string | undefined): OrchestratorAuditGate {
   if (value === "always" || value === "process-layer-only" || value === "never") {
     return value;
@@ -447,8 +519,10 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     orchestrator: {
       ...defaults.orchestrator,
       ...config.orchestrator,
-      auditGate: normalizeOrchestratorAuditGate(config.orchestrator?.auditGate)
+      auditGate: normalizeOrchestratorAuditGate(config.orchestrator?.auditGate),
+      simplifyGate: normalizeOrchestratorSimplifyGate(config.orchestrator?.simplifyGate)
     },
+    minimalism: normalizeMinimalismConfig(config.minimalism, defaults.minimalism),
     artifacts: {
       ...defaults.artifacts,
       ...config.artifacts

@@ -66,6 +66,13 @@ Optional; required when verify/review/audit returns actionable failures. Templat
 - Drift:
   - `None.` or exact mismatch and corrective action
 
+{% if minimalism_enabled and minimalism_level != "off" -%}
+## Minimal Solution Conformance
+- Ladder rung per requirement vs actual implementation
+- `ponytail:` comments added (file:line) or N/A with reason
+- Accepted debt (ceiling + upgrade path) or `None.`
+{% endif -%}
+
 ## Project Rules Compliance
 - [ ] rule from `.ai/rules/project-profile.mdc` → `## Project-Specific Rules` — evidence: pending
 - [x] manifesto / workflow-gate constraint — evidence: file:line or test name

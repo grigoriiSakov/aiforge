@@ -13,7 +13,7 @@ Keep process context lean, current, and non-contradictory.
 
 ## Rules
 
-- Model cost: follow `agents.modelTiers` and `.ai/reference/model-profiles.md`; default orchestrator gate is **one** review subagent on `budget` tier (`orchestrator.auditGate: never`).
+- Model cost: follow `agents.modelTiers` and `.ai/reference/model-profiles.md`; default orchestrator gate is **one** review subagent on `budget` tier (`orchestrator.auditGate: never`). Optional **simplify-review** subagent on `budget` when `orchestrator.simplifyGate` ≠ `never`.
 - `current.md` should be short and execution-oriented.
 - Do not duplicate the whole manifesto into runtime artifacts.
 - Prefer pointers to files, globs, and steps over long narrative summaries.

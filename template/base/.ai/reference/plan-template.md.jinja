@@ -24,6 +24,20 @@ Capture gray-area choices **before** the step plan (layouts, API shapes, error h
 - Decision 2: ...
 - Defaults accepted (if any): ...
 
+## Minimal Solution Ladder
+{% if minimalism_enabled and minimalism_level != "off" -%}
+Required when `minimalism.enabled` is true. Run **before** `File Map`. Each requirement must pick the highest working rung (1–6). `CREATE` entries need justification when rung < 6.
+
+| Requirement | Rung (1–6) | Chosen approach | Skipped alternatives | ponytail-debt? |
+|-------------|------------|-----------------|----------------------|----------------|
+| ... | 3 native | `<input type="date">` | flatpickr wrapper | no |
+| ... | 2 stdlib | `functools.lru_cache` | custom cache class | yes: global lock |
+
+Intensity: `{{ minimalism_level }}` from `ai.config.yaml`. `change_class: small` → default `full`; `large` greenfield may use `lite` only when explicitly noted in `Implementation Decisions`.
+{% else -%}
+Optional. Skip when `minimalism.enabled` is false or `minimalism.level` is `off`.
+{% endif -%}
+
 ## Execution Contract
 
 ```json

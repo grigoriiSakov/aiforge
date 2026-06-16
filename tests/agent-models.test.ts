@@ -39,7 +39,7 @@ describe("agent model profiles", () => {
     const yaml = fs
       .readFileSync(configPath, "utf8")
       .replace(
-        /agents:\n  modelTiers:\n(?:    [a-z]+: [a-z]+\n)+  markdown: ""/,
+        /agents:\n  modelTiers:\n(?:    [a-zA-Z]+: [a-z]+\n)+  markdown: ""/,
         'agents:\n  markdown: "team notes"\n'
       );
     fs.writeFileSync(configPath, yaml);

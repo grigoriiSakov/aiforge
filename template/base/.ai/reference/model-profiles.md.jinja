@@ -16,7 +16,7 @@ title: "Model Profiles"
 |------|-------------|
 | `quality` | Architecture, risky refactors, wide blast radius |
 | `balanced` | Planning, orchestration main session, tracker, clarify |
-| `budget` | Orchestrator review subagent, narrow checklists, reruns |
+| `budget` | Orchestrator review/simplify-review subagents, lint-only passes, narrow checklists, reruns |
 
 ## Role → tier (from `ai.config.yaml`)
 
@@ -28,6 +28,7 @@ title: "Model Profiles"
 | implement | `{{ agent_model_implement }}` |
 | review | `{{ agent_model_review }}` |
 | audit | `{{ agent_model_audit }}` |
+| simplifyReview | `{{ agent_model_simplify_review }}` |
 | tracker | `{{ agent_model_tracker }}` |
 
 ## Per-runtime slugs (examples)

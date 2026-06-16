@@ -16,6 +16,9 @@ Findings first.
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with review until this preflight read is complete.
 - Skipping preflight or reviewing only the diff without rule compliance is a workflow defect.
@@ -40,6 +43,31 @@ Required output section in every review (before summary):
 - Any `fail` on a project-specific rule → at least `medium` finding (often `high` for architecture/invariant breaks).
 - A clean verdict is **forbidden** while any project-specific rule is `fail`.
 - If `## Project-Specific Rules` is empty, state that explicitly and still verify manifesto + workflow gates for the touched scope.
+
+{% if minimalism_enabled and minimalism_level != "off" and minimalism_review_gate != "never" %}
+## Complexity pass (mandatory when enabled)
+
+{% if minimalism_review_gate == "before-review" %}
+Run **before** correctness findings on every review.
+{% else %}
+Run when `Execution Contract.change_class` is `medium` or `large`, or when the diff adds files/dependencies beyond the plan ladder.
+{% endif %}
+
+### Complexity Pass
+
+One line per finding: `L12-38: stdlib: ...` (or `path:L..` for multi-file).
+
+Tags: `delete` | `stdlib` | `native` | `yagni` | `shrink`
+
+End with: `net: -N lines possible.` or `Lean already.`
+
+Severity mapping into main findings:
+- `yagni` new abstraction / new dependency for stdlib-native task → **medium** (often **high** if large)
+- `delete` speculative code in scope → **medium**
+- `shrink` / advisory only → **low** or note in summary
+
+A clean verdict is **forbidden** while a **medium+** complexity finding remains unaddressed or undocumented as accepted debt in `progress.md`.
+{% endif %}
 
 ## Mandatory protocol
 

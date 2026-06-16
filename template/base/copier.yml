@@ -86,6 +86,35 @@ orchestrator_audit_gate:
     - process-layer-only
     - always
 
+orchestrator_simplify_gate:
+  type: str
+  default: optional
+  choices:
+    - never
+    - optional
+    - always
+
+minimalism_enabled:
+  type: bool
+  default: true
+
+minimalism_level:
+  type: str
+  default: full
+  choices:
+    - lite
+    - full
+    - ultra
+    - off
+
+minimalism_review_gate:
+  type: str
+  default: before-review
+  choices:
+    - never
+    - optional
+    - before-review
+
 plan_progress_runtime_root:
   type: str
   default: .ai/context/runtime

@@ -81,6 +81,7 @@ describe("generic reusable surfaces", () => {
       "refactor/SKILL.md.jinja",
       "repeat/SKILL.md.jinja",
       "review/SKILL.md.jinja",
+      "simplify-review/SKILL.md.jinja",
       "tracker/SKILL.md.jinja"
     ];
 

@@ -21,6 +21,7 @@ export const AGENT_MODEL_ROLE_VALUES: readonly AgentModelRole[] = [
   "implement",
   "review",
   "audit",
+  "simplifyReview",
   "tracker"
 ];
 
@@ -31,6 +32,7 @@ export const DEFAULT_AGENT_MODEL_TIERS: AgentModelTiers = {
   implement: "quality",
   review: "budget",
   audit: "budget",
+  simplifyReview: "budget",
   tracker: "balanced"
 };
 
@@ -69,6 +71,7 @@ export function normalizeAgentModelTiers(current: Partial<AgentModelTiers> | und
     implement: normalizeAgentModelTier(current?.implement, defaults.implement),
     review: normalizeAgentModelTier(current?.review, defaults.review),
     audit: normalizeAgentModelTier(current?.audit, defaults.audit),
+    simplifyReview: normalizeAgentModelTier(current?.simplifyReview, defaults.simplifyReview),
     tracker: normalizeAgentModelTier(current?.tracker, defaults.tracker)
   };
 }

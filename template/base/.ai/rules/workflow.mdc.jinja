@@ -30,14 +30,23 @@ alwaysApply: true
   - `Acceptance Traceability`
   - `Claimed Write Scope`
   - `Open Questions / Blockers`
+{% if minimalism_enabled and minimalism_level != "off" -%}
+  - `Minimal Solution Ladder`
+{% endif -%}
 - Progress artifact minimum:
   - `Выполнено`
   - `Текущий шаг`
   - `Дальше`
   - `Spec Conformance`
   - `Project Rules Compliance`
+{% if minimalism_enabled and minimalism_level != "off" -%}
+  - `Minimal Solution Conformance`
+{% endif -%}
   - `Решения по ходу`
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
 - Completion means all required spec, plan, verification, and review points are done; partial completion is not completion.
+{% if minimalism_enabled and minimalism_level != "off" -%}
+- When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. Orchestrator may delegate `/simplify-review` when `orchestrator.simplifyGate` ≠ `never`.
+{% endif -%}
 - If review produces `high` or `medium` findings, the workflow must loop back through `implement -> test -> verify -> review` until those severities are eliminated.

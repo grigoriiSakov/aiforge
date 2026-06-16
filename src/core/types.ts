@@ -26,6 +26,20 @@ export type WorktreeExecutionStrategy = "direct" | "overlay";
 /** When the orchestrator runs a separate /audit subagent alongside /review. */
 export type OrchestratorAuditGate = "never" | "process-layer-only" | "always";
 
+/** When the orchestrator runs a separate /simplify-review subagent before /review. */
+export type OrchestratorSimplifyGate = "never" | "optional" | "always";
+
+export type MinimalismLevel = "lite" | "full" | "ultra" | "off";
+
+/** Standalone /review complexity pass policy when minimalism is enabled. */
+export type MinimalismReviewGate = "never" | "optional" | "before-review";
+
+export interface MinimalismConfig {
+  enabled: boolean;
+  level: MinimalismLevel;
+  reviewGate: MinimalismReviewGate;
+}
+
 export interface ExecutionEntrypoints {
   implement: string;
   test: string;
@@ -52,6 +66,7 @@ export type AgentModelRole =
   | "implement"
   | "review"
   | "audit"
+  | "simplifyReview"
   | "tracker";
 
 export interface AgentModelTiers {
@@ -61,6 +76,7 @@ export interface AgentModelTiers {
   implement: AgentModelTier;
   review: AgentModelTier;
   audit: AgentModelTier;
+  simplifyReview: AgentModelTier;
   tracker: AgentModelTier;
 }
 
@@ -104,7 +120,9 @@ export interface ProjectConfig {
     branchPrefix: string;
     maxReviewIterations: number;
     auditGate: OrchestratorAuditGate;
+    simplifyGate: OrchestratorSimplifyGate;
   };
+  minimalism: MinimalismConfig;
   execution: {
     canonicalRoot: string;
     worktreeEnvVar: string;

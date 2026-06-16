@@ -16,6 +16,9 @@ Use this skill to produce an implement-ready implementation plan before code cha
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with planning until this preflight read is complete.
 
@@ -58,7 +61,10 @@ Turn the current request or issue into an execution artifact that is specific en
    - `Step Plan`
    - `Risk Registry`
    - `Open Questions / Blockers`
-10. The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.
+{% if minimalism_enabled and minimalism_level != "off" %}
+   - `Minimal Solution Ladder`
+{% endif %}
+10. {% if minimalism_enabled and minimalism_level != "off" %}Before `File Map`, complete `## Minimal Solution Ladder` for every requirement. Each `CREATE` file must cite rung 6 justification or be removed. Reconcile with abstraction-first: extend existing abstractions; do not plan new layers with one implementation.{% else %}The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.{% endif %}
 11. The plan must call out query/storage-heavy steps that need industrial handling:
    - no N+1
    - no oversized reads

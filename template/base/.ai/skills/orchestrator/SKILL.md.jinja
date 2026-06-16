@@ -18,6 +18,9 @@ Pipeline owner for:
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
   - `.ai/reference/orchestrator-test-strategy.md`
   - `.ai/reference/orchestrator-fix-loop-decision.md`
   - `.ai/reference/model-profiles.md`
@@ -102,6 +105,8 @@ Pipeline owner for:
 ## Review gate + models
 
 Конфиг: `orchestrator.auditGate` = **`{{ orchestrator_audit_gate }}`** (`never` | `process-layer-only` | `always`).
+Конфиг: `orchestrator.simplifyGate` = **`{{ orchestrator_simplify_gate }}`** (`never` | `optional` | `always`).
+Конфиг: `minimalism` = **`enabled: {{ minimalism_enabled }}`**, **`level: {{ minimalism_level }}`**, **`reviewGate: {{ minimalism_review_gate }}`**.
 
 26. **Subagent model (review, обязательно):** определи **текущий** runtime (Codex ≠ Cursor ≠ Claude):
     ```bash
@@ -112,7 +117,15 @@ Pipeline owner for:
     - `model-hint` читает **только** `agents.runtimeModels.<activeRuntime>` из `ai.config.yaml` / `.ai/project.model-profiles.json`.
     - следуй полю `instruction` в JSON (Cursor → Task `model=`; Codex → `codex -m …`; не смешивать).
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
-27. После scoped `record-test --result pass` и `set-status --status reviewing`:
+27. После scoped `record-test --result pass`{% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %} и **до** `set-status --status reviewing`{% endif %}:
+{% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %}
+    - **simplify gate (`{{ orchestrator_simplify_gate }}`):** subagent `.ai/skills/simplify-review/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role simplifyReview`.
+    - распарсь `orchestrator_simplify_verdict` из YAML ответа.
+    - `return_to_implement: required` **или** (`{{ orchestrator_simplify_gate }}` = `always` и `result: blocking`) → fix-loop: упрости код по findings → scoped test → `graph next` (не запускай review subagent пока blocking не снят).
+    - `{{ orchestrator_simplify_gate }}` = `optional` и `return_to_implement: optional` → оркестратор решает по `net_lines_cut_possible` и blast radius; зафиксируй в `progress.md` → `### Simplify gate`.
+    - `result: lean` или advisory-only → продолжай к review gate.
+{% endif %}
+    - `set-status --status reviewing`
     - **всегда один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
 {% if orchestrator_audit_gate == "always" %}
     - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
