@@ -160,4 +160,20 @@ describe("generic reusable surfaces", () => {
     expect(reviewSkill).toContain("default expectation is scoped tests for the behavior that changed");
     expect(checkSkill).toContain("Do not assume the full project test suite is required");
   });
+
+  test("orchestrator chooses simple or full review by complexity", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const orchestratorSkill = fs.readFileSync(
+      path.join(root, ".ai", "skills", "orchestrator", "SKILL.md.jinja"),
+      "utf8"
+    );
+    const reviewSkill = fs.readFileSync(path.join(root, ".ai", "skills", "review", "SKILL.md.jinja"), "utf8");
+
+    expect(orchestratorSkill).toContain("review-depth triage");
+    expect(orchestratorSkill).toContain("review_depth: simple|full");
+    expect(orchestratorSkill).toContain("запрещено запускать одновременно `simple` и `full` review");
+    expect(reviewSkill).toContain("Honor parent-provided `review_depth: simple|full`");
+    expect(reviewSkill).toContain("Escalate to `full` immediately");
+    expect(reviewSkill).toContain("review_depth: simple | full");
+  });
 });

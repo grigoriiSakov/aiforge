@@ -288,7 +288,7 @@ Override: `AIFORGE_ACTIVE_RUNTIME=codex`. **Не смешивать** namespace:
 | `plan-template` → `## Implementation Decisions` | discuss-before-plan без отдельного трекера |
 | `/clarify` | Вопросы до плана; ответы → bullets для planner |
 | `verify-fix-loop.md` | Секция `## Fix Loop` в `progress.md` после verify/review/audit |
-| orchestrator gate | review subagent; после фикса — **решение** `skip-rereview` vs `require-rereview` (`record-fix-resolution`), не автоматический повтор review; `maxReviewIterations` — потолок |
+| orchestrator gate | model-driven `simple` vs `full` review по сложности diff/scope; ровно один review subagent на gate; после фикса — **решение** `skip-rereview` vs `require-rereview` (`record-fix-resolution`), не автоматический повтор review; `maxReviewIterations` — потолок |
 
 ---
 

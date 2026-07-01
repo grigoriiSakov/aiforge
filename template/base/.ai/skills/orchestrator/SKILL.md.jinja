@@ -126,7 +126,11 @@ Pipeline owner for:
     - `result: lean` или advisory-only → продолжай к review gate.
 {% endif %}
     - `set-status --status reviewing`
-    - **всегда один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
+    - **review-depth triage (обязательно до делегирования):** модель-оркестратор классифицирует изменение по diff + `Claimed Write Scope` + `Execution Contract`, выбирает ровно один режим и записывает выбор в `progress.md` → `### Review gate`:
+      - `simple` — только если все признаки одновременно верны: <=2 claimed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, план без открытых спорных решений.
+      - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high`, `after_fix_re_review: required`, или оркестратор сомневается.
+      - default при сомнении — `full`; запрещено запускать одновременно `simple` и `full` review для одного gate.
+    - **ровно один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
 {% if orchestrator_audit_gate == "always" %}
     - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
 {% elif orchestrator_audit_gate == "process-layer-only" %}

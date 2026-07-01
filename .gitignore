@@ -6,3 +6,5 @@ dist/
 coverage/
 tmp/
 .cursor/
+dist/
+node_modules/

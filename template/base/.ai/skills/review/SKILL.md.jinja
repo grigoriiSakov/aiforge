@@ -128,6 +128,12 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 Use when the parent `/orchestrator` launched this run as a **separate** review subagent after implement/test.
 
 - Read only the assigned issue's local `plan.md` / `progress.md` and diff/evidence from the orchestrator worktree path in the prompt.
+- Honor parent-provided `review_depth: simple|full`.
+- If `review_depth` is missing, infer it from the rules below and state the inference in the YAML `review_depth` field.
+- `simple` review is allowed only for small local changes: <=2 claimed files, no dependency/config/runtime/process-layer/security/API/schema/concurrency/migration/architecture impact, clear scoped evidence, no unresolved plan ambiguity, and no previous blocking review.
+- Escalate to `full` immediately if the diff or artifacts violate any simple-review precondition; do not run both passes.
+- In `simple`, skip broad architecture/process sweeps beyond touched files and mandatory project-rule checks; focus on changed behavior, obvious regressions, evidence credibility, and rule compliance for touched scope.
+- In `full`, run the complete checklist below, including artifact quality, process/compliance drift, architecture/spec completion, and OOS waiver validation.
 - Do **not** call `orchestrator-state.mjs`, `review-state.mjs`, or Linear MCP (no state transitions, no comment sync).
 - Do **not** run full-project `{{ task_command }} {{ task_verify_name }}` or the full test suite; use scoped evidence from `progress.md` only.
 - Do **not** start another implement loop yourself; return a verdict to the parent orchestrator only.
@@ -143,6 +149,7 @@ End the response with this exact machine-readable block:
 
 ```yaml
 orchestrator_review_verdict:
+  review_depth: simple | full
   result: clean | low | medium | high
   top_findings:
     - severity: high | medium | low

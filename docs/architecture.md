@@ -1,97 +1,132 @@
-# Architecture
+# CLI Configurator MVP — Architecture Spec
 
-## Core idea
+## 1) Runtime & Stack
 
-`ai-simple-template` intentionally keeps the product thin:
+- Language: TypeScript (Node.js LTS).
+- Distribution: npm package + `npx` entry.
+- Template engine: Copier.
+- Command runner surface: Task.
+- Target: Linux/macOS first (Windows support as follow-up).
 
-- `Copier` renders managed surfaces through local apply runs;
-- `Taskfile.yml` hides project-specific commands behind stable task names;
-- generated hooks and prompts read machine-friendly project data from `.ai/project.manifest.json`.
+## 2) Configuration Model
 
-## Layers
+Конфигурация строится вокруг единого project manifest (logical model, может храниться в `.ai/project.manifest.json`):
 
-### CLI
+- `schemaVersion`: версия схемы манифеста.
+- `projectProfile`: `python-fastapi-docker | laravel-docker | vue-quasar-capacitor`.
+- `managedSurfaces`: список путей и политик управления (`managed`, `semi-managed`, `unmanaged`).
+- `tooling`: флаги и опции для local render/Task/MCP/LLMS.
+- `updatePolicy`: режим update (strict, preserve-local-overrides, report-only).
+- `features`: включенные capability-флаги (`mcp`, `llms`, `manifesto`, ...).
 
-`src/cli/index.ts`
+Precedence:
+1) CLI flags
+2) local manifest
+3) profile defaults
+4) template defaults
 
-Thin orchestration layer over:
+## 3) Directory Layout (target after init/adopt)
 
-- profile detection,
-- config bootstrap,
-- Copier-based local render/apply,
-- manifesto/llms/mcp post-processing,
-- diagnostics.
-
-### Core services
-
-- `src/core/config.ts`
-- `src/core/state.ts` (`.aiforge.json`)
-- `src/core/setup.ts` / `src/core/wizard.ts`
-- `src/core/profiles/*`
-- `src/core/copier.ts`
-- `src/core/doctor.ts`
-- `src/core/manifesto.ts`
-- `src/core/llms.ts`
-- `src/core/mcp.ts`, `src/core/mcp-registry.ts`, `src/core/mcp-provision.ts`
-- `src/core/extensions/*`, `src/core/remote-skills.ts`, `src/core/security/gate.ts`
-
-### Template surface
-
-`template/base`
-
-Contains generated files for target repos:
-
-- `.cursor`
-- `.codex`
-- `.claude`
-- `.agent`
-- `.agents`
+Managed surfaces:
+- `.cursor/`
+- `.codex/`
+- `.claude/`
+- `.agent/`
+- `.agents/`
 - `AGENTS.md`
-- `Taskfile.yml`
 - `MANIFESTO.md`
-- `llms`
+- `llms.txt`
+- `llms/**`
 
-### Profiles
+Suggested service internals for CLI repo:
+- `src/commands/*` — command handlers (`init`, `adopt`, ...).
+- `src/core/config/*` — load/validate/merge config.
+- `src/core/copier/*` — local render adapter.
+- `src/core/surfaces/*` — apply/backup/diff/ownership logic.
+- `src/core/profiles/*` — profile definitions and detection rules.
+- `src/core/doctor/*` — diagnostics and health checks.
+- `src/core/task/*` — Task integration.
+- `src/core/llms/*` — llms build pipeline.
+- `src/core/mcp/*` — scaffold and validation.
 
-Profile defaults live in TypeScript definitions and docs:
+## 4) Managed vs Unmanaged Surfaces
 
-- `python-fastapi-docker`
-- `laravel-docker`
-- `vue-quasar-capacitor`
+Managed:
+- Полностью контролируются CLI/template; редактирование допускается, но может быть перезаписано `sync/update`.
 
-## Config flow
+Semi-managed:
+- Пользовательские блоки/override sections допускаются по explicit marker policy.
 
-1. CLI detects a likely profile.
-2. CLI creates `ai.config.yaml`.
-3. CLI also writes `.ai/project.manifest.json` for runtime hooks.
-4. CLI writes/merges `.aiforge.json` (installer state: runtimes mirror, MCP/extension/skill metadata).
-5. CLI converts config into Copier answers.
-6. Copier renders target surfaces.
-7. Post-processing (`finalizeAfterCopierCopy`): task runner, Copier answers, runtime symlinks, `MANIFESTO.md`, `llms`, MCP merge + docs.
+Unmanaged:
+- Любые бизнес-файлы проекта вне declared surfaces; CLI читает только для detect/doctor.
 
-## Installer state (`.aiforge.json`)
+Ownership contract:
+- Каждому managed файлу присваивается ownership metadata (в manifest/state), чтобы `doctor` фиксировал drift и unsupported manual changes.
 
-Implemented in `src/core/state.ts`. Updated from:
+## 5) Key Command Flows (data flow)
 
-- `writeMachineManifest` / `saveConfig` (runtimes mirror + timestamps),
-- `provisionManagedMcp` (managed MCP hashes under `state.mcp`),
-- `extension add/remove/update` and `skills add-git/remove` (extensions / remoteSkills arrays).
+Общий pipeline для mutating команд:
+1) `load config` (flags + manifest + profile defaults)
+2) `detect environment` (repo facts, profile hints)
+3) `plan changes` (diff intended vs actual)
+4) `preflight checks` (permissions, required binaries, conflicts)
+5) `apply` (local render + surface writer)
+6) `post-verify` (`doctor` checks subset)
+7) `report` (human + optional JSON)
 
-`src/core/doctor.ts` validates presence and runtime parity between YAML and `.aiforge.json`.
+Команды:
+- `init`: bootstrap manifest + initial managed render.
+- `adopt`: detect existing files, map ownership, then selective sync.
+- `detect`: read-only profile/state inference.
+- `sync`: reconcile to desired state by manifest.
+- `update`: локальный reconcile/apply lifecycle без git template refs.
+- `doctor`: consistency + dependency + drift checks.
+- `mcp scaffold`: create/update MCP baseline artifacts.
+- `manifesto init`: create initial manifesto surface.
+- `llms build`: regenerate `llms.txt` and `llms/**`.
 
-## MCP provisioning
+## 6) Update Lifecycle
 
-- Registry: `src/core/mcp-registry.ts`
-- Merge/write: `src/core/mcp-provision.ts`
-- User-facing scaffold + README: `src/core/mcp.ts`
+Stages:
+1) Snapshot current managed surfaces.
+2) Render current template locally against current config.
+3) Compute/apply managed surface changes.
+4) Restore shared symlinks and runtime artifacts.
+5) Run doctor subset.
+6) Summary output (changed/skipped/conflicted).
 
-Managed servers use JSON keys prefixed with `aiforge-` inside `mcpServers` objects.
+Failure policy (MVP):
+- Hard-fail on schema mismatch or critical conflicts.
+- Partial apply is allowed only with explicit per-surface status and non-zero exit code.
+- Rollback from snapshot for catastrophic apply failures.
 
-## Why `.ai/project.manifest.json`
+## 7) Test Strategy (MVP)
 
-Generated runtime scripts must not depend on npm packages from the configurator repo.
+Test pyramid:
+- Unit tests:
+  - config merge/precedence,
+  - profile detection rules,
+  - managed ownership and diff planner,
+  - error code mapping.
+- Integration tests:
+  - command e2e in temp repos,
+  - local Copier render/apply flow on fixture templates,
+  - `detect -> sync -> doctor` lifecycle per profile.
+- Golden/snapshot tests:
+  - generated surfaces (`AGENTS.md`, `MANIFESTO.md`, `llms` tree).
+- Contract tests:
+  - `--json` output schema stability for CI consumers.
 
-So:
+CI minimum gates:
+- lint + typecheck
+- unit + integration
+- smoke run of all key commands in dry-run mode
 
-- humans read/edit `ai.config.yaml`;
-- hooks and runtime scripts read JSON from `.ai/project.manifest.json`.
+## 8) Observability & Exit Codes
+
+- Structured logs with command stage and duration.
+- Stable exit codes:
+  - `0` success,
+  - `2` validation/preflight failure,
+  - `3` conflict/drift requires manual action,
+  - `4` runtime dependency/internal failure.
