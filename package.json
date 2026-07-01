@@ -7,12 +7,12 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/aiforge2/aiforge.git"
+    "url": "git+https://github.com/grigoriiSakov/aiforge.git"
   },
   "bugs": {
-    "url": "https://gitlab.com/aiforge2/aiforge/-/issues"
+    "url": "https://github.com/grigoriiSakov/aiforge/issues"
   },
-  "homepage": "https://gitlab.com/aiforge2/aiforge#readme",
+  "homepage": "https://github.com/grigoriiSakov/aiforge#readme",
   "keywords": [
     "ai-agents",
     "codex",

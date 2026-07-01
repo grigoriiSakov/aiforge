@@ -82,7 +82,7 @@ aiforge --help
 ### From source
 
 ```bash
-git clone https://gitlab.com/aiforge2/aiforge.git
+git clone https://github.com/grigoriiSakov/aiforge.git
 cd aiforge
 npm ci
 npm run build
