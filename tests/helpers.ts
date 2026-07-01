@@ -65,7 +65,7 @@ if (mode === "copy") {
     [
       "# AGENTS.md",
       "",
-      "This repository uses the ai-simple-template workflow baseline."
+      "This repository uses the aiforge workflow baseline."
     ].join("\\n");
   ensureDir(path.join(destinationPath, ".ai", "skills", "plan"));
   ensureDir(path.join(destinationPath, ".ai", "rules"));

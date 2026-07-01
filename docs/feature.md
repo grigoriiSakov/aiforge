@@ -1,74 +1,68 @@
-# CLI Configurator MVP — Feature Spec
+# Feature Scope
 
-## 1) Product Goal
+## Product Goal
 
-Сделать Node.js + TypeScript CLI, который быстро стандартизирует инженерную среду проекта через управляемые шаблоны и безопасные обновления.
+aiforge helps teams add a consistent AI-agent workflow layer to new or existing repositories in minutes.
 
-MVP-фокус:
-- bootstrap managed surfaces в существующем или новом проекте;
-- единый UX команд через repo-local `go-task`;
-- предсказуемый update lifecycle без ручного копипаста.
+It does not try to generate application code. It standardizes the process surfaces that agents rely on: rules, skills, task commands, review gates, runtime hooks, context files, and MCP scaffolding.
 
-## 2) Problem Statement
+## Problems It Solves
 
-Команды тратят время на ручную настройку `.cursor/.codex/.claude/.agent/.agents`, `AGENTS.md`, `MANIFESTO.md`, `llms`-артефактов и workflow-команд. Конфигурация дрейфует между проектами, обновления неаудируемые.
+Without a shared workflow layer, every repository slowly grows its own mix of prompt files, IDE-specific rules, undocumented task commands, and stale agent instructions.
 
-## 3) MVP Scope
+aiforge gives a repository one source of truth:
 
-CLI предоставляет команды:
-- `init` — инициализация нового managed foundation в репозитории.
-- `adopt` — принятие существующего проекта под управление (без полного перегенерата всего подряд).
-- `detect` — определение project profile и текущего состояния поверхностей.
-- `sync` — выравнивание managed surfaces с текущим профилем/манифестом.
-- `update` — обновление template/runtime артефактов через локальный render/apply flow без git-зависимости.
-- `doctor` — диагностика drift/конфликтов/битых зависимостей.
-- `mcp scaffold` — каркас MCP-конфигурации/подключений.
-- `manifesto init` — первичная инициализация `MANIFESTO.md`.
-- `llms build` — сборка `llms.txt` и `llms/**`.
+- `ai.config.yaml` for durable workflow configuration
+- managed `.ai/**` files for shared rules and skills
+- runtime adapters for Cursor, Codex, Claude Code, and related agent surfaces
+- task entrypoints that agents and humans can both run
+- update and sync commands so the workflow can evolve safely
 
-Поддерживаемые профили MVP:
+## MVP Scope
+
+Core commands:
+
+- `init` - create a managed workflow baseline
+- `adopt` - bring an existing repository under aiforge management
+- `detect` - inspect stack signals and recommend a profile
+- `sync` - render managed surfaces from the current config
+- `update` - apply template/runtime evolution
+- `doctor` - check drift, missing dependencies, and runtime state
+- `mcp scaffold` - create or update managed MCP blocks
+- `manifesto init` - create the initial manifesto surface
+- `llms build` - rebuild `llms.txt` and `llms/**`
+- `project-stub` - generate a prompt-friendly project configuration draft
+
+Supported starter profiles:
+
 - `python-fastapi-docker`
+- `python-django`
 - `laravel-docker`
+- `node-express-api`
+- `nextjs`
+- `react-vite`
 - `vue-quasar-capacitor`
+- `go-service`
 
-Template/update engine:
-- Copier copy/render как локальный apply engine без зависимости от git-based template update.
+## Success Criteria
 
-Unified command layer:
-- Task (единая точка запуска команд для пользователя и CI).
+- A repository can get a working baseline in under five minutes.
+- `detect -> init/adopt -> doctor` gives a clear path to a usable setup.
+- Managed surfaces can be regenerated without hand-copying instructions between tools.
+- Stack-specific defaults are useful but easy to override in `ai.config.yaml`.
+- Tests and typecheck pass in CI.
 
-## 4) Success Criteria (MVP)
+## Non-Goals
 
-- За <= 5 минут проект получает валидный baseline managed surfaces.
-- `detect -> sync -> doctor` проходит без критических ошибок в типовом репозитории.
-- `update` выполняется идемпотентно при отсутствии локальных правок в managed файлах.
-- Каждый профиль разворачивается одинаковыми командами без profile-specific ручных шагов.
+- Managing application dependencies.
+- Migrating business code.
+- Replacing CI.
+- Deep semantic merge of arbitrary local edits in managed files.
+- Acting as a marketplace for third-party agents or plugins.
 
-## 5) Non-Goals (MVP)
+## Current Risks
 
-- Полный package/dependency manager (npm/pnpm/pip/composer orchestration вне минимально нужного).
-- Глубокий semantic merge пользовательских правок в managed файлах (только базовый conflict/report flow).
-- Автогенерация бизнес-кода приложения.
-- Плагинная marketplace-экосистема.
-- Автоматическая миграция legacy custom scripts за пределами declared surfaces.
-
-## 6) User-facing Command Contract (MVP)
-
-Базовый интерфейс:
-- `cli <command> [--profile <id>] [--yes] [--dry-run] [--json]`
-
-Обязательные UX-инварианты:
-- Все mutating команды поддерживают `--dry-run`.
-- Любая команда может печатать machine-readable output (`--json`) для CI.
-- Ошибки имеют стабильные error codes и actionable remediation hints.
-
-## 7) Risks
-
-- Drift между template версией и локальными правками managed файлов.
-- Некорректное определение профиля при `detect` в смешанных репозиториях.
-- Частичное применение изменений при сбоях update/sync.
-
-MVP mitigation:
-- preflight checks (`doctor` + internal validation),
-- transactional apply-per-surface (с явным отчетом, где не применилось),
-- backup/restore для mutating этапов.
+- Profiles are opinionated and may need repository-specific command overrides.
+- Windows support is not a first-class target yet.
+- Generated workflow surfaces are powerful, but still evolving with real usage.
+- Template updates need careful review in repositories with heavy local customization.

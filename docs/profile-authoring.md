@@ -1,36 +1,40 @@
 # Profile Authoring
 
-## Goal
-
-A profile defines stack-specific defaults without polluting the generic workflow layer.
-
-## Current source of truth
+A profile gives a stack useful defaults without hardcoding stack behavior into the generic workflow layer.
 
 Profiles currently live in:
 
+- `src/core/types.ts`
 - `src/core/profiles/definitions.ts`
+- `src/core/profiles/detect.ts`
+- `profiles/<profile-id>/README.md`
+- `tests/fixtures/<profile-id>/`
 
 Each profile defines:
 
+- detection hints
 - default tracker
-- language
+- default workflow language
 - canonical task command arrays
 - manifesto title
-- llms source globs
-- human notes
+- LLM source globs
+- short notes for humans
 
 ## Rules
 
-- Generic hooks must not hardcode profile commands.
-- Profile commands must be executable through `Taskfile.yml`.
-- Detection hints should be additive, not mutually exclusive magic.
-- If a profile needs custom files, prefer template variables/conditionals over duplicating the whole workflow pack.
+- Keep generic hooks stack-neutral.
+- Put stack-specific commands in the profile definition.
+- Make detection additive. A single file should rarely decide the profile by itself.
+- Prefer npm script conventions or standard toolchain commands where possible.
+- Document assumptions in `profiles/<profile-id>/README.md`.
+- Add fixtures and tests for every profile.
 
-## Adding a profile
+## Adding a Profile
 
-1. Add new `ProjectProfileId` in `src/core/types.ts`.
-2. Add a profile definition in `src/core/profiles/definitions.ts`.
-3. Extend detection rules in `src/core/profiles/detect.ts`.
-4. Add fixture repo under `tests/fixtures/<profile-id>/`.
-5. Add profile detection and command-flow tests.
-6. If needed, extend template content with Jinja conditionals.
+1. Add the new `ProjectProfileId` in `src/core/types.ts`.
+2. Add the profile definition in `src/core/profiles/definitions.ts`.
+3. Extend detection scoring in `src/core/profiles/detect.ts`.
+4. Add a fixture repository under `tests/fixtures/<profile-id>/`.
+5. Add detection coverage in `tests/profiles.test.ts`.
+6. Add a profile README under `profiles/<profile-id>/README.md`.
+7. Run `npm run typecheck` and `npm test`.

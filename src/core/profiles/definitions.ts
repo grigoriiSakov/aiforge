@@ -46,6 +46,47 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     ],
     notes: ["Assumes docker-first validation", "Designed for modular FastAPI projects."]
   },
+  "python-django": {
+    id: "python-django",
+    label: "Python + Django",
+    detectionHints: ["manage.py", "django", "pyproject.toml", "requirements.txt"],
+    taskCommands: {
+      implement: ["python manage.py check"],
+      test: ["python manage.py test"],
+      lint: ["python -m ruff check ."],
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
+    },
+    trackerDefault: "github",
+    languageDefault: "en",
+    linearDefaults: {
+      enabled: false,
+      scopes: [
+        {
+          teamId: null,
+          team: "Backend Team",
+          projectId: null,
+          project: null,
+          defaultLabels: ["backend", "python"]
+        }
+      ]
+    },
+    manifestoTitle: "Django Application Workflow Manifesto",
+    llmsSourceGlobs: [
+      "**/*.py",
+      "templates/**/*.{html,jinja,jinja2}",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
+    notes: ["Defaults to manage.py validation.", "Best for conventional Django apps and APIs."]
+  },
   "laravel-docker": {
     id: "laravel-docker",
     label: "Laravel + Docker",
@@ -89,6 +130,132 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     ],
     notes: ["Assumes commands run inside Docker container.", "Optimized for DDD-ish Laravel layout."]
   },
+  "node-express-api": {
+    id: "node-express-api",
+    label: "Node.js + Express API",
+    detectionHints: ["package.json", "express", "tsconfig.json", "src/server.ts"],
+    taskCommands: {
+      implement: ["npm run build --if-present"],
+      test: ["npm run test --if-present"],
+      lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
+    },
+    trackerDefault: "github",
+    languageDefault: "en",
+    linearDefaults: {
+      enabled: false,
+      scopes: [
+        {
+          teamId: null,
+          team: "Backend Team",
+          projectId: null,
+          project: null,
+          defaultLabels: ["backend", "node"]
+        }
+      ]
+    },
+    manifestoTitle: "Node API Workflow Manifesto",
+    llmsSourceGlobs: [
+      "src/**/*.{ts,tsx,js,mjs,cjs}",
+      "test/**/*.{ts,tsx,js,mjs,cjs}",
+      "tests/**/*.{ts,tsx,js,mjs,cjs}",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
+    notes: ["Uses npm script conventions.", "Good default for Express/Fastify-style APIs."]
+  },
+  "nextjs": {
+    id: "nextjs",
+    label: "Next.js",
+    detectionHints: ["next", "app/", "pages/", "next.config.js", "next.config.ts"],
+    taskCommands: {
+      implement: ["npm run build --if-present"],
+      test: ["npm run test --if-present"],
+      lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
+    },
+    trackerDefault: "github",
+    languageDefault: "en",
+    linearDefaults: {
+      enabled: false,
+      scopes: [
+        {
+          teamId: null,
+          team: "Product Engineering",
+          projectId: null,
+          project: null,
+          defaultLabels: ["frontend", "nextjs"]
+        }
+      ]
+    },
+    manifestoTitle: "Next.js Product Workflow Manifesto",
+    llmsSourceGlobs: [
+      "app/**/*.{ts,tsx,js,jsx,mdx}",
+      "pages/**/*.{ts,tsx,js,jsx,mdx}",
+      "components/**/*.{ts,tsx,js,jsx}",
+      "src/**/*.{ts,tsx,js,jsx}",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
+    notes: ["Uses npm script conventions.", "Covers App Router and Pages Router projects."]
+  },
+  "react-vite": {
+    id: "react-vite",
+    label: "React + Vite",
+    detectionHints: ["react", "vite", "package.json", "index.html"],
+    taskCommands: {
+      implement: ["npm run build --if-present"],
+      test: ["npm run test --if-present"],
+      lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
+    },
+    trackerDefault: "github",
+    languageDefault: "en",
+    linearDefaults: {
+      enabled: false,
+      scopes: [
+        {
+          teamId: null,
+          team: "Frontend Team",
+          projectId: null,
+          project: null,
+          defaultLabels: ["frontend", "react"]
+        }
+      ]
+    },
+    manifestoTitle: "React Frontend Workflow Manifesto",
+    llmsSourceGlobs: [
+      "src/**/*.{ts,tsx,js,jsx,css,scss}",
+      "public/**/*",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
+    notes: ["Uses npm script conventions.", "Good default for Vite-powered React apps."]
+  },
   "vue-quasar-capacitor": {
     id: "vue-quasar-capacitor",
     label: "Vue + Quasar + Capacitor",
@@ -128,6 +295,48 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
       "MANIFESTO.md"
     ],
     notes: ["Uses gate-first verification.", "Works for Vue/Quasar/Capacitor style repos."]
+  },
+  "go-service": {
+    id: "go-service",
+    label: "Go Service",
+    detectionHints: ["go.mod", "cmd/", "internal/", "go test ./..."],
+    taskCommands: {
+      implement: ["go test ./..."],
+      test: ["go test ./..."],
+      lint: ["test -z \"$(gofmt -l .)\"", "go vet ./..."],
+      verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
+      review: [
+        `${TASK_COMMAND_PLACEHOLDER} verify`,
+        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
+      ]
+    },
+    trackerDefault: "github",
+    languageDefault: "en",
+    linearDefaults: {
+      enabled: false,
+      scopes: [
+        {
+          teamId: null,
+          team: "Platform Team",
+          projectId: null,
+          project: null,
+          defaultLabels: ["backend", "go"]
+        }
+      ]
+    },
+    manifestoTitle: "Go Service Workflow Manifesto",
+    llmsSourceGlobs: [
+      "**/*.go",
+      "go.mod",
+      "go.sum",
+      ".cursor/**/*.md",
+      ".cursor/**/*.mdc",
+      ".claude/**/*.md",
+      ".claude/**/*.json",
+      "AGENTS.md",
+      "MANIFESTO.md"
+    ],
+    notes: ["Uses the Go toolchain directly.", "Good default for services with cmd/internal layout."]
   }
 };
 

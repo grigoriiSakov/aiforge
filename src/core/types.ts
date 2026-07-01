@@ -1,7 +1,12 @@
 export type ProjectProfileId =
   | "python-fastapi-docker"
+  | "python-django"
   | "laravel-docker"
-  | "vue-quasar-capacitor";
+  | "node-express-api"
+  | "nextjs"
+  | "react-vite"
+  | "vue-quasar-capacitor"
+  | "go-service";
 
 export type TrackerType = "linear" | "gitlab" | "github" | "none";
 

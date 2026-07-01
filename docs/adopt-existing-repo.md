@@ -1,27 +1,41 @@
-# Adopt Existing Repo
+# Adopting an Existing Repository
+
+Use `adopt` when a repository already has application code and you want to add the aiforge workflow layer without rewriting the project.
 
 ## Flow
 
-1. Point CLI at an existing repository.
-2. Run `detect` to inspect stack signals.
-3. Run `adopt` to create config + render managed surfaces.
-4. Run `doctor` to verify required surfaces are present (including `.aiforge.json` and runtime drift checks).
-
-## Example
-
 ```bash
-npx tsx src/cli/index.ts detect --repo /path/to/repo
-npx tsx src/cli/index.ts adopt --repo /path/to/repo
-npx tsx src/cli/index.ts doctor --repo /path/to/repo
+aiforge detect
+aiforge adopt
+aiforge doctor
 ```
 
-## Safety contract
+With an explicit target:
 
-- MVP keeps adoption non-destructive by default.
-- Managed surfaces are limited to AI/runtime/config files.
-- Business code is not rewritten by the configurator.
+```bash
+aiforge detect --repo /path/to/repo
+aiforge adopt --repo /path/to/repo
+aiforge doctor --repo /path/to/repo
+```
 
-## When to use `sync` vs `update`
+## What Adoption Does
 
-- `sync`: re-render current desired state from `ai.config.yaml`
-- `update`: run `copier update` after template evolution
+- Detects stack signals and recommends a profile.
+- Creates `ai.config.yaml`.
+- Renders managed workflow surfaces.
+- Writes machine manifests for runtime hooks and model tiers.
+- Installs the repo-local Task wrapper.
+- Leaves business code alone.
+
+## Safety Contract
+
+Adoption is scoped to AI/runtime/config surfaces. Application files are not modified.
+
+If a repository already has local agent instructions, review the generated `ai.config.yaml`, `AGENTS.md`, and `.ai/rules/project-profile.mdc` after adoption and move durable project rules into `projectRules.markdown`.
+
+## Sync vs Update
+
+- `sync` renders the current desired state from `ai.config.yaml`.
+- `update` applies template/runtime evolution through Copier.
+
+Use `sync` after editing config. Use `update` when a newer aiforge template should be applied to an already managed repository.
