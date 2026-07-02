@@ -52,7 +52,7 @@ The target repository's application files remain unmanaged. They are read for de
 - `src/core/config.ts` - config lifecycle and template answers
 - `src/core/profiles` - stack defaults and detection
 - `src/core/copier.ts` - Copier integration
-- `src/core/task-runner.ts` - repo-local Task wrapper and installer
+- `src/core/task-runner.ts` - repo-local Task wrapper and explicit opt-in installer
 - `src/core/security` - extension and remote skill safety checks
 - `template/base` - generated workflow surfaces
 - `tests` - unit and integration coverage

@@ -1,0 +1,89 @@
+---
+name: skeptic
+description: Challenge a draft implementation plan before it becomes implement-ready. Use during /plan or when asked for skeptic, critique, red-team, second opinion, or plan quality review.
+---
+
+# Skeptic
+
+Use this skill to stress-test a draft plan before implementation.
+
+## Rule preflight
+
+- Before doing anything else in this skill, read:
+  - `{{ manifesto_path }}`
+  - `ai.config.yaml`
+  - `.ai/context/current.md` if it exists
+  - `.ai/rules/workflow.mdc`
+  - `.ai/rules/workflow-gates.mdc`
+  - `.ai/rules/project-profile.mdc`
+{% if minimalism_enabled and minimalism_level != "off" %}
+  - `.ai/rules/minimal-solution.mdc`
+{% endif %}
+- Treat those files as hard constraints for this run, not background reference.
+- Do not continue with skeptical review until this preflight read is complete.
+
+## Goal
+
+Find plan defects while the cost to fix them is still low.
+
+The skeptic is adversarial about assumptions, not about people. Every objection must be grounded in one of:
+
+- source request / issue text
+- existing repository code or generated surfaces
+- project rules, manifesto, workflow gates, or profile constraints
+- known good practice for the stack or problem class
+- verification gaps that would hide a likely regression
+
+## Mandatory protocol
+
+1. Use model tier `{{ agent_model_skeptic }}` for this skill (see `.ai/reference/model-profiles.md`).
+2. Read the draft plan and, when present, local progress artifacts:
+   - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
+   - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+3. Read the relevant source request / issue and any `llms` artifacts used by `/plan`.
+4. Inspect existing code surfaces named by the draft plan before criticizing architecture or file scope.
+5. Search for adjacent/sibling implementations in the repository before claiming a pattern is missing.
+6. When external best practice materially affects the plan and is not already captured by repo rules or `llms` artifacts, use current primary/credible documentation and cite the source in the critique.
+7. Evaluate the draft plan against:
+   - requirements coverage and explicit non-goals
+   - reuse of existing abstractions and generated runtime surfaces
+   - file-level write scope accuracy
+   - test and verification sufficiency
+   - backward compatibility and adjacent behavior
+   - data/query/storage risks: N+1, oversized reads, raw in-memory loops
+   - configuration, runtime, tracker, and generated-template drift
+   - unnecessary new files, dependencies, or layers
+8. Classify each objection:
+   - `blocker` - plan is not implement-ready until fixed
+   - `risk` - implementable, but plan needs mitigation or acceptance
+   - `note` - useful context, not a planning gate
+9. Do not invent uncertainty. If evidence is missing, state the exact missing evidence and how to obtain it.
+10. Do not require full-suite verification by default. Follow `.ai/rules/workflow-gates.mdc`: scoped evidence is enough when it credibly covers the touched behavior.
+11. All critique and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+
+## Output contract
+
+Return this concise structure:
+
+```markdown
+## Skeptic Review
+
+### Verdict
+pass | revise
+
+### Blockers
+- `None.` or `blocker`: evidence -> required plan change
+
+### Risks
+- `None.` or `risk`: evidence -> mitigation or accepted debt
+
+### Notes
+- `None.` or `note`: evidence -> optional improvement
+
+### Required Plan Updates
+- `None.` or exact section/field to update
+```
+
+- `pass` means there are no blockers and all important risks are either mitigated in the plan or explicitly accepted.
+- `revise` means at least one blocker remains.
+- Keep the review short enough to paste into the plan artifact.

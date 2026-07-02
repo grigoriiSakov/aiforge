@@ -20,6 +20,22 @@ function appendSecurityScan(state: AiforgeInstallerState, record: AiforgeSecurit
   return { ...state, security: { lastScans } };
 }
 
+function shouldCopyPackagePath(sourceRoot: string, sourcePath: string): boolean {
+  const rel = path.relative(sourceRoot, sourcePath);
+  if (!rel) {
+    return true;
+  }
+  const parts = rel.split(path.sep);
+  return !parts.some((part) => [".git", ".hg", ".svn", "node_modules"].includes(part));
+}
+
+function copyPackageTree(sourceRoot: string, dest: string): void {
+  fs.cpSync(sourceRoot, dest, {
+    recursive: true,
+    filter: (sourcePath) => shouldCopyPackagePath(sourceRoot, sourcePath)
+  });
+}
+
 export interface InstallExtensionResult {
   extensionName: string;
   installedSkills: string[];
@@ -49,7 +65,7 @@ export function installExtensionFromPath(
   if (fs.existsSync(destRoot)) {
     fs.rmSync(destRoot, { recursive: true, force: true });
   }
-  fs.cpSync(absSource, destRoot, { recursive: true });
+  copyPackageTree(absSource, destRoot);
 
   const installedSkills: string[] = [];
   const skillsRoot = path.join(repoRoot, ".ai", "skills");
@@ -61,7 +77,7 @@ export function installExtensionFromPath(
       fs.rmSync(destSkill, { recursive: true, force: true });
     }
     ensureDir(path.dirname(destSkill));
-    fs.cpSync(srcSkill, destSkill, { recursive: true });
+    copyPackageTree(srcSkill, destSkill);
     installedSkills.push(path.relative(repoRoot, destSkill));
   }
 

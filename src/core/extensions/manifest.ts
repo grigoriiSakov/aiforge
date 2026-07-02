@@ -48,13 +48,21 @@ export function readExtensionManifest(extensionRoot: string): ExtensionManifest 
 }
 
 export function assertExtensionSourceLayout(extensionRoot: string, manifest: ExtensionManifest): void {
+  const root = path.resolve(extensionRoot);
   for (const rel of manifest.skills ?? []) {
-    const resolved = path.resolve(extensionRoot, rel);
-    if (!resolved.startsWith(path.resolve(extensionRoot))) {
+    const resolved = path.resolve(root, rel);
+    const relative = path.relative(root, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new Error(`Unsafe skill path: ${rel}`);
     }
     if (!fs.existsSync(resolved)) {
       throw new Error(`Skill path does not exist: ${rel}`);
+    }
+    if (!fs.statSync(resolved).isDirectory()) {
+      throw new Error(`Skill path is not a directory: ${rel}`);
+    }
+    if (!fs.existsSync(path.join(resolved, "SKILL.md"))) {
+      throw new Error(`Skill path missing SKILL.md: ${rel}`);
     }
   }
 }

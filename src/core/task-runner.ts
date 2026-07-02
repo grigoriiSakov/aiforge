@@ -33,7 +33,7 @@ export function ensureTaskRunnerInstalled(repoRoot: string): void {
   }
 
   throw new Error(
-    "go-task runner is not available. Install `go-task`, or allow aiforge to download Task into `.ai/bin/task`."
+    "go-task runner is not available. Install `go-task`, set AIFORGE_TASK_INSTALLER_BIN, or set AIFORGE_ALLOW_TASK_DOWNLOAD=1 to allow aiforge to download Task into `.ai/bin/task`."
   );
 }
 
@@ -103,6 +103,10 @@ function installLocalTaskBinary(repoRoot: string): void {
   const override = process.env.AIFORGE_TASK_INSTALLER_BIN;
   if (override) {
     runInstaller(override, [installDir], repoRoot, override);
+    return;
+  }
+
+  if (process.env.AIFORGE_ALLOW_TASK_DOWNLOAD !== "1") {
     return;
   }
 

@@ -63,7 +63,6 @@ async function main(): Promise<void> {
     .option("--project-name <name>", "Human-readable project name")
     .option("--profile <id>", "Profile id")
     .option("--interactive", "Prompt for profile / project name on stdin", false)
-    .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
     .action(async (options: {
@@ -104,7 +103,6 @@ async function main(): Promise<void> {
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--profile <id>", "Profile id")
     .option("--interactive", "Prompt for profile / project name on stdin", false)
-    .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
     .action(async (options: {
@@ -138,7 +136,6 @@ async function main(): Promise<void> {
     .command("sync")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--profile <id>", "Override profile id")
-    .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
     .action(async (options: { repo: string; profile?: string; dryRun: boolean; json: boolean }) => {
@@ -155,7 +152,6 @@ async function main(): Promise<void> {
     .command("update")
     .option("--repo <path>", "Repository root", process.cwd())
     .option("--profile <id>", "Override profile id before update")
-    .option("--yes", "Apply without interactive confirmation", false)
     .option("--dry-run", "Preview changes only", false)
     .option("--json", "Print JSON output", false)
     .action(async (options: { repo: string; profile?: string; dryRun: boolean; json: boolean }) => {

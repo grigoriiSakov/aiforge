@@ -25,6 +25,7 @@ process.exit(0);
     process.env.PATH = `${fakeTaskBinDir}:${originalPath}`;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
+    delete process.env.AIFORGE_ALLOW_TASK_DOWNLOAD;
   });
 
   afterEach(() => {
@@ -80,5 +81,68 @@ process.exit(0);
     expect(rm.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".aiforge", "extensions", "demo-ext"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "skills", "demo-ext__hello"))).toBe(false);
+  });
+
+  test("rejects extension skill paths outside the extension root", async () => {
+    const extRoot = makeTempRepo("aiforge-ext-src-");
+    const sibling = `${extRoot}-sibling`;
+    const skillDir = path.join(sibling, "hello");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: hello\ndescription: test\n---\n", "utf8");
+    fs.writeFileSync(
+      path.join(extRoot, "extension.json"),
+      JSON.stringify({ name: "bad-ext", version: "0.0.1", skills: ["../" + path.basename(sibling) + "/hello"] }) +
+        "\n",
+      "utf8"
+    );
+
+    const repoRoot = makeTempRepo("aiforge-ext-target-");
+    await runInitCommand({ repoRoot, projectName: "Ext Host", profileId: "laravel-docker", dryRun: false });
+
+    const add = runExtensionAddCommand(repoRoot, extRoot);
+    expect(add.ok).toBe(false);
+    expect(add.message).toContain("Unsafe skill path");
+  });
+
+  test("rejects extension skill directories without SKILL.md", async () => {
+    const extRoot = makeTempRepo("aiforge-ext-src-");
+    fs.mkdirSync(path.join(extRoot, "skills", "empty"), { recursive: true });
+    fs.writeFileSync(
+      path.join(extRoot, "extension.json"),
+      JSON.stringify({ name: "bad-ext", version: "0.0.1", skills: ["skills/empty"] }) + "\n",
+      "utf8"
+    );
+
+    const repoRoot = makeTempRepo("aiforge-ext-target-");
+    await runInitCommand({ repoRoot, projectName: "Ext Host", profileId: "laravel-docker", dryRun: false });
+
+    const add = runExtensionAddCommand(repoRoot, extRoot);
+    expect(add.ok).toBe(false);
+    expect(add.message).toContain("missing SKILL.md");
+  });
+
+  test("records warnings and excludes package metadata when extension contains scripts", async () => {
+    const extRoot = makeTempRepo("aiforge-ext-src-");
+    const skillDir = path.join(extRoot, "skills", "scripted");
+    fs.mkdirSync(path.join(skillDir, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(extRoot, ".git"), { recursive: true });
+    fs.writeFileSync(path.join(extRoot, ".git", "config"), "metadata\n", "utf8");
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: scripted\ndescription: test\n---\n", "utf8");
+    fs.writeFileSync(path.join(skillDir, "scripts", "helper.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(extRoot, "extension.json"),
+      JSON.stringify({ name: "warn-ext", version: "0.0.1", skills: ["skills/scripted"] }) + "\n",
+      "utf8"
+    );
+
+    const repoRoot = makeTempRepo("aiforge-ext-target-");
+    await runInitCommand({ repoRoot, projectName: "Ext Host", profileId: "laravel-docker", dryRun: false });
+
+    const add = runExtensionAddCommand(repoRoot, extRoot);
+    expect(add.ok).toBe(true);
+    expect(add.details?.securityVerdict).toBe("warn");
+    expect(fs.existsSync(path.join(repoRoot, ".aiforge", "extensions", "warn-ext", "SECURITY_WARN.txt"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".aiforge", "extensions", "warn-ext", ".git"))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "skills", "warn-ext__scripted", ".git"))).toBe(false);
   });
 });

@@ -58,7 +58,7 @@ Useful depending on the target repository:
 
 - Docker / Docker Compose for Docker-based profiles
 - Go, Python, PHP/Composer, npm/yarn/pnpm, or the stack toolchain used by the selected profile
-- Task (`go-task`) is optional. aiforge writes a repo-local wrapper at `.ai/bin/go-task` and can install a local Task binary into `.ai/bin/task` when needed.
+- Task (`go-task`) is optional. aiforge writes a repo-local wrapper at `.ai/bin/go-task`. If no system `go-task` or `task` binary exists, install Task yourself, set `AIFORGE_TASK_INSTALLER_BIN`, or explicitly opt into download with `AIFORGE_ALLOW_TASK_DOWNLOAD=1`.
 
 Install Copier:
 
@@ -170,6 +170,7 @@ agents:
   modelTiers:
     orchestrator: balanced
     plan: balanced
+    skeptic: balanced
     clarify: balanced
     implement: quality
     review: budget

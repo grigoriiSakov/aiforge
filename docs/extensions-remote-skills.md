@@ -24,7 +24,11 @@ Install copies the tree to `.aiforge/extensions/<name>/` and duplicates declared
 
 ## Security gate
 
-`extension add` and `skills add-git` run `src/core/security/gate.ts` (regex-based). **Blocked** patterns abort install; **warn** patterns record `SECURITY_WARN.txt` in the installed extension copy and append a `warn` entry to `.aiforge.json` → `security.lastScans`.
+`extension add` and `skills add-git` run `src/core/security/gate.ts` (lightweight static scan). **Blocked** patterns abort install; **warn** patterns record `SECURITY_WARN.txt` in the installed extension copy and append a `warn` entry to `.aiforge.json` → `security.lastScans`.
+
+The gate rejects unsafe path traversal, packages without `SKILL.md`, symlinks, sensitive key/env files, and oversized files. Script or executable files are allowed but recorded as warnings. VCS/package metadata such as `.git` and `node_modules` is ignored by the scan and excluded from installed copies.
+
+Extensions and remote skills should still be treated as trusted-source artifacts. Review third-party skill content before installing it.
 
 ## Remote skills precedence
 

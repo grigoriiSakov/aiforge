@@ -17,6 +17,7 @@ export const AGENT_MODEL_TIER_VALUES: readonly AgentModelTier[] = ["quality", "b
 export const AGENT_MODEL_ROLE_VALUES: readonly AgentModelRole[] = [
   "orchestrator",
   "plan",
+  "skeptic",
   "clarify",
   "implement",
   "review",
@@ -28,6 +29,7 @@ export const AGENT_MODEL_ROLE_VALUES: readonly AgentModelRole[] = [
 export const DEFAULT_AGENT_MODEL_TIERS: AgentModelTiers = {
   orchestrator: "balanced",
   plan: "balanced",
+  skeptic: "balanced",
   clarify: "balanced",
   implement: "quality",
   review: "budget",
@@ -67,6 +69,7 @@ export function normalizeAgentModelTiers(current: Partial<AgentModelTiers> | und
   return {
     orchestrator: normalizeAgentModelTier(current?.orchestrator, defaults.orchestrator),
     plan: normalizeAgentModelTier(current?.plan, defaults.plan),
+    skeptic: normalizeAgentModelTier(current?.skeptic, defaults.skeptic),
     clarify: normalizeAgentModelTier(current?.clarify, defaults.clarify),
     implement: normalizeAgentModelTier(current?.implement, defaults.implement),
     review: normalizeAgentModelTier(current?.review, defaults.review),

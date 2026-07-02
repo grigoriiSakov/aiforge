@@ -67,6 +67,7 @@ export type AgentModelTier = "quality" | "balanced" | "budget";
 export type AgentModelRole =
   | "orchestrator"
   | "plan"
+  | "skeptic"
   | "clarify"
   | "implement"
   | "review"
@@ -77,6 +78,7 @@ export type AgentModelRole =
 export interface AgentModelTiers {
   orchestrator: AgentModelTier;
   plan: AgentModelTier;
+  skeptic: AgentModelTier;
   clarify: AgentModelTier;
   implement: AgentModelTier;
   review: AgentModelTier;

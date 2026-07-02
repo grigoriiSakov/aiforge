@@ -232,6 +232,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     agents_markdown: config.agents?.markdown ?? "",
     agent_model_orchestrator: config.agents.modelTiers.orchestrator,
     agent_model_plan: config.agents.modelTiers.plan,
+    agent_model_skeptic: config.agents.modelTiers.skeptic,
     agent_model_clarify: config.agents.modelTiers.clarify,
     agent_model_implement: config.agents.modelTiers.implement,
     agent_model_review: config.agents.modelTiers.review,

@@ -22,6 +22,7 @@ describe("agent model profiles", () => {
     });
 
     expect(config.agents.modelTiers).toEqual(DEFAULT_AGENT_MODEL_TIERS);
+    expect(config.agents.modelTiers.skeptic).toBe("balanced");
     expect(config.agents.modelTiers.review).toBe("budget");
     expect(config.agents.modelTiers.implement).toBe("quality");
   });

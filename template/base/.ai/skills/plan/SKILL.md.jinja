@@ -50,7 +50,8 @@ Turn the current request or issue into an execution artifact that is specific en
    - explicit non-goals
    - adjacent behavior that must remain stable
    - existing reusable surfaces
-9. The plan is invalid if it does not contain:
+9. Before marking the plan implement-ready, run `/skeptic` against the draft plan. Revise the plan until the skeptic verdict is `pass`, then paste the final `## Skeptic Review` into the plan artifact.
+10. The plan is invalid if it does not contain:
    - `Implementation Decisions`
    - `Execution Contract`
    - `Current State Snapshot`
@@ -59,23 +60,24 @@ Turn the current request or issue into an execution artifact that is specific en
    - `Acceptance Traceability`
    - `Claimed Write Scope`
    - `Step Plan`
+   - `Skeptic Review`
    - `Risk Registry`
    - `Open Questions / Blockers`
 {% if minimalism_enabled and minimalism_level != "off" %}
    - `Minimal Solution Ladder`
 {% endif %}
-10. {% if minimalism_enabled and minimalism_level != "off" %}Before `File Map`, complete `## Minimal Solution Ladder` for every requirement. Each `CREATE` file must cite rung 6 justification or be removed. Reconcile with abstraction-first: extend existing abstractions; do not plan new layers with one implementation.{% else %}The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.{% endif %}
-11. The plan must call out query/storage-heavy steps that need industrial handling:
+11. {% if minimalism_enabled and minimalism_level != "off" %}Before `File Map`, complete `## Minimal Solution Ladder` for every requirement. Each `CREATE` file must cite rung 6 justification or be removed. Reconcile with abstraction-first: extend existing abstractions; do not plan new layers with one implementation.{% else %}The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.{% endif %}
+12. The plan must call out query/storage-heavy steps that need industrial handling:
    - no N+1
    - no oversized reads
    - no avoidable in-memory loops over raw datasets
-12. If requirements are ambiguous, stop and ask focused clarification before coding.
-13. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
-14. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-15. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact). Do **not** create or update Linear comments for plan body sync.
+13. If requirements are ambiguous, stop and ask focused clarification before coding.
+14. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
+15. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
+16. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact). Do **not** create or update Linear comments for plan body sync.
 {% if linear_enabled %}
-16. When the plan is implement-ready and Linear MCP is available, move the issue workflow state to `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md`.
-17. If Linear MCP is unavailable for **state** updates, follow `.ai/reference/tracker-degraded-mode.md`; keep working on `plan.md` locally and report pending state sync.
+17. When the plan is implement-ready and Linear MCP is available, move the issue workflow state to `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md`.
+18. If Linear MCP is unavailable for **state** updates, follow `.ai/reference/tracker-degraded-mode.md`; keep working on `plan.md` locally and report pending state sync.
 {% endif %}
 
 ## Storage contract
