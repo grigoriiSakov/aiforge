@@ -104,9 +104,13 @@ git clone https://github.com/grigoriiSakov/aiforge.git
 cd aiforge
 npm ci
 npm run build
-npm link
+npm_config_prefix="$HOME/.local" npm link
+hash -r
 aiforge --help
+openspec --version
 ```
+
+Ensure `$HOME/.local/bin` is near the front of `PATH`. Using a user-owned prefix avoids requiring `sudo` and prevents root-owned npm links under `/usr/local`.
 
 For one-off development without a global link:
 
