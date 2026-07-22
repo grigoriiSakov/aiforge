@@ -4,7 +4,7 @@
 
 aiforge helps teams add a consistent AI-agent workflow layer to new or existing repositories in minutes.
 
-It does not try to generate application code. It standardizes the process surfaces that agents rely on: rules, skills, task commands, review gates, runtime hooks, context files, and MCP scaffolding.
+It does not try to generate application code. It standardizes the process surfaces that agents rely on: OpenSpec changes, rules, skills, task commands, review gates, runtime hooks, context files, and MCP scaffolding.
 
 ## Problems It Solves
 
@@ -17,6 +17,7 @@ aiforge gives a repository one source of truth:
 - runtime adapters for Cursor, Codex, Claude Code, and related agent surfaces
 - task entrypoints that agents and humans can both run
 - update and sync commands so the workflow can evolve safely
+- bundled OpenSpec for durable requirements, change proposals, designs, tasks, validation, and archive history
 
 ## MVP Scope
 
@@ -59,6 +60,7 @@ Supported starter profiles:
 - Replacing CI.
 - Deep semantic merge of arbitrary local edits in managed files.
 - Acting as a marketplace for third-party agents or plugins.
+- Reimplementing OpenSpec's specification and change lifecycle.
 
 ## Current Risks
 

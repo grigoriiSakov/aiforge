@@ -44,6 +44,7 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@fission-ai/openspec": "^1.6.0",
     "commander": "^13.1.0",
     "fast-glob": "^3.3.3",
     "yaml": "^2.8.1"
@@ -58,6 +59,6 @@
     "vitest": "^4.1.8"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.19.0"
   }
 }

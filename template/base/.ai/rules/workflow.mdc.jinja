@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Workflow Rule
 
-- Source of truth order: `{{ manifesto_path }}` -> `ai.config.yaml` -> `.ai/rules/*` -> `.ai/skills/*` -> `.ai/reference/*` -> `Taskfile.yml`
+- Source of truth order: `{{ manifesto_path }}` -> `ai.config.yaml` -> `openspec/config.yaml` and the selected OpenSpec change -> `.ai/rules/*` -> `.ai/skills/*` -> `.ai/reference/*` -> `Taskfile.yml`
 - Generic execution gates live in `.ai/rules/workflow-gates.mdc`.
 - Shared rule and skill sources are projected into provider runtimes via symlinks; update `.ai/*` first.
 - Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
@@ -19,17 +19,16 @@ alwaysApply: true
   - `{{ task_command }} {{ task_verify_name }}`
   - `{{ task_command }} {{ task_review_name }}`
 - Do not hardcode stack-specific commands in generic workflow prompts or status updates.
-- For non-trivial work, planning and execution memory must live in explicit **local** artifacts:
-  - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (`PLAN::ISSUE-ID` marker block inside the file)
-  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (`PROGRESS::ISSUE-ID` marker block inside the file)
+- For non-trivial work, planning and execution memory must live in explicit local artifacts:
+  - `openspec/changes/<change-id>/` for proposal, delta specs, design, and tasks
+  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (`PROGRESS::ISSUE-ID` marker block inside the file) for execution evidence
 - When a tracker is enabled, use it for issue workflow **states** only; do not mirror plan/progress bodies into tracker comments.
-- Plan quality minimum:
-  - `Execution Contract`
-  - `Spec Coverage Matrix`
-  - `Do Not Break`
-  - `Acceptance Traceability`
-  - `Claimed Write Scope`
-  - `Open Questions / Blockers`
+- OpenSpec change quality minimum:
+  - proposal intent, scope, non-goals, and impact
+  - testable delta requirements and scenarios
+  - design decisions, invariants, migration, rollback, and `Claimed Write Scope`
+  - tasks mapped to requirements and canonical verification commands
+  - no unresolved implementation blockers
 {% if minimalism_enabled and minimalism_level != "off" -%}
   - `Minimal Solution Ladder`
 {% endif -%}
@@ -45,7 +44,7 @@ alwaysApply: true
   - `Решения по ходу`
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
-- Completion means all required spec, plan, verification, and review points are done; partial completion is not completion.
+- Completion means all required OpenSpec, implementation, verification, and review points are done; partial completion is not completion.
 {% if minimalism_enabled and minimalism_level != "off" -%}
 - When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. Orchestrator may delegate `/simplify-review` when `orchestrator.simplifyGate` ≠ `never`.
 {% endif -%}

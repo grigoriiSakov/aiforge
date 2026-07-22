@@ -98,6 +98,80 @@ describe("generic reusable surfaces", () => {
     }
   });
 
+  test("plan uses an OpenSpec change as its sole planning source of truth", () => {
+    const planSkill = fs.readFileSync(
+      path.join(process.cwd(), "template", "base", ".ai", "skills", "plan", "SKILL.md.jinja"),
+      "utf8"
+    );
+
+    expect(planSkill).toContain("The selected `openspec/changes/<change-id>/` directory is the sole planning source of truth.");
+    expect(planSkill).toContain("Do not create a new `PLAN::ISSUE-ID` artifact");
+    expect(planSkill).toContain("openspec validate <change-id>");
+  });
+
+  test("implementation and orchestration consume OpenSpec planning artifacts", () => {
+    const skillsRoot = path.join(process.cwd(), "template", "base", ".ai", "skills");
+    const implementSkill = fs.readFileSync(path.join(skillsRoot, "implement", "SKILL.md.jinja"), "utf8");
+    const orchestratorSkill = fs.readFileSync(path.join(skillsRoot, "orchestrator", "SKILL.md.jinja"), "utf8");
+
+    expect(implementSkill).toContain("openspec instructions apply --change <change-id>");
+    expect(implementSkill).toContain("openspec/changes/<change-id>/");
+    expect(orchestratorSkill).toContain("plan memory: `openspec/changes/<change-id>/`");
+    expect(orchestratorSkill).toContain("openspec validate <change-id>");
+  });
+
+  test("skeptic and review validate the selected OpenSpec change", () => {
+    const skillsRoot = path.join(process.cwd(), "template", "base", ".ai", "skills");
+    const skepticSkill = fs.readFileSync(path.join(skillsRoot, "skeptic", "SKILL.md.jinja"), "utf8");
+    const reviewSkill = fs.readFileSync(path.join(skillsRoot, "review", "SKILL.md.jinja"), "utf8");
+
+    expect(skepticSkill).toContain("selected `openspec/changes/<change-id>/`");
+    expect(reviewSkill).toContain("selected `openspec/changes/<change-id>/`");
+    expect(reviewSkill).toContain("openspec validate <change-id>");
+  });
+
+  test("workflow rules use OpenSpec instead of the legacy local plan contract", () => {
+    const rulesRoot = path.join(process.cwd(), "template", "base", ".ai", "rules");
+    const workflow = fs.readFileSync(path.join(rulesRoot, "workflow.mdc.jinja"), "utf8");
+    const gates = fs.readFileSync(path.join(rulesRoot, "workflow-gates.mdc.jinja"), "utf8");
+
+    expect(workflow).toContain("openspec/changes/<change-id>/");
+    expect(workflow).not.toContain("PLAN::ISSUE-ID");
+    expect(gates).toContain("validated OpenSpec change");
+    expect(gates).not.toContain("Spec Coverage Matrix");
+  });
+
+  test("supervisor worker and review contexts point to OpenSpec changes", () => {
+    const runtimeRoot = path.join(process.cwd(), "template", "base", ".ai", "runtime");
+    const state = fs.readFileSync(path.join(runtimeRoot, "supervisor-state.mjs.jinja"), "utf8");
+    const context = fs.readFileSync(path.join(runtimeRoot, "supervisor-context.mjs.jinja"), "utf8");
+
+    expect(state).toContain('path.join("openspec", "changes", openSpecChangeId(issueId))');
+    expect(context).toContain("OpenSpec change: openspec/changes/${openSpecChangeId(issue.id)}");
+    expect(context).not.toContain("Plan path:");
+  });
+
+  test("OpenSpec sync and archive run only at the orchestrator terminal gate", () => {
+    const skillsRoot = path.join(process.cwd(), "template", "base", ".ai", "skills");
+    const implementSkill = fs.readFileSync(path.join(skillsRoot, "implement", "SKILL.md.jinja"), "utf8");
+    const orchestratorSkill = fs.readFileSync(path.join(skillsRoot, "orchestrator", "SKILL.md.jinja"), "utf8");
+
+    expect(implementSkill).toContain("Use `/opsx:update <change-id>` when implementation changes the approved artifacts");
+    expect(implementSkill).toContain("Do not run `/opsx:sync` or archive the change from `/implement`");
+    expect(orchestratorSkill).toContain("## OpenSpec terminal gate");
+    expect(orchestratorSkill).toContain("`/opsx:sync <change-id>`");
+    expect(orchestratorSkill).toContain("`openspec archive <change-id> --yes`");
+    expect(orchestratorSkill).toContain("Do not release the orchestrator run when sync or archive fails");
+  });
+
+  test("README documents the default OpenSpec workflow", () => {
+    const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");
+
+    expect(readme).toContain("OpenSpec is installed and initialized by default");
+    expect(readme).toContain("/opsx:propose");
+    expect(readme).toContain("aiforge owns execution");
+  });
+
   test("Taskfile.yml.jinja must not use Jinja trim that eats YAML list indentation", () => {
     const taskfilePath = path.join(process.cwd(), "template", "base", "Taskfile.yml.jinja");
     const content = fs.readFileSync(taskfilePath, "utf8");

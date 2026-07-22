@@ -12,6 +12,7 @@ Use this skill to stress-test a draft plan before implementation.
 - Before doing anything else in this skill, read:
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
+  - `openspec/config.yaml`
   - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
@@ -37,9 +38,7 @@ The skeptic is adversarial about assumptions, not about people. Every objection 
 ## Mandatory protocol
 
 1. Use model tier `{{ agent_model_skeptic }}` for this skill (see `.ai/reference/model-profiles.md`).
-2. Read the draft plan and, when present, local progress artifacts:
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+2. Read the selected `openspec/changes/<change-id>/` proposal, delta specs, design, and tasks plus `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` when present.
 3. Read the relevant source request / issue and any `llms` artifacts used by `/plan`.
 4. Inspect existing code surfaces named by the draft plan before criticizing architecture or file scope.
 5. Search for adjacent/sibling implementations in the repository before claiming a pattern is missing.
@@ -86,4 +85,4 @@ pass | revise
 
 - `pass` means there are no blockers and all important risks are either mitigated in the plan or explicitly accepted.
 - `revise` means at least one blocker remains.
-- Keep the review short enough to paste into the plan artifact.
+- Keep the review short enough to apply directly to the relevant OpenSpec artifacts.

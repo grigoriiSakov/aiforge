@@ -31,6 +31,7 @@ import {
   createFakeExecutable,
   copyFixture,
   createFakeCopierBin,
+  createFakeOpenSpecBin,
   installClaudeHookTemplates,
   installCodexHookTemplates,
   installCursorHookTemplates,
@@ -113,6 +114,7 @@ process.exit(0);
     );
     process.env.PATH = `${fakeTaskBinDir}:${originalPath}`;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
+    process.env.AIFORGE_OPENSPEC_BIN = createFakeOpenSpecBin();
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
     delete process.env.AIFORGE_TASK_INSTALLER_BIN;
     delete process.env.AIFORGE_RUNTIME_PROVIDER;
@@ -150,7 +152,7 @@ process.exit(0);
     expect(answersContent).toContain("_src_path:");
     expect(answersContent).not.toContain("_commit:");
     expect(answersContent).not.toContain("_subdirectory:");
-    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands"))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands", "opsx-propose.md"))).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "reference")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "context")).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(false);
@@ -201,6 +203,52 @@ process.exit(0);
       fs.realpathSync(path.join(repoRoot, ".ai", "rules"))
     );
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("init installs the OpenSpec core workflow by default", async () => {
+    const repoRoot = makeTempRepo("aiforge-openspec-init-");
+
+    const result = await runInitCommand({
+      repoRoot,
+      projectName: "OpenSpec Demo",
+      profileId: "react-vite",
+      dryRun: false
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, "openspec", "config.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "skills", "openspec-propose", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands", "opsx-propose.md"))).toBe(true);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(repoRoot, ".aiforge-openspec-invocation.json"), "utf8"))
+    ).toEqual([
+      "init",
+      repoRoot,
+      "--tools",
+      "codex,cursor,claude,antigravity",
+      "--profile",
+      "core"
+    ]);
+  });
+
+  test("doctor reports a missing OpenSpec workflow skill", async () => {
+    const repoRoot = makeTempRepo("aiforge-openspec-doctor-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "OpenSpec Doctor",
+      profileId: "react-vite",
+      dryRun: false
+    });
+    fs.rmSync(path.join(repoRoot, ".ai", "skills", "openspec-propose"), {
+      recursive: true,
+      force: true
+    });
+
+    const result = runDoctorCommand(repoRoot);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("OpenSpec workflow is missing or incomplete");
+    expect(result.details?.remediation).toBe("Run aiforge sync to reinstall OpenSpec workflows.");
   });
 
   test("orchestrator runtime serializes related issues and direct conflicts", () => {
@@ -1380,7 +1428,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     const result = await runUpdateCommand(repoRoot, false);
 
     expect(result.ok).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands"))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, ".cursor", "commands", "opsx-propose.md"))).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "reference")).isSymbolicLink()).toBe(true);
     expect(fs.lstatSync(path.join(repoRoot, ".cursor", "context")).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "linear-scope.json"))).toBe(false);

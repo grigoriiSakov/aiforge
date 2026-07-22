@@ -12,6 +12,7 @@ Findings first.
 - Before doing anything else in this skill, read:
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
+  - `openspec/config.yaml`
   - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
@@ -73,9 +74,7 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Use model tier `{{ agent_model_review }}` (`.ai/reference/model-profiles.md`); in `orchestrator-delegate` mode stay lean — no orchestrator runtime mutations.
-3. Read the current plan and progress from local artifacts only:
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+3. Read the selected `openspec/changes/<change-id>/` and `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`. Run `openspec validate <change-id>` before a clean verdict.
 4. Confirm recent evidence for:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
@@ -87,10 +86,10 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 **Orchestrator / repo-wide lint-verify:** If the issue is orchestrator-managed and `progress.md` documents that full `{{ task_command }} {{ task_lint_name }}` or `{{ task_command }} {{ task_verify_name }}` is red **only** outside `Claimed Write Scope`, do not block the review loop on that alone: validate the OOS justification (claimed paths vs failure locations, logs). Scoped evidence for the change must remain credible. If the split is honest and in-scope work is complete, sign off clean for the issue scope and state **residual risk** (repo-wide red) explicitly in the summary. If failures actually touch claimed paths, that is a finding or a forced return to implement — not an OOS waiver.
 
 6. Review not only the diff, but also:
-   - `Spec Coverage Matrix`
-   - `Execution Contract`
-   - `Do Not Break`
-   - `Acceptance Traceability`
+   - proposal scope and explicit non-goals
+   - delta requirements and scenarios
+   - design decisions, invariants, migration, and rollback
+   - tasks-to-requirements and verification mapping
    - `Spec Conformance`
    - `Project Rules Compliance` in `progress.md` and the mandatory `### Project Rules Compliance` table in this review output
 7. Review for completion, not just local code quality:
@@ -127,7 +126,7 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 
 Use when the parent `/orchestrator` launched this run as a **separate** review subagent after implement/test.
 
-- Read only the assigned issue's local `plan.md` / `progress.md` and diff/evidence from the orchestrator worktree path in the prompt.
+- Read only the assigned issue's selected OpenSpec change, `progress.md`, and diff/evidence from the orchestrator worktree path in the prompt.
 - Honor parent-provided `review_depth: simple|full`.
 - If `review_depth` is missing, infer it from the rules below and state the inference in the YAML `review_depth` field.
 - `simple` review is allowed only for small local changes: <=2 claimed files, no dependency/config/runtime/process-layer/security/API/schema/concurrency/migration/architecture impact, clear scoped evidence, no unresolved plan ambiguity, and no previous blocking review.

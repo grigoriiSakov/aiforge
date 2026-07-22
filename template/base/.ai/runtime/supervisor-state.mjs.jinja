@@ -160,8 +160,12 @@ function orchestratorRunPath(issueId) {
   return normalizePath(path.join(".ai", "runtime", "orchestrator", "runs", `${issueId}.json`));
 }
 
-function localPlanPath(issueId) {
-  return normalizePath(path.join(PLAN_PROGRESS_ROOT, issueId, "plan.md"));
+function openSpecChangeId(issueId) {
+  return String(issueId).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function openSpecChangePath(issueId) {
+  return normalizePath(path.join("openspec", "changes", openSpecChangeId(issueId)));
 }
 
 function localProgressPath(issueId) {
@@ -518,7 +522,7 @@ function graphNext(state) {
       issue: issue.id,
       reviewPath: normalizePath(path.relative(repoRoot(), reviewPath(state.slug, issue.id, Math.max(1, issue.attempts)))),
       orchestratorRunPath: orchestratorRunPath(issue.id),
-      planPath: localPlanPath(issue.id),
+      planPath: openSpecChangePath(issue.id),
       progressPath: localProgressPath(issue.id)
     };
   }
@@ -663,7 +667,7 @@ function commandWriteWorkerContext(args) {
     `- Base branch: ${state.baseBranch}`,
     `- Manager branch: ${state.managerBranch}`,
     `- Orchestrator run path: ${orchestratorRunPath(issue.id)}`,
-    `- Plan path: ${localPlanPath(issue.id)}`,
+    `- OpenSpec change: ${openSpecChangePath(issue.id)}`,
     `- Progress path: ${localProgressPath(issue.id)}`,
     issue.lastFindingsPath ? `- Rework findings: ${issue.lastFindingsPath}` : "- Rework findings: none",
     "",

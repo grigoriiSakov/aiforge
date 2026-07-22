@@ -20,7 +20,7 @@ const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
   "awaiting-finalize"
 ]);
 const PENDING_STATUSES = new Set(["queued", "blocked-by-conflict"]);
-const FLOW_COMPLETE_STATUSES = new Set(["awaiting-finalize", "done"]);
+const FLOW_COMPLETE_STATUSES = new Set(["done"]);
 const HUMAN_GATE_STATUSES = new Set(["awaiting-human-approval"]);
 const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
 const TEST_SCOPES = new Set(["scoped", "full"]);
@@ -146,6 +146,10 @@ function saveRun(run) {
 
 function normalizePath(rawValue) {
   return String(rawValue).replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "").trim();
+}
+
+function openSpecChangeId(issueId) {
+  return String(issueId).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function dedupe(values) {
@@ -995,6 +999,16 @@ function commandGraphNext(args) {
       testScope: "full",
       message:
         "Review gate passed. Run full project verify once, then record-test --scope full.",
+      ...limits
+    };
+  } else if (run.status === "awaiting-finalize") {
+    payload = {
+      step: "pending",
+      action: "finalize_openspec",
+      issue: issueId,
+      changeId: openSpecChangeId(issueId),
+      worktreePath: run.worktreePath,
+      message: "Sync and archive the validated OpenSpec change, then release the run as done.",
       ...limits
     };
   } else if (HUMAN_GATE_STATUSES.has(run.status)) {

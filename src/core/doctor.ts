@@ -4,6 +4,7 @@ import path from "node:path";
 import { CONFIG_FILE_NAME, MACHINE_MANIFEST_PATH, loadConfig } from "./config.js";
 import { readJsonFileIfExists } from "./filesystem.js";
 import { resolveMcpProvider } from "./mcp-registry.js";
+import { resolveOpenSpecTools } from "./openspec.js";
 import { INSTALLER_STATE_FILE_NAME, loadInstallerStateOrNull } from "./state.js";
 import type { CommandResult, RuntimeFlags } from "./types.js";
 
@@ -45,6 +46,30 @@ export function runDoctor(repoRoot: string): CommandResult {
       code: 3,
       message: "Managed surfaces are missing",
       details: { missing, profile: config.profile.id, remediation: "Run aiforge sync or init." }
+    };
+  }
+
+  const openSpecConfigPath = path.join(repoRoot, "openspec", "config.yaml");
+  const openSpecProposeSkillPath = path.join(
+    repoRoot,
+    ".ai",
+    "skills",
+    "openspec-propose",
+    "SKILL.md"
+  );
+  if (
+    !fs.existsSync(openSpecConfigPath) ||
+    (resolveOpenSpecTools(config.runtimes).length > 0 && !fs.existsSync(openSpecProposeSkillPath))
+  ) {
+    return {
+      ok: false,
+      code: 3,
+      message: "OpenSpec workflow is missing or incomplete",
+      details: {
+        configPath: "openspec/config.yaml",
+        proposeSkillPath: ".ai/skills/openspec-propose/SKILL.md",
+        remediation: "Run aiforge sync to reinstall OpenSpec workflows."
+      }
     };
   }
 

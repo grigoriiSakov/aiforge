@@ -133,7 +133,8 @@ export function createConfig(params: {
       { path: ".codex", policy: "managed" },
       { path: ".claude", policy: "managed" },
       { path: ".agent", policy: "managed" },
-      { path: ".agents", policy: "managed" }
+      { path: ".agents", policy: "managed" },
+      { path: "openspec", policy: "semi-managed" }
     ],
     updatePolicy: "strict",
     features: {

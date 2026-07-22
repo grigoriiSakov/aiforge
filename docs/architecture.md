@@ -2,8 +2,9 @@
 
 ## Runtime and Distribution
 
-- Language: TypeScript on Node.js 20+
+- Language: TypeScript on Node.js 20.19+
 - Distribution target: npm package with the `aiforge` binary
+- Spec/change engine: bundled OpenSpec CLI
 - Template engine: Copier
 - Command runner: repo-local Task wrapper at `.ai/bin/go-task`
 - Primary target platforms: Linux and macOS
@@ -45,6 +46,14 @@ Managed surfaces include:
 
 The target repository's application files remain unmanaged. They are read for detection and context, but not rewritten by aiforge.
 
+## OpenSpec Boundary
+
+OpenSpec owns durable planning state under `openspec/`: current behavior specs, proposed changes, design decisions, implementation tasks, validation, and archive history.
+
+aiforge owns operational execution state under `.ai/`: canonical stack commands, worktree reservations, progress evidence, test and review gates, runtime adapters, MCP provisioning, model hints, and tracker transitions.
+
+The shared post-Copier pipeline creates runtime symlinks first and then runs bundled OpenSpec non-interactively with the enabled runtime tool IDs. This order lets OpenSpec skills land in the shared `.ai/skills` source while runtime-specific command files remain in their native directories.
+
 ## Source Layout
 
 - `src/cli` - command registration
@@ -67,7 +76,8 @@ Mutating commands follow the same basic shape:
 4. Build the desired managed surface state.
 5. Render through Copier.
 6. Run post-steps such as machine manifest and Task wrapper generation.
-7. Report changes or diagnostics.
+7. Initialize or refresh OpenSpec skills and project context.
+8. Report changes or diagnostics.
 
 ## Profile Strategy
 

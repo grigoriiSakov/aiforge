@@ -140,6 +140,12 @@ describe("orchestrator loop guards", () => {
       )
     );
     expect(afterFull.status).toBe("awaiting-finalize");
+
+    const finalizeGraph = JSON.parse(
+      runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot)
+    );
+    expect(finalizeGraph.action).toBe("finalize_openspec");
+    expect(finalizeGraph.changeId).toBe("app-10");
   });
 
   test("model-hint uses codex block when CODEX_ENV is set", () => {

@@ -28,8 +28,26 @@ aiforge adds a managed workflow kernel to a target repository:
 | `Taskfile.yml` | Canonical task entrypoints used by humans and agents |
 | `llms.txt`, `llms/**` | Optional LLM context output |
 | `.aiforge.json` | Installer state for MCP, extensions, remote skills, and runtime checks |
+| `openspec/**` | Durable behavior specifications, proposed changes, designs, and implementation tasks |
 
 Business code is not generated or rewritten.
+
+## OpenSpec Workflow
+
+OpenSpec is installed and initialized by default during `init`, `adopt`, `sync`, and `update`; there is no opt-in flag and no separate global OpenSpec installation is required.
+
+Responsibilities are deliberately split:
+
+- OpenSpec owns durable requirements and planning through `/opsx:explore`, `/opsx:propose`, change specs, design, tasks, validation, sync, and archive.
+- aiforge owns execution: stack profiles, canonical Task commands, runtime guards, worktrees, progress state, tests, review gates, MCP, model routing, and tracker transitions.
+- `/plan` is an aiforge compatibility bridge that creates or updates an OpenSpec change. New local `PLAN::ISSUE-ID` artifacts are no longer created.
+- `/implement` and `/orchestrator` consume one validated `openspec/changes/<change-id>/` while keeping runtime evidence in `.ai/context/runtime/<issue-id>/progress.md`.
+
+Start a change with:
+
+```text
+/opsx:propose "describe the change"
+```
 
 ## Supported Profiles
 
@@ -50,7 +68,7 @@ Profiles are starter defaults, not hard locks. After `init` or `adopt`, edit `ai
 
 Required on the machine running aiforge:
 
-- Node.js 20 or newer
+- Node.js 20.19 or newer
 - npm
 - Python 3 with Copier available as either `copier` or `python3 -m copier`
 
@@ -154,6 +172,7 @@ aiforge skills remove <id>
 - `sync` reconciles the current installed template against the current config.
 - `update` runs the Copier update flow for template/runtime evolution.
 - repo-local fields such as `manifesto.markdown`, `projectRules`, `agents.markdown`, `agents.modelTiers`, `agents.runtimeModels`, and custom commands are preserved for the same profile.
+- OpenSpec workflow skills are refreshed and aiforge-managed context/rules in `openspec/config.yaml` are reconciled without removing project-specific context or rules.
 
 When changing stack profiles intentionally:
 

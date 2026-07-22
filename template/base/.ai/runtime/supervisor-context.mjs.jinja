@@ -138,6 +138,8 @@ function renderWorkerContext(slug, state, next) {
     throw new Error(`unknown supervisor issue: ${next.issue}`);
   }
   const attempt = Number(next.attempt ?? Math.max(1, Number(issue.attempts ?? 0) + 1));
+  const openSpecChangeId = (issueId) =>
+    String(issueId).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const targetPath = workerContextPath(slug, issue.id, attempt);
   const lines = [
     `# Supervisor Worker Brief: ${issue.id}`,
@@ -149,7 +151,7 @@ function renderWorkerContext(slug, state, next) {
     `- Base branch override: ${formatBaseBranchOverride(state.baseBranch)}`,
     `- Manager branch: ${state.managerBranch}`,
     `- Orchestrator run path: .ai/runtime/orchestrator/runs/${issue.id}.json`,
-    `- Plan path: {{ plan_progress_runtime_root }}/${issue.id}/plan.md`,
+    `- OpenSpec change: openspec/changes/${openSpecChangeId(issue.id)}`,
     `- Progress path: {{ plan_progress_runtime_root }}/${issue.id}/progress.md`,
     issue.lastFindingsPath ? `- Rework findings: ${issue.lastFindingsPath}` : "- Rework findings: none",
     "",

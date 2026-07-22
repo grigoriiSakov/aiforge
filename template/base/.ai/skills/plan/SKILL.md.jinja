@@ -1,17 +1,18 @@
 ---
 name: plan
-description: Create a deterministic implementation plan before code changes. Use when the user asks for plan, /plan, or equivalent planning intent.
+description: Create or update an OpenSpec change before implementation. Use when the user asks for plan, /plan, or equivalent planning intent.
 ---
 
-# Plan
+# Plan (OpenSpec bridge)
 
-Use this skill to produce an implement-ready implementation plan before code changes.
+Use OpenSpec for durable requirements and planning artifacts. aiforge remains responsible for execution commands, worktree ownership, progress state, tests, review, and tracker transitions.
 
 ## Rule preflight
 
 - Before doing anything else in this skill, read:
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
+  - `openspec/config.yaml`
   - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
@@ -22,73 +23,46 @@ Use this skill to produce an implement-ready implementation plan before code cha
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with planning until this preflight read is complete.
 
-## Goal
+## Source of truth
 
-Turn the current request or issue into an execution artifact that is specific enough for `/implement`.
+- The selected `openspec/changes/<change-id>/` directory is the sole planning source of truth.
+- Use the installed `openspec-propose` / `openspec-update-change` skills or the equivalent `/opsx:propose` and `/opsx:update` commands.
+- Do not create a new `PLAN::ISSUE-ID` artifact or a new `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`.
+- A legacy `plan.md` may be read as migration input, but it must not remain authoritative after the OpenSpec change exists.
+- Runtime execution evidence continues in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`.
 
 ## Mandatory protocol
 
-1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
-2. Read:
-   - `.ai/reference/plan-template.md`
-   - `.ai/reference/plan-progress-template.md`
-   - `.ai/reference/context-artifacts.md`
-   - `.ai/reference/orchestrator-claimed-scope-template.md`
-   - `.ai/reference/model-profiles.md`
-3. If requirements have material gray areas, run `/clarify` first or fill `## Implementation Decisions` in the plan (see `.ai/reference/plan-template.md`); do not hide ambiguity inside step titles.
-4. Load relevant `llms` artifacts and existing code surfaces before planning so the plan reuses the current system instead of reinventing it.
-5. Respect profile `{{ profile_id }}` and tracker `{{ workflow_tracker }}`.
-6. Use model tier `{{ agent_model_plan }}` for this skill (see `.ai/reference/model-profiles.md`).
-7. Anchor the plan around canonical tasks only:
+1. Inspect the relevant code and existing `openspec/specs/` domains before proposing a change.
+2. Choose a stable kebab-case `<change-id>`. For tracker-backed work, use the normalized lowercase issue ID (`APP-123` → `app-123`) so supervisor and orchestrator resolve the same change, and record the original issue ID in the proposal.
+3. Create or update the OpenSpec change so it contains:
+   - `proposal.md` with intent, in-scope behavior, explicit non-goals, impact, and affected spec domains;
+   - delta specs with testable requirements and scenarios;
+   - `design.md` with important implementation decisions, reuse points, migrations, rollback, and risks;
+   - `tasks.md` whose tasks map to requirements and verification evidence.
+4. Use only canonical aiforge execution commands in tasks:
    - `{{ task_command }} {{ task_implement_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
    - `{{ task_command }} {{ task_review_name }}`
-8. Before writing the plan, extract:
-   - source request / issue requirements
-   - explicit non-goals
-   - adjacent behavior that must remain stable
-   - existing reusable surfaces
-9. Before marking the plan implement-ready, run `/skeptic` against the draft plan. Revise the plan until the skeptic verdict is `pass`, then paste the final `## Skeptic Review` into the plan artifact.
-10. The plan is invalid if it does not contain:
-   - `Implementation Decisions`
-   - `Execution Contract`
-   - `Current State Snapshot`
-   - `Spec Coverage Matrix`
-   - `Do Not Break`
-   - `Acceptance Traceability`
-   - `Claimed Write Scope`
-   - `Step Plan`
-   - `Skeptic Review`
-   - `Risk Registry`
-   - `Open Questions / Blockers`
-{% if minimalism_enabled and minimalism_level != "off" %}
-   - `Minimal Solution Ladder`
-{% endif %}
-11. {% if minimalism_enabled and minimalism_level != "off" %}Before `File Map`, complete `## Minimal Solution Ladder` for every requirement. Each `CREATE` file must cite rung 6 justification or be removed. Reconcile with abstraction-first: extend existing abstractions; do not plan new layers with one implementation.{% else %}The plan must explicitly prefer abstraction-first implementation and identify where existing abstractions should be extended instead of adding new `if/else` branches.{% endif %}
-12. The plan must call out query/storage-heavy steps that need industrial handling:
-   - no N+1
-   - no oversized reads
-   - no avoidable in-memory loops over raw datasets
-13. If requirements are ambiguous, stop and ask focused clarification before coding.
-14. If the issue may run through `/orchestrator`, make `Claimed Write Scope` machine-readable and file-level exact.
-15. All planning notes, artifacts, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-16. Persist the implement-ready plan only under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact). Do **not** create or update Linear comments for plan body sync.
+5. Preserve the execution constraints formerly carried by the local plan:
+   - adjacent behavior that must remain stable;
+   - exact claimed write scope for orchestrated work;
+   - acceptance traceability from requirements to tasks and checks;
+   - explicit blockers and unresolved decisions;
+   - data/query, security, compatibility, and migration risks where applicable.
+6. Run `/skeptic` against the complete OpenSpec change. Apply blocking findings to the artifacts before implementation.
+7. Run `openspec validate <change-id>` and resolve validation errors.
+8. Do not hand off to implementation while required artifacts, non-goals, decisions, or validation are incomplete.
 {% if linear_enabled %}
-17. When the plan is implement-ready and Linear MCP is available, move the issue workflow state to `{{ tracker_status_plan_ready }}` per `.ai/rules/linear-mcp.mdc` and `.ai/skills/tracker/SKILL.md`.
-18. If Linear MCP is unavailable for **state** updates, follow `.ai/reference/tracker-degraded-mode.md`; keep working on `plan.md` locally and report pending state sync.
+9. When the change is implement-ready and Linear MCP is available, move the issue to `{{ tracker_status_plan_ready }}`. If state update is unavailable, follow `.ai/reference/tracker-degraded-mode.md` without duplicating OpenSpec artifacts into tracker comments.
 {% endif %}
-
-## Storage contract
-
-- Canonical local directory: `{{ plan_progress_runtime_root }}/ISSUE-ID/` (from `ai.config.yaml` -> `artifacts.planProgressRoot`).
-- Local plan file: `plan.md` is the **sole** source of truth for plan content, including `<!-- AI_SIMPLE_PLAN:START/END -->` and `# PLAN::ISSUE-ID` markers from `.ai/reference/plan-template.md`.
-- Never mirror plan body into Linear issue comments via MCP.
 
 ## Quality bar
 
-- Prefer exact file targets over vague directories.
-- Each acceptance criterion must map to at least one step and one verify command.
-- Do not leave unresolved blockers inside a ready plan.
-- Do not hardcode stack commands in the plan narrative; refer to canonical tasks.
+- Requirements describe observable behavior rather than internal file edits.
+- Scenarios are concrete enough to become automated or explicit manual checks.
+- Design references existing repository patterns before introducing new abstractions.
+- Each task identifies the requirement it satisfies and the canonical command that verifies it.
+- `openspec status --change <change-id>` reports all implementation prerequisites complete.

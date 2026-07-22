@@ -7,11 +7,17 @@ import { runExtensionAddCommand } from "../src/commands/extension-add.js";
 import { runExtensionListCommand } from "../src/commands/extension-list.js";
 import { runExtensionRemoveCommand } from "../src/commands/extension-remove.js";
 import { runInitCommand } from "../src/commands/init.js";
-import { createFakeCopierBin, createFakeExecutable, makeTempRepo } from "./helpers.js";
+import {
+  createFakeCopierBin,
+  createFakeExecutable,
+  createFakeOpenSpecBin,
+  makeTempRepo
+} from "./helpers.js";
 
 describe("extension install", () => {
   const originalPath = process.env.PATH ?? "";
   const originalCopier = process.env.AI_SIMPLE_COPIER_BIN;
+  const originalOpenSpec = process.env.AIFORGE_OPENSPEC_BIN;
 
   beforeEach(() => {
     const fakeTaskBinDir = makeTempRepo("aiforge-task-bin-ext-");
@@ -24,6 +30,7 @@ process.exit(0);
     );
     process.env.PATH = `${fakeTaskBinDir}:${originalPath}`;
     process.env.AI_SIMPLE_COPIER_BIN = createFakeCopierBin();
+    process.env.AIFORGE_OPENSPEC_BIN = createFakeOpenSpecBin();
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
     delete process.env.AIFORGE_ALLOW_TASK_DOWNLOAD;
   });
@@ -34,6 +41,11 @@ process.exit(0);
       delete process.env.AI_SIMPLE_COPIER_BIN;
     } else {
       process.env.AI_SIMPLE_COPIER_BIN = originalCopier;
+    }
+    if (originalOpenSpec === undefined) {
+      delete process.env.AIFORGE_OPENSPEC_BIN;
+    } else {
+      process.env.AIFORGE_OPENSPEC_BIN = originalOpenSpec;
     }
   });
 

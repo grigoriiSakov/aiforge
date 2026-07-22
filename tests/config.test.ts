@@ -65,6 +65,7 @@ describe("config lifecycle", () => {
     expect(config.execution.worktreeEnvVar).toBe("AIFORGE_WORKTREE_PATH");
     expect(config.execution.worktreeStrategy).toBe("direct");
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.managedSurfaces).toContainEqual({ path: "openspec", policy: "semi-managed" });
   });
 
   test("rejects cursor model slug under runtimeModels.codex", () => {

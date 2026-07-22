@@ -8,6 +8,7 @@
 - `.claude/` — Claude Code hooks and symlinked views into `.ai/`
 - `.agent/` — Antigravity-facing surface with symlinked views into `.ai/`
 - `.agents/` — thin Codex agent-mode surface
+- `openspec/` — durable behavior specs and change artifacts consumed by every runtime
 
 ## What stays in `.agents`
 
@@ -24,3 +25,5 @@ Everything shared or machine-readable now lives in `.ai`:
 - `.ai/context/*`
 
 So `.agents/` is now just an optional Codex agent-mode compatibility surface, not a shared source of truth.
+
+OpenSpec installs its workflow skills through the enabled runtime adapters. Because runtime skill directories point to `.ai/skills`, the generated OpenSpec skills are shared without duplicating their content. Runtime-native command files, such as Cursor OPSX commands, remain in the directories expected by that runtime.

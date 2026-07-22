@@ -113,6 +113,30 @@ if (mode === "update") {
   );
 }
 
+export function createFakeOpenSpecBin(): string {
+  const tempDir = makeTempRepo("aiforge-openspec-bin-");
+  return createFakeExecutable(
+    tempDir,
+    "fake-openspec",
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const repoRoot = args[1];
+const writeFile = (relativePath, content) => {
+  const targetPath = path.join(repoRoot, relativePath);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, content, "utf8");
+};
+writeFile(".aiforge-openspec-invocation.json", JSON.stringify(args) + "\\n");
+writeFile("openspec/config.yaml", "schema: spec-driven\\n");
+writeFile(".ai/skills/openspec-propose/SKILL.md", "---\\nname: openspec-propose\\n---\\n");
+writeFile(".cursor/commands/opsx-propose.md", "# Propose\\n");
+process.exit(0);
+`
+  );
+}
+
 export function createFakeExecutable(directory: string, name: string, content: string): string {
   const binPath = path.join(directory, name);
   fs.writeFileSync(binPath, content, { mode: 0o755 });

@@ -12,6 +12,7 @@ Use this skill to implement the planned change step by step.
 - Before doing anything else in this skill, read:
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
+  - `openspec/config.yaml`
   - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
@@ -42,28 +43,25 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Use model tier `{{ agent_model_implement }}` (`.ai/reference/model-profiles.md`).
-3. Read:
-   - `.ai/reference/plan-template.md`
-   - `.ai/reference/plan-progress-template.md`
-   - `.ai/reference/context-artifacts.md`
+3. Read `.ai/reference/plan-progress-template.md` and `.ai/reference/context-artifacts.md`.
 4. Before changing code, load the relevant context and existing implementation surfaces:
    - `.ai/context/current.md`
    - relevant `llms` artifacts declared by `ai.config.yaml`
    - nearby canonical code that can be reused instead of reimplemented
-5. Load the current plan artifact from `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` only (no Linear plan comment reads or writes).
-6. Do not start medium/large work without a plan artifact.
-7. Before changing code, extract from the plan:
-   - `Execution Contract`
-   - `Spec Coverage Matrix`
-   - `Do Not Break`
-   - `Acceptance Traceability`
-   - current step boundaries
+5. Select exactly one `openspec/changes/<change-id>/` and read its proposal, delta specs, design, and tasks.
+6. Run `openspec instructions apply --change <change-id>` and treat the resulting instructions plus the selected change artifacts as the implementation contract.
+7. Do not start medium/large work until OpenSpec reports the change implementation-ready and `openspec validate <change-id>` passes.
+8. Before changing code, extract from the OpenSpec change:
+   - scope and explicit non-goals from `proposal.md`
+   - normative requirements and scenarios from delta specs
+   - architecture decisions, invariants, migrations, and rollback from `design.md`
+   - current task boundaries and verification mapping from `tasks.md`
 {% if minimalism_enabled and minimalism_level != "off" %}
-7a. **Before the first code change**, re-run the minimal solution ladder from the plan against the actual codebase (not plan assumptions). If a higher rung works:
-   - shrink the step and update `File Map` / `Minimal Solution Ladder` in `plan.md` before coding
+8a. **Before the first code change**, re-run the minimal solution ladder against the actual codebase. If a simpler approach works:
+   - update `design.md` and `tasks.md` before coding
    - record the decision in `progress.md` → `## Minimal Solution Conformance`
 {% endif %}
-8. Before the first code change, create or update execution memory in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments).
+9. Before the first code change, create or update execution memory in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments).
 9. Execute strictly step by step. On every step transition:
    - update `## Выполнено`
    - update `## Текущий шаг`
@@ -94,9 +92,9 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
    - if an orchestrator run has `Claimed Write Scope` and full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails only outside that scope, record command output + rationale in `progress.md` and still attach scoped green evidence for the task; do not stall review solely on repo-wide red (orchestrator skill defines the bar)
-14. If implementation drifts from source request or plan:
+14. If implementation drifts from the source request or OpenSpec artifacts:
    - either fix the code
-   - or update the plan first
+   - or update the OpenSpec change first with `/opsx:update`
    - otherwise stop
 14. If `.ai/runtime/orchestrator-state.mjs` has an active run for the issue:
    - use only the assigned orchestrator worktree
@@ -109,10 +107,15 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - run `{{ task_command }} {{ task_verify_name }}`
    - run `/review` again
    - do not consider the task complete until review no longer reports `high` or `medium`
+17. Keep the active OpenSpec change coherent during implementation:
+   - check off completed entries in `tasks.md` as evidence is produced
+   - Use `/opsx:update <change-id>` when implementation changes the approved artifacts; update proposal/specs/design/tasks before continuing code work
+   - run `openspec validate <change-id>` before review handoff
+   - Do not run `/opsx:sync` or archive the change from `/implement`; review and final full verification have not completed yet
 {% if linear_enabled %}
-17. When execution starts and Linear MCP is available, move the issue workflow state to `{{ tracker_status_active }}` per tracker rules (state only — no progress comment sync).
+18. When execution starts and Linear MCP is available, move the issue workflow state to `{{ tracker_status_active }}` per tracker rules (state only — no progress comment sync).
 {% else %}
-17. Do not change Linear issue state; execution state lives in local artifacts only.
+18. Do not change Linear issue state; execution state lives in local artifacts only.
 {% endif %}
 
 ## Do not do this

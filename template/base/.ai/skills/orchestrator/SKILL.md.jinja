@@ -14,6 +14,7 @@ Pipeline owner for:
 - Before doing anything else in this skill, read:
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
+  - `openspec/config.yaml`
   - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
@@ -30,7 +31,7 @@ Pipeline owner for:
 ## Mandatory protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
-2. Treat `.ai/reference/plan-template.md` and `.ai/reference/plan-progress-template.md` as required runtime contracts.
+2. Treat the selected OpenSpec change and `.ai/reference/plan-progress-template.md` as required planning/execution contracts.
 3. Read `.ai/reference/orchestrator-claimed-scope-template.md`.
 4. Use `node .ai/runtime/orchestrator-state.mjs` as the source of truth for:
    - reservation
@@ -39,9 +40,9 @@ Pipeline owner for:
    - implement / test / review transitions
    - terminal release
 5. Accept exactly one issue ID per orchestrator run.
-6. Do not start implementation until the current plan contains machine-readable `Claimed Write Scope`.
+6. Do not start implementation until `openspec validate <change-id>` passes and `design.md` contains machine-readable `Claimed Write Scope`.
 7. Ensure the workflow keeps a single source of truth for:
-   - plan memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (local `PLAN::ISSUE-ID` artifact; never mirror plan body into Linear comments)
+   - plan memory: `openspec/changes/<change-id>/` (proposal, delta specs, design, and tasks)
    - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments)
    - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 {% if linear_enabled %}
@@ -51,7 +52,7 @@ Pipeline owner for:
    - `node .ai/runtime/orchestrator-state.mjs init`
    - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
      По умолчанию ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`.
-     Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/plan не требует pinned base branch.
+     Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/OpenSpec design не требует pinned base branch.
 9. Interpret submit result strictly:
    - `reserved` -> create the isolated worktree
    - `queued` -> stop; a related issue is still active
@@ -94,13 +95,34 @@ Pipeline owner for:
 ## Phase evidence
 
 25. A phase is not complete without evidence:
-   - `plan` -> complete plan artifact
+   - `plan` -> complete and validated OpenSpec change
    - `implement` -> code changes aligned with plan
    - `test` -> scoped canonical evidence (п. 20–21)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
    - **Quality bar (in-scope):** нельзя уходить в review без scoped green по затронутому поведению в `Claimed Write Scope`.
    - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
    - **«Старые» ошибки внутри скоупа:** не отмазка.
+
+## OpenSpec terminal gate
+
+Run this gate exactly once, only after all of these are true:
+
+- the selected change is still present at `openspec/changes/<change-id>/`
+- review evidence is `clean` or `low`
+- the full verification result is `pass`
+- orchestrator runtime status is `awaiting-finalize`
+- every required checkbox in the change `tasks.md` is complete
+
+Terminal sequence:
+
+1. Run `openspec status --change <change-id>` and `openspec validate <change-id>`. Stop on incomplete artifacts, tasks, ambiguity, or validation errors.
+2. Invoke `/opsx:sync <change-id>` using the installed `openspec-sync-specs` skill so accepted delta requirements become current specs before archival.
+3. Run `openspec archive <change-id> --yes`. Archive is non-interactive here because review, full verify, and sync already passed.
+4. Confirm the active change no longer appears in `openspec list` and its dated archive exists under `openspec/changes/archive/`.
+5. Record sync/archive evidence in `progress.md` under `## OpenSpec Finalization`.
+6. Only now release the orchestrator runtime with terminal status `done` and perform tracker finalization.
+
+Do not release the orchestrator run when sync or archive fails. Keep runtime status `awaiting-finalize`, record the exact failure in `progress.md`, and stop for correction or human decision. Never use `--no-validate` during automatic finalization.
 
 ## Review gate + models
 
@@ -130,7 +152,7 @@ Pipeline owner for:
       - `simple` — только если все признаки одновременно верны: <=2 claimed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, план без открытых спорных решений.
       - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high`, `after_fix_re_review: required`, или оркестратор сомневается.
       - default при сомнении — `full`; запрещено запускать одновременно `simple` и `full` review для одного gate.
-    - **ровно один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, `plan.md` / `progress.md`.
+    - **ровно один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change / `progress.md`.
 {% if orchestrator_audit_gate == "always" %}
     - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
 {% elif orchestrator_audit_gate == "process-layer-only" %}
@@ -177,7 +199,7 @@ Pipeline owner for:
 ## Stop conditions
 
 - No source request / issue contract
-- No valid plan artifact for non-trivial work
+- No valid OpenSpec change for non-trivial work
 - Missing or invalid `Claimed Write Scope`
 - Drift between source request, plan, and implementation
 - Attempt to implement outside the assigned orchestrator worktree

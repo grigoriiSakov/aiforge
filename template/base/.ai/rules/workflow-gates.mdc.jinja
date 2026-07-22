@@ -10,17 +10,13 @@ alwaysApply: true
 ## Gate 1: Plan
 
 - No clear requirements/spec -> no implementation.
-- Medium/large work requires an explicit step-by-step plan before code changes.
-- The plan must map source requirements, explicit non-goals, and follow-ups without silent omissions.
+- Medium/large work requires a validated OpenSpec change before code changes.
+- The OpenSpec change must map source requirements, explicit non-goals, and follow-ups without silent omissions.
 - Risky assumptions must be stated and validated before implementation starts.
-- The plan must contain:
-  - `Execution Contract`
-  - `Spec Coverage Matrix`
-  - `Do Not Break`
-  - `Acceptance Traceability`
-  - `Claimed Write Scope`
-  - `Open Questions / Blockers`
-- `Open Questions / Blockers` must be empty before `/implement`.
+- The OpenSpec change must contain complete proposal, delta specs, design, and tasks.
+- Design must record important invariants, `Claimed Write Scope`, migration/rollback, and unresolved decisions.
+- Tasks must map requirements to canonical verification evidence.
+- Open questions and blockers must be empty before `/implement`.
 - Reuse existing canonical surfaces before introducing new files or helpers.
 - If the touched scope contains overloaded or giant files, the plan must include decomposition-on-touch steps.
 - If the request touches user-facing text or AI output, the plan must state the language/locale contract explicitly.
@@ -28,15 +24,11 @@ alwaysApply: true
 ## Gate 2: Implement
 
 - Before the first code change, complete project-rules preflight: read `.ai/rules/project-profile.mdc`, extract every applicable rule from `## Project-Specific Rules`, and seed `## Project Rules Compliance` in `progress.md`.
-- Implementation must follow the approved plan, source request, and project-specific rules exactly.
+- Implementation must follow the validated OpenSpec change, source request, and project-specific rules exactly.
 - Implementer must not silently reinterpret requirements during coding.
 - Before each step transition and before review handoff, re-read `.ai/rules/project-profile.mdc` and update `## Project Rules Compliance`; no open `fail` or unchecked applicable rule is allowed.
 - Implementer must study relevant existing code and `llms` context first, then reuse or extend canonical implementation instead of cloning logic into a new branch/path.
-- Before and after coding, compare implementation against:
-  - source request/spec
-  - `Execution Contract`
-  - `Do Not Break`
-  - `Acceptance Traceability`
+- Before and after coding, compare implementation against the source request, OpenSpec requirements/scenarios, design invariants, and tasks.
 - Any drift between code, plan, and spec must be fixed or escalated back to `/clarify` or `/plan`.
 - Prefer extending existing canonical implementation over creating duplicate parallel logic.
 - Prefer explicit abstractions, composition, strategy-style decomposition, and data-driven dispatch over sprawling `if/else` chains.
@@ -73,19 +65,13 @@ alwaysApply: true
 ## Gate 5: Review
 
 - Findings first; classify by severity.
-- Review must treat the source request/spec as a first-class contract.
+- Review must treat the source request and selected OpenSpec change as first-class contracts.
 - Before any clean verdict, run an explicit **Project Rules Compliance** pass:
   - every bullet in `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`
   - applicable manifesto and workflow-gate constraints for the touched scope
   - per-rule `pass | fail | N/A` with evidence; any `fail` blocks a clean verdict (minimum `medium` finding)
-- Review must verify:
-  - implementation-vs-spec conformance
-  - `Do Not Break` invariants
-  - `Acceptance Traceability`
-  - `Spec Coverage Matrix`
-  - reuse vs duplicate implementation
-  - test adequacy
-- Review must confirm 100% completion against the source spec and the approved plan.
+- Review must verify implementation-vs-spec conformance, design invariants, tasks-to-requirements traceability, reuse vs duplicate implementation, and test adequacy.
+- Review must confirm 100% completion against the source request and validated OpenSpec change.
 - The task is not complete while any required acceptance point, plan step, or mandatory follow-through item is still open.
 - `high` or `medium` findings force a mandatory loop: `implement -> test -> verify -> review` until those severity levels are gone.
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.

@@ -3,6 +3,7 @@ import { ensureCopierAnswersFile } from "./copier.js";
 import { buildLlms } from "./llms.js";
 import { generateManifesto } from "./manifesto.js";
 import { scaffoldMcp } from "./mcp.js";
+import { ensureOpenSpecProject } from "./openspec.js";
 import { applyRuntimeFlags } from "./runtime.js";
 import { ensureTaskRunnerInstalled } from "./task-runner.js";
 import type { ProjectConfig } from "./types.js";
@@ -23,6 +24,7 @@ export async function finalizeAfterCopierCopy(
     answers: buildCopierAnswers(config)
   });
   applyRuntimeFlags(repoRoot);
+  ensureOpenSpecProject(repoRoot, config);
   generateManifesto(repoRoot);
   await buildLlms(repoRoot);
   scaffoldMcp(repoRoot);
