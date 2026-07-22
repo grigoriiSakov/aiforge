@@ -4,8 +4,13 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
-const cliEntry = path.join(rootDir, "dist", "src", "cli", "index.js");
+const cliEntries = [
+  path.join(rootDir, "dist", "src", "cli", "index.js"),
+  path.join(rootDir, "dist", "src", "cli", "openspec.js")
+];
 
-if (fs.existsSync(cliEntry)) {
-  fs.chmodSync(cliEntry, 0o755);
+for (const cliEntry of cliEntries) {
+  if (fs.existsSync(cliEntry)) {
+    fs.chmodSync(cliEntry, 0o755);
+  }
 }

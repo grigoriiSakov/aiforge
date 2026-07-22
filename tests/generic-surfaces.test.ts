@@ -167,7 +167,8 @@ describe("generic reusable surfaces", () => {
   test("README documents the default OpenSpec workflow", () => {
     const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");
 
-    expect(readme).toContain("OpenSpec is installed and initialized by default");
+    expect(readme).toContain("OpenSpec is a runtime dependency of `aiforge`");
+    expect(readme).toContain("publishes both the `aiforge` and `openspec` commands");
     expect(readme).toContain("/opsx:propose");
     expect(readme).toContain("aiforge owns execution");
   });

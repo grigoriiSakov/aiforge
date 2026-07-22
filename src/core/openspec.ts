@@ -35,21 +35,36 @@ export function ensureOpenSpecProject(
     "--profile",
     "core"
   ];
+  const status = runOpenSpecCli(args, {
+    cwd: repoRoot,
+    ...(options.bin ? { bin: options.bin } : {})
+  });
+
+  if (status !== 0) {
+    throw new Error(`OpenSpec init failed with exit code ${String(status)}`);
+  }
+
+  configureOpenSpecProject(repoRoot, config);
+}
+
+export function runOpenSpecCli(
+  args: string[],
+  options: { cwd?: string; bin?: string } = {}
+): number {
   const override = options.bin ?? process.env.AIFORGE_OPENSPEC_BIN;
   const command = override
     ? { bin: override, args }
     : { bin: process.execPath, args: [resolveBundledOpenSpecBin(), ...args] };
   const result = spawnSync(command.bin, command.args, {
-    cwd: repoRoot,
+    cwd: options.cwd ?? process.cwd(),
     stdio: "inherit",
     env: process.env
   });
 
-  if (result.status !== 0) {
-    throw new Error(`OpenSpec init failed with exit code ${String(result.status)}`);
+  if (result.error) {
+    throw result.error;
   }
-
-  configureOpenSpecProject(repoRoot, config);
+  return result.status ?? 1;
 }
 
 function configureOpenSpecProject(repoRoot: string, config: ProjectConfig): void {

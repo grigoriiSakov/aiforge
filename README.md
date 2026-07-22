@@ -34,7 +34,7 @@ Business code is not generated or rewritten.
 
 ## OpenSpec Workflow
 
-OpenSpec is installed and initialized by default during `init`, `adopt`, `sync`, and `update`; there is no opt-in flag and no separate global OpenSpec installation is required.
+OpenSpec is a runtime dependency of `aiforge` and is initialized by default during `init`, `adopt`, `sync`, and `update`; there is no opt-in flag and no separate OpenSpec package installation is required. Installing or linking `aiforge` publishes both the `aiforge` and `openspec` commands. Existing global installations of `aiforge` must be updated or linked again once to create the new `openspec` executable shim; `aiforge sync` intentionally does not modify global package-manager state.
 
 Responsibilities are deliberately split:
 

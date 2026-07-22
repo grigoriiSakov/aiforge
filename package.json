@@ -24,7 +24,8 @@
     "cli"
   ],
   "bin": {
-    "aiforge": "./dist/src/cli/index.js"
+    "aiforge": "./dist/src/cli/index.js",
+    "openspec": "./dist/src/cli/openspec.js"
   },
   "files": [
     "dist/src",
