@@ -31,7 +31,7 @@ Core commands:
 - `doctor` - check drift, missing dependencies, and runtime state
 - `mcp scaffold` - create or update managed MCP blocks
 - `manifesto init` - create the initial manifesto surface
-- `llms build` - rebuild `llms.txt` and `llms/**`
+- `llms build` - rebuild optional `llms.txt` and `llms/**` when `features.llms` is enabled
 - `project-stub` - generate a prompt-friendly project configuration draft
 
 Supported starter profiles:

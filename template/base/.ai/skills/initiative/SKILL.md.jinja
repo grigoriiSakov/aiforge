@@ -31,15 +31,12 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 
 - `investigate` — codebase facts before committing to a design; reuse its discipline (evidence, separate current vs desired vs unknown).
 - `issue` — task context shape, `related_issues` / orchestrator serialization when relevant.
-- `plan` — plan artifact quality under `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`, markers from `.ai/reference/plan-template.md`.
+- `plan` — OpenSpec change quality and implementation readiness.
 - `tracker` — scope from `.ai/linear-scope.json`, degraded-mode rules in `.ai/reference/tracker-degraded-mode.md`.
 
 ## Mandatory reference reads
 
-- `.ai/reference/plan-template.md`
-- `.ai/reference/plan-progress-template.md`
 - `.ai/reference/context-artifacts.md`
-- `.ai/reference/issue-spec-template.md`
 - `.ai/reference/orchestrator-claimed-scope-template.md` (if issues may later run through `/orchestrator`)
 
 ## Protocol
@@ -48,7 +45,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 
 2. **Refresh short context** — run `node .cursor/hooks/render-context.mjs manual` (optional second arg: path to a small JSON event file if you have one), then read `.ai/context/current.md`. Do not treat `current.md` as a dump for full research; keep it a digest per `context-artifacts.md`.
 
-3. **Load existing intent surfaces** — read `{{ manifesto_path }}`, `ai.config.yaml`, profile rules, and load `{{ llms_txt_path }}` / configured `llms` artifacts before deep discovery (same spirit as `plan`).
+3. **Load existing intent surfaces** — read `{{ manifesto_path }}`, `ai.config.yaml`, profile rules, `openspec/config.yaml`, and relevant existing OpenSpec specs before deep discovery.
 
 4. **Discovery** — inspect the repo (and linked surfaces the user names). Use web research only when the user asks or when facts are unstable. Prefer reusable code paths over greenfield design.
 
@@ -74,7 +71,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 
 8. **Initiative spec + execution map on the project (no meta “planning issue”)** — do **not** create a separate tracker issue whose only job is to hold a plan for spawning other issues. Put initiative-level material on the **project** instead:
    - **Technical spec** (scope, contracts/API/data, migrations expectation, test plan with `{{ task_command }} {{ task_test_name }}` / `{{ task_command }} {{ task_verify_name }}` where relevant, dependencies, out of scope, DoD, link to the PRD): project description and/or a **second project attachment** (e.g. `technical-spec.md`), in `{{ workflow_language }}` unless the user overrides.
-   - **Execution map** (sequence, milestones, dependency map, cross-surface blockers — same spirit as `.ai/reference/plan-template.md` at initiative level): same attachment, a dedicated project doc (`execution-map.md`), or a clearly marked section inside the PRD (e.g. rollout + epic breakdown) that you treat as canonical for ordering work.
+   - **Execution map** (sequence, milestones, dependency map, cross-surface blockers): same attachment, a dedicated project doc (`execution-map.md`), or a clearly marked section inside the PRD that you treat as canonical for ordering work.
    - **Machine-readable initiative manifest** stored locally at `.ai/context/initiatives/<slug>/issues-manifest.json`: this is a durable local source artifact for `supervisor`. It must include `slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifact paths, and the ordered issue list with `id`, `title`, `order`, `blockedBy`, and any extra per-issue metadata you need later.
    - Minimal shape:
      ```json
@@ -97,7 +94,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
      ```
 
 9. **Atomic issues** — create an ordered set of **work** issues (real deliverables), not a placeholder “planning” ticket:
-    - Each issue description must satisfy `.ai/reference/issue-spec-template.md` **and** carry the technical-spec bullets that apply to **that** slice (link back to project PRD + spec/execution doc; do not duplicate the whole initiative spec in every body).
+    - Each issue description must link to the applicable OpenSpec change/spec and carry only the technical-spec bullets that apply to **that** slice; do not duplicate the whole initiative spec in every body.
     - Order work via milestones/phases, `blockedBy`, and the execution map.
     - Frontend (or downstream) issues only when upstream contracts are clear; mark real backend blockers.
     - If `/orchestrator` is likely, note `related_issues` early for risky overlap (see `issue` skill).
@@ -110,7 +107,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 
    - `.ai/context/initiatives/<slug>/prd.md` — full PRD (may include rollout + epic breakdown as the canonical execution map if you keep one file)
    - `.ai/context/initiatives/<slug>/technical-spec.md` — initiative technical spec + pointer to `prd.md` (paste into project description, project doc, or first real work issue only if the team insists — not as a dedicated “create issues from this” ticket)
-   - `.ai/context/initiatives/<slug>/execution-map.md` — optional: sequence, dependencies, blockers (`.ai/reference/plan-template.md` style markers where useful); omit if fully covered inside `prd.md`
+   - `.ai/context/initiatives/<slug>/execution-map.md` — optional: sequence, dependencies and blockers; omit if fully covered inside `prd.md`
    - `.ai/context/initiatives/<slug>/issues-breakdown.md` — ordered **work** issues with dependencies and DoD each (ready to paste as real issues)
    - `.ai/context/initiatives/<slug>/issues-manifest.json` — the machine-readable form of the same ordering for `supervisor` (`slug`, `baseBranch`, `managerBranch`, `maxAttemptsPerIssue`, artifacts, ordered issues with `blockedBy`)
 
@@ -132,7 +129,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 - Linear MCP unavailable while on the Linear path → stop; do not fake tracker completion (user may disable Linear in config and rerun for a local bundle).
 - PRD not creatable or not attachable to the Linear project → stop; workflow not complete on that path.
 {% endif %}
-- PRD exists but atomic issues lack implement-ready spec → extend issues until they match `issue-spec-template` + per-issue spec bar (for the Linear path); for the local path, fix `issues-breakdown.md` / `technical-spec.md` before handoff.
+- PRD exists but atomic issues lack implement-ready requirements → extend the OpenSpec changes and per-issue acceptance bar (for the Linear path); for the local path, fix `issues-breakdown.md` / `technical-spec.md` before handoff.
 - `issues-manifest.json` missing or drifted from the real issue order / dependencies → fix it before handoff.
 
 ## Outcome

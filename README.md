@@ -22,7 +22,7 @@ aiforge adds a managed workflow kernel to a target repository:
 | Surface | Purpose |
 |---------|---------|
 | `ai.config.yaml` | The source of truth for project workflow, profile, runtimes, commands, and model tiers |
-| `.ai/**` | Shared rules, skills, references, context files, and runtime state helpers |
+| `.ai/**` | Shared rules, skills, operational references, context files, and runtime state helpers |
 | `AGENTS.md`, `MANIFESTO.md` | Human-readable project instructions generated from `ai.config.yaml` |
 | `.cursor/**`, `.codex/**`, `.claude/**`, `.agent/**`, `.agents/**` | Runtime-specific adapters and hooks |
 | `Taskfile.yml` | Canonical task entrypoints used by humans and agents |
@@ -152,7 +152,7 @@ aiforge update
 aiforge doctor
 aiforge mcp scaffold
 aiforge manifesto init
-aiforge llms build
+aiforge llms build # only when features.llms is enabled
 aiforge project-stub
 ```
 

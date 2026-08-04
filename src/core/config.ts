@@ -48,6 +48,12 @@ export function createConfig(params: {
     }
   };
 
+  const features = {
+    mcp: true,
+    llms: false,
+    manifesto: true
+  };
+
   return {
     schemaVersion: 1,
     project: {
@@ -127,8 +133,6 @@ export function createConfig(params: {
       { path: "AGENTS.md", policy: "managed" },
       { path: "MANIFESTO.md", policy: "managed" },
       { path: "Taskfile.yml", policy: "managed" },
-      { path: "llms.txt", policy: "managed" },
-      { path: "llms", policy: "managed" },
       { path: ".cursor", policy: "managed" },
       { path: ".codex", policy: "managed" },
       { path: ".claude", policy: "managed" },
@@ -137,11 +141,7 @@ export function createConfig(params: {
       { path: "openspec", policy: "semi-managed" }
     ],
     updatePolicy: "strict",
-    features: {
-      mcp: true,
-      llms: true,
-      manifesto: true
-    }
+    features
   };
 }
 
@@ -492,6 +492,11 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
   const profile = getProfileDefinition(profileId);
   const taskCommand = normalizeTaskCommand(config.task?.command);
   const task = normalizeTaskConfig(config.task, defaults.task, taskCommand);
+  const features = {
+    ...defaults.features,
+    ...config.features
+  };
+  const managedSurfaces = mergeManagedSurfaces(config.managedSurfaces, defaults.managedSurfaces);
 
   return {
     ...defaults,
@@ -553,11 +558,10 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
       ...defaults.projectRules,
       ...config.projectRules
     },
-    managedSurfaces: mergeManagedSurfaces(config.managedSurfaces, defaults.managedSurfaces),
-    features: {
-      ...defaults.features,
-      ...config.features
-    }
+    managedSurfaces: features.llms
+      ? managedSurfaces
+      : managedSurfaces.filter((entry) => entry.path !== "llms.txt" && entry.path !== "llms"),
+    features
   };
 }
 

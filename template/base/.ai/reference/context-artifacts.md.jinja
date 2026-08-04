@@ -12,7 +12,6 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 
 - `.ai/context/current.md`
 - `.ai/context/initiatives/<slug>/issues-manifest.json`
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (canonical `PLAN::ISSUE-ID` artifact)
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (canonical `PROGRESS::ISSUE-ID` artifact)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
@@ -33,14 +32,13 @@ Use as a short digest only:
 
 Do not dump large research or full code excerpts into `current.md`.
 
-## Plan / progress layout
+## Execution progress layout
 
-Always write plan and progress under the configured root, **one directory per issue**:
+OpenSpec owns planning. Keep execution evidence under the configured root, one directory per issue:
 
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 
-Use marker blocks from `.ai/reference/plan-progress-template.md`. The tracker (e.g. Linear) carries workflow **state** only, not duplicated plan/progress bodies. Do not use repo-root `docs/ai/` for these; keep plan/progress under `.ai` only.
+Use the `PROGRESS::ISSUE-ID` marker and the required sections from `.ai/rules/workflow.mdc`. The tracker carries workflow state only.
 
 ## Orchestrator runtime
 

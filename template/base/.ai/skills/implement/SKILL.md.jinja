@@ -43,10 +43,10 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Use model tier `{{ agent_model_implement }}` (`.ai/reference/model-profiles.md`).
-3. Read `.ai/reference/plan-progress-template.md` and `.ai/reference/context-artifacts.md`.
+3. Read `.ai/reference/context-artifacts.md` and `.ai/reference/model-profiles.md`.
 4. Before changing code, load the relevant context and existing implementation surfaces:
    - `.ai/context/current.md`
-   - relevant `llms` artifacts declared by `ai.config.yaml`
+   - the selected OpenSpec change and relevant repository files
    - nearby canonical code that can be reused instead of reimplemented
 5. Select exactly one `openspec/changes/<change-id>/` and read its proposal, delta specs, design, and tasks.
 6. Run `openspec instructions apply --change <change-id>` and treat the resulting instructions plus the selected change artifacts as the implementation contract.
@@ -123,5 +123,5 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
 - Do not silently invent extra scope.
 - Do not write a long diary instead of a progress artifact.
 - Do not bypass canonical tasks with direct stack commands in prompts or status updates.
-- Do not ignore reusable code that was already discoverable through `llms` and local code reading.
+- Do not ignore reusable code that was already discoverable through local code reading.
 - Do not solve growing complexity with another layer of ad-hoc `if/else`.

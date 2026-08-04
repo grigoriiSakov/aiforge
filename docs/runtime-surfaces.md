@@ -2,7 +2,7 @@
 
 ## Generated surfaces
 
-- `.ai/` — shared source for reusable rules, skills, references, context artifacts, and tracker scope
+- `.ai/` — shared source for reusable rules, skills, operational references, context artifacts, and tracker scope
 - `.cursor/` — runtime-specific config, hooks, and symlinked views into `.ai/`
 - `.codex/` — config, hooks, and symlinked views into `.ai/`
 - `.claude/` — Claude Code hooks and symlinked views into `.ai/`
@@ -21,7 +21,7 @@ Everything shared or machine-readable now lives in `.ai`:
 - `.ai/runtime/*`
 - `.ai/rules/*`
 - `.ai/skills/*`
-- `.ai/reference/*`
+- `.ai/reference/*` (operational runtime references only; OpenSpec owns planning artifacts)
 - `.ai/context/*`
 
 So `.agents/` is now just an optional Codex agent-mode compatibility surface, not a shared source of truth.

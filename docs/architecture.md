@@ -41,8 +41,8 @@ Managed surfaces include:
 - `AGENTS.md`
 - `MANIFESTO.md`
 - `Taskfile.yml`
-- `llms.txt`
-- `llms/**`
+- optional `llms.txt`
+- optional `llms/**`
 
 The target repository's application files remain unmanaged. They are read for detection and context, but not rewritten by aiforge.
 

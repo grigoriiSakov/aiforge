@@ -3,8 +3,18 @@ import { buildLlms } from "../core/llms.js";
 import type { CommandResult } from "../core/types.js";
 
 export async function runLlmsBuildCommand(repoRoot: string, dryRun = false): Promise<CommandResult> {
+  const config = loadConfig(repoRoot);
+
+  if (!config.features.llms) {
+    return {
+      ok: true,
+      code: 0,
+      message: "LLMS artifacts are disabled; set features.llms to true to enable them",
+      details: { enabled: false, created: [] }
+    };
+  }
+
   if (dryRun) {
-    const config = loadConfig(repoRoot);
     return {
       ok: true,
       code: 0,

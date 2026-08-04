@@ -23,11 +23,7 @@ describe("generic reusable surfaces", () => {
       ".claude/hooks/stop-delivery-guard.mjs.jinja",
       ".ai/reference/context-budget.md.jinja",
       ".ai/reference/context-artifacts.md.jinja",
-      ".ai/reference/issue-spec-template.md.jinja",
-      ".ai/reference/PROMPT_OPTIMIZATION_STRATEGY.md.jinja",
       ".ai/reference/orchestrator-claimed-scope-template.md.jinja",
-      ".ai/reference/plan-progress-template.md.jinja",
-      ".ai/reference/plan-template.md.jinja",
       ".ai/reference/tracker-degraded-mode.md.jinja",
       ".ai/context/README.md.jinja",
       ".ai/linear-scope.json.jinja",
@@ -208,17 +204,13 @@ describe("generic reusable surfaces", () => {
     );
     const reviewSkill = fs.readFileSync(path.join(root, ".ai", "skills", "review", "SKILL.md.jinja"), "utf8");
     const projectProfile = fs.readFileSync(path.join(root, ".ai", "rules", "project-profile.mdc.jinja"), "utf8");
-    const progressTemplate = fs.readFileSync(
-      path.join(root, ".ai", "reference", "plan-progress-template.md.jinja"),
-      "utf8"
-    );
 
     expect(implementSkill).toContain("## Project rules compliance (mandatory)");
     expect(implementSkill).toContain("## Project Rules Compliance");
     expect(reviewSkill).toContain("## Project rules compliance check (mandatory)");
     expect(reviewSkill).toContain("### Project Rules Compliance");
     expect(projectProfile).toContain("## Enforcement (mandatory for implement and review)");
-    expect(progressTemplate).toContain("## Project Rules Compliance");
+    expect(implementSkill).toContain("## Project Rules Compliance");
   });
 
   test("testing policy defaults to touched scope, not full suite", () => {

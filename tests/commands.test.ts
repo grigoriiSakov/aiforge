@@ -137,9 +137,9 @@ process.exit(0);
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, CONFIG_FILE_NAME))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "linear-scope.json"))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "reference", "orchestrator-claimed-scope-template.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "settings.json"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".claude", "hooks.json"))).toBe(true);
@@ -1084,12 +1084,11 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     );
   });
 
-  test("sync regenerates manifesto and llms", async () => {
+  test("sync regenerates manifesto and manages opt-in llms", async () => {
     const repoRoot = copyFixture("vue-quasar-capacitor");
     await runAdoptCommand({ repoRoot, dryRun: false });
 
     fs.rmSync(path.join(repoRoot, "MANIFESTO.md"));
-    fs.rmSync(path.join(repoRoot, "llms.txt"));
     fs.writeFileSync(
       path.join(repoRoot, ".ai", "project.manifest.json"),
       JSON.stringify({ stale: true }, null, 2) + "\n"
@@ -1099,7 +1098,18 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(false);
+
+    const config = loadConfig(repoRoot);
+    config.features.llms = true;
+    saveConfig(repoRoot, config);
+    await runSyncCommand(repoRoot, false);
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(true);
+
+    config.features.llms = false;
+    saveConfig(repoRoot, config);
+    await runSyncCommand(repoRoot, false);
+    expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(false);
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
@@ -1551,6 +1561,10 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       profileId: "laravel-docker",
       dryRun: false
     });
+
+    const config = loadConfig(repoRoot);
+    config.features.llms = true;
+    saveConfig(repoRoot, config);
 
     const mcpResult = runMcpScaffoldCommand(repoRoot);
     const manifestoResult = runManifestoInitCommand(repoRoot);

@@ -60,7 +60,6 @@ function removeLegacyManagedSurfaces(repoRoot: string): void {
   fs.rmSync(path.join(repoRoot, ".cursor", "reference"), { recursive: true, force: true });
   fs.rmSync(path.join(repoRoot, ".cursor", "context"), { recursive: true, force: true });
   fs.rmSync(path.join(repoRoot, ".cursor", "linear-scope.json"), { recursive: true, force: true });
-  fs.rmSync(path.join(repoRoot, ".cursor", "PROMPT_OPTIMIZATION_STRATEGY.md"), { recursive: true, force: true });
 }
 
 function ensureSharedLinks(repoRoot: string, runtimes: RuntimeFlags): void {
