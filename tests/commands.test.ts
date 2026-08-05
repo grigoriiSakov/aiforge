@@ -772,15 +772,17 @@ process.exit(0);
     fs.writeFileSync(evidencePath, '{"status":"done"}\n');
     fs.writeFileSync(userNotePath, "historical note\n");
 
-    const dryRun = await runSyncCommand(repoRoot, true);
+    const syncDryRun = await runSyncCommand(repoRoot, true);
+    const updateDryRun = await runUpdateCommand(repoRoot, true);
 
-    expect(dryRun.ok).toBe(true);
-    expect(dryRun.details?.wouldRemove).toEqual(
-      [
-        path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"),
-        ...retiredFiles.map((parts) => path.join(...parts))
-      ]
-    );
+    const expectedRemovals = [
+      path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"),
+      ...retiredFiles.map((parts) => path.join(...parts))
+    ];
+    for (const dryRun of [syncDryRun, updateDryRun]) {
+      expect(dryRun.ok).toBe(true);
+      expect(dryRun.details?.wouldRemove).toEqual(expectedRemovals);
+    }
     for (const parts of retiredFiles) {
       expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(true);
     }
