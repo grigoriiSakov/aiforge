@@ -75,10 +75,11 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Use model tier `{{ agent_model_review }}` (`.ai/reference/model-profiles.md`); in `orchestrator-delegate` mode stay lean — no orchestrator runtime mutations.
 3. Read the selected `openspec/changes/<change-id>/` and `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`. Run `openspec validate <change-id>` before a clean verdict.
-4. Confirm recent evidence for:
+4. When available, inspect evidence for:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
+   - absence of pre-review test/lint is expected in orchestrator-delegate mode; judge the diff and plan directly
 5. Testing evidence must match the touched scope:
    - default expectation is scoped tests for the behavior that changed
    - do not require a full project run unless the user explicitly asked for it, repository rules require it, or the change is too broad for scoped evidence
@@ -104,13 +105,13 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
    - missing tests
    - missing or false plan coverage
 9. Severity loop is mandatory:
-   - if findings include `high` or `medium`, the current task is not done
-   - return to `implement`, fix the findings, then rerun the cycle:
+   - if findings include `high`, `critical`, or `medium`, the current task is not done
+   - return to `implement`, fix the findings, then run the scoped post-review validation cycle:
      - `{{ task_command }} {{ task_implement_name }}` when applicable to the project flow
      - `{{ task_command }} {{ task_test_name }}` (scoped as appropriate; refresh OOS note if full verify stays red outside scope)
-     - `{{ task_command }} {{ task_verify_name }}` when it adds signal for the touched scope; do not treat full-pipeline red outside `Claimed Write Scope` as blocking the loop by itself if orchestrator rules already documented OOS
-     - `/review`
-   - repeat until no `high` or `medium` findings remain
+     - `{{ task_command }} {{ task_lint_name }}` (scoped as appropriate)
+     - `/review` only when the fix is non-trivial or `after_fix_re_review: required`
+   - repeat until no `high`, `critical`, or `medium` findings remain
 10. After producing the review result, record a machine-readable verdict (standalone `/review` only):
    - clean review: `node .ai/runtime/review-state.mjs verdict clean "short summary"`
    - review with findings: `node .ai/runtime/review-state.mjs verdict issues-found "short summary"`
@@ -124,7 +125,7 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 
 ## Orchestrator-delegate mode
 
-Use when the parent `/orchestrator` launched this run as a **separate** review subagent after implement/test.
+Use when the parent `/orchestrator` launched this run as a **separate** review subagent immediately after implementation.
 
 - Read only the assigned issue's selected OpenSpec change, `progress.md`, and diff/evidence from the orchestrator worktree path in the prompt.
 - Honor parent-provided `review_depth: simple|full`.
@@ -149,9 +150,9 @@ End the response with this exact machine-readable block:
 ```yaml
 orchestrator_review_verdict:
   review_depth: simple | full
-  result: clean | low | medium | high
+  result: clean | low | medium | high | critical
   top_findings:
-    - severity: high | medium | low
+    - severity: high | medium | critical | low
       summary: "..."
       addressed_by_fix_hint: "file or change type orchestrator should verify after fix"
   after_fix_re_review: required | optional | not_needed
@@ -161,7 +162,7 @@ orchestrator_review_verdict:
 ```
 
 - `result: clean|low` only when the task is complete within effective scope (and OOS split is honest when applicable). Use `after_fix_re_review: not_needed`.
-- `result: medium|high` when any blocking finding remains.
+- `result: medium|high|critical` when any blocking finding remains.
 - `after_fix_re_review`:
   - `not_needed` — trivial fixes (typos, single test, obvious one-liner); orchestrator may `skip-rereview` after scoped green.
   - `optional` — orchestrator decides using diff + findings (see orchestrator-fix-loop-decision.md).
@@ -174,4 +175,4 @@ orchestrator_review_verdict:
 - Brief summary last.
 - If no findings exist, say so explicitly and mention residual risk.
 - A clean verdict is valid only when the task is 100% complete against the source spec and plan **within the effective scope** (orchestrator: `Claimed Write Scope` + honest OOS documentation when full lint/verify stays red outside it).
-- `high` or `medium` findings require another implement/test/verify/review loop before the task can be considered complete.
+- `high`, `critical`, or `medium` findings require an implement → scoped test + lint fix loop before the task can be considered complete; repeat review only when required by the fix risk.

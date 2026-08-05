@@ -372,6 +372,24 @@ function requirePassingScopedValidation(run) {
   }
 }
 
+function hasCurrentScopedValidation(run) {
+  if (
+    run.lastTestResult !== "pass" ||
+    run.lastTestScope !== "scoped" ||
+    run.lastLintResult !== "pass" ||
+    run.lastLintScope !== "scoped" ||
+    run.lastTestFingerprint !== run.lastLintFingerprint
+  ) {
+    return false;
+  }
+
+  try {
+    return run.lastTestFingerprint === currentWorkspaceFingerprint(run);
+  } catch {
+    return false;
+  }
+}
+
 function requireCleanReview(run) {
   if (!["clean", "low"].includes(run.lastReviewResult)) {
     throw new Error("cannot finalize without clean or low review evidence");
@@ -585,7 +603,12 @@ function commandRecordTest(args) {
   } else if (result === "fail") {
     run.status = "fix-loop";
     run.currentStep = currentStep ?? "scoped-tests-failed";
-  } else if (scope === "scoped" && run.status === "testing" && run.lastLintResult === "pass") {
+  } else if (
+    scope === "scoped" &&
+    run.status === "testing" &&
+    run.lastLintResult === "pass" &&
+    run.lastLintFingerprint === run.lastTestFingerprint
+  ) {
     requirePassingScopedValidation(run);
     run.status = "pre-finalize";
     run.currentStep = currentStep ?? "run-full-verify";
@@ -630,7 +653,12 @@ function commandRecordLint(args) {
   } else if (result === "fail") {
     run.status = "fix-loop";
     run.currentStep = currentStep ?? "scoped-lint-failed";
-  } else if (scope === "scoped" && run.status === "testing" && run.lastTestResult === "pass") {
+  } else if (
+    scope === "scoped" &&
+    run.status === "testing" &&
+    run.lastTestResult === "pass" &&
+    run.lastTestFingerprint === run.lastLintFingerprint
+  ) {
     requirePassingScopedValidation(run);
     run.status = "pre-finalize";
     run.currentStep = currentStep ?? "run-full-verify";
@@ -960,9 +988,9 @@ function commandRecordFixResolution(args) {
     );
   }
   requirePassingScopedValidation(run);
-  if (!["medium", "high", "critical", "low"].includes(run.lastReviewResult ?? "")) {
+  if (!["clean", "low", "medium", "high", "critical"].includes(run.lastReviewResult ?? "")) {
     throw new Error(
-      "record-fix-resolution applies after a review with findings (lastReviewResult medium/high/critical/low)"
+      "record-fix-resolution applies after review or validation findings (lastReviewResult clean/low/medium/high/critical)"
     );
   }
 
@@ -1079,13 +1107,7 @@ function commandGraphNext(args) {
         "Stop automation. Ask the user what to do next. To resume fix-loop after approval: approve-fix-loop.",
       ...limits
     };
-  } else if (
-    run.status === "fix-loop" &&
-    run.lastTestResult === "pass" &&
-    run.lastTestScope === "scoped" &&
-    run.lastLintResult === "pass" &&
-    run.lastLintScope === "scoped"
-  ) {
+  } else if (run.status === "fix-loop" && hasCurrentScopedValidation(run)) {
     payload = {
       step: "pending",
       action: "decide_fix_loop",
@@ -1094,7 +1116,7 @@ function commandGraphNext(args) {
       lastReviewResult: run.lastReviewResult,
       afterFixRereviewHint: run.afterFixRereviewHint,
       message:
-        "Scoped tests passed after fix. Read review findings + diff; choose skip-rereview or require-rereview (see orchestrator-fix-loop-decision.md). Do not auto-launch review subagent.",
+        "Scoped tests and lint passed after fix. Read review findings + diff; choose skip-rereview or require-rereview (see orchestrator-fix-loop-decision.md). Do not auto-launch review subagent.",
       ...limits
     };
   } else if (run.status === "testing") {

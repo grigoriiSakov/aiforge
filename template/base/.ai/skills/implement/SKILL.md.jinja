@@ -101,12 +101,12 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - do not create a second branch/worktree
    - update run state through the orchestrator runtime helper
 15. All reasoning, progress notes, and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
-16. If the latest review produced `high` or `medium` findings, implementation must resume from those findings and continue the loop:
+16. If the latest review produced `high`, `critical`, or `medium` findings, implementation must resume from those findings and continue the bounded loop:
    - fix the findings
    - run `{{ task_command }} {{ task_test_name }}`
-   - run `{{ task_command }} {{ task_verify_name }}`
-   - run `/review` again
-   - do not consider the task complete until review no longer reports `high` or `medium`
+   - run `{{ task_command }} {{ task_lint_name }}`
+   - run `/review` again only when the fix is non-trivial or the review verdict requires it
+   - do not consider the task complete until scoped test and lint are green and blocking findings are resolved
 17. Keep the active OpenSpec change coherent during implementation:
    - check off completed entries in `tasks.md` as evidence is produced
    - Use `/opsx:update <change-id>` when implementation changes the approved artifacts; update proposal/specs/design/tasks before continuing code work
