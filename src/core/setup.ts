@@ -29,13 +29,26 @@ const RETIRED_GENERATED_FILES = [
 
 const RETIRED_GENERATED_DIRECTORIES = [
   path.join(".ai", "skills", "supervisor"),
+  path.join(".ai", "skills", "initiative-supervisor"),
+  path.join(".ai", "skills", "initiative-supervisor-init"),
   path.join(".ai", "runtime", "supervisor-launchers")
 ];
 
-export function previewRetiredGeneratedFiles(repoRoot: string): string[] {
-  return RETIRED_GENERATED_FILES.filter((relativePath) =>
+export function previewRetiredGeneratedSurfaces(repoRoot: string): string[] {
+  const files = RETIRED_GENERATED_FILES.filter((relativePath) =>
     fs.existsSync(path.join(repoRoot, relativePath))
   );
+  const fileSet = new Set(RETIRED_GENERATED_FILES);
+  const directories = RETIRED_GENERATED_DIRECTORIES.filter((relativePath) => {
+    const absolutePath = path.join(repoRoot, relativePath);
+    if (!fs.existsSync(absolutePath) || !fs.lstatSync(absolutePath).isDirectory()) {
+      return false;
+    }
+    return fs
+      .readdirSync(absolutePath)
+      .every((entry) => fileSet.has(path.join(relativePath, entry)));
+  });
+  return [...files, ...directories];
 }
 
 /**

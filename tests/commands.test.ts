@@ -766,6 +766,13 @@ process.exit(0);
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       fs.writeFileSync(targetPath, "// retired generated file\n");
     }
+    const emptyRetiredDirectories = [
+      [".ai", "skills", "initiative-supervisor"],
+      [".ai", "skills", "initiative-supervisor-init"]
+    ];
+    for (const parts of emptyRetiredDirectories) {
+      fs.mkdirSync(path.join(repoRoot, ...parts), { recursive: true });
+    }
     const evidencePath = path.join(repoRoot, ".ai", "runtime", "supervisor", "runs", "old-run.json");
     const userNotePath = path.join(repoRoot, ".ai", "skills", "supervisor", "notes.md");
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
@@ -777,7 +784,9 @@ process.exit(0);
 
     const expectedRemovals = [
       path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"),
-      ...retiredFiles.map((parts) => path.join(...parts))
+      ...retiredFiles.map((parts) => path.join(...parts)),
+      ...emptyRetiredDirectories.map((parts) => path.join(...parts)),
+      path.join(".ai", "runtime", "supervisor-launchers")
     ];
     for (const dryRun of [syncDryRun, updateDryRun]) {
       expect(dryRun.ok).toBe(true);
@@ -786,6 +795,10 @@ process.exit(0);
     for (const parts of retiredFiles) {
       expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(true);
     }
+    for (const parts of emptyRetiredDirectories) {
+      expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(true);
+    }
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "supervisor-launchers"))).toBe(true);
     expect(fs.readFileSync(evidencePath, "utf8")).toContain('"done"');
     expect(fs.readFileSync(userNotePath, "utf8")).toContain("historical note");
 
@@ -795,6 +808,10 @@ process.exit(0);
     for (const parts of retiredFiles) {
       expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(false);
     }
+    for (const parts of emptyRetiredDirectories) {
+      expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(false);
+    }
+    expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "supervisor-launchers"))).toBe(false);
     expect(fs.readFileSync(evidencePath, "utf8")).toContain('"done"');
     expect(fs.readFileSync(userNotePath, "utf8")).toContain("historical note");
   });

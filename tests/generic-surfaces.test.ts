@@ -155,6 +155,8 @@ describe("generic reusable surfaces", () => {
     const cliSource = fs.readFileSync(path.join(process.cwd(), "src", "cli", "index.ts"), "utf8");
     const retiredPaths = [
       ".ai/skills/supervisor/SKILL.md.jinja",
+      ".ai/skills/initiative-supervisor",
+      ".ai/skills/initiative-supervisor-init",
       ".ai/runtime/supervisor-state.mjs.jinja",
       ".ai/runtime/supervisor-context.mjs.jinja",
       ".ai/runtime/supervisor-daemon.mjs.jinja",
