@@ -58,8 +58,8 @@ alwaysApply: true
 - Automated tests must not call real third-party services by default; use mocks/stubs/fakes at the boundary.
 - Verify through canonical tasks from `ai.config.yaml`, not ad-hoc stack guesses.
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.
-- Verification is not complete without review; green checks alone do not mean the task is done.
-- If review reports `high` or `medium` findings, verification is failed and the task must re-enter the implement loop.
+- Review is the first post-implementation gate; scoped test and lint evidence follow review before final verification.
+- If review reports `high`, `critical`, or `medium` findings, verification is failed and the task must re-enter the implement loop.
 - For **orchestrator-managed** work with a declared `Claimed Write Scope`, repo-wide `lint`/`verify` red caused by **pre-existing or out-of-scope** code does not by itself block the test→review loop if: scoped verification for the touched behavior is green, the failure is documented in progress with path-level reasoning, and review explicitly accepts the scope split (residual repo risk called out in the review summary).
 
 ## Gate 5: Review
@@ -73,7 +73,7 @@ alwaysApply: true
 - Review must verify implementation-vs-spec conformance, design invariants, tasks-to-requirements traceability, reuse vs duplicate implementation, and test adequacy.
 - Review must confirm 100% completion against the source request and validated OpenSpec change.
 - The task is not complete while any required acceptance point, plan step, or mandatory follow-through item is still open.
-- `high` or `medium` findings force a mandatory loop: `implement -> test -> verify -> review` until those severity levels are gone.
+- `high`, `critical`, or `medium` findings force a bounded loop: `implement -> review -> scoped test + lint`; repeat review only when the fix is non-trivial or the reviewer requires it.
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.
 - For orchestrated work, review must confirm the run is still aligned with the current worktree fingerprint before marking it review-ready.
 - When progress documents full-pipeline `lint`/`verify` failure outside `Claimed Write Scope`, review must either validate that justification or return findings — not stall indefinitely on global red alone.

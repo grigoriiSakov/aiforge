@@ -9,20 +9,20 @@ title: "Orchestrator Fix-Loop Decision"
 ## When fix-loop status + scoped test pass
 
 1. Read the last `orchestrator_review_verdict` in the review subagent output (or `progress.md` Fix Loop).
-2. Map each `medium`/`high` finding → concrete change in the worktree.
+2. Map each `medium`/`high`/`critical` finding → concrete change in the worktree.
 3. Choose **one** path:
 
 | Path | When | Next commands |
 |------|------|----------------|
-| **Skip re-review** | All blocking findings addressed; scoped green; localized diff; review said `after_fix_re_review: not_needed` or `optional` and you can attest closure | `record-fix-resolution --decision skip-rereview --note "..."` → `pre-finalize` / full suite |
+| **Skip re-review** | All blocking findings addressed; scoped test + lint green; localized diff; review said `after_fix_re_review: not_needed` or `optional` and you can attest closure | `record-fix-resolution --decision skip-rereview --note "..."` → `pre-finalize` / full suite |
 | **Require re-review** | Partial fix, ambiguous closure, architecture/spec risk, security, cross-cutting change, or review said `after_fix_re_review: required` | `record-fix-resolution --decision require-rereview --note "..."` → `set-status reviewing` → **one** review subagent |
 
 ## Skip re-review (default for trivial fixes)
 
 OK when **all** apply:
 
-- Every `medium`/`high` finding has a matching fix in claimed paths (or plan amended).
-- Scoped lint/test pass recorded (`record-test --scope scoped --result pass`).
+- Every `medium`/`high`/`critical` finding has a matching fix in claimed paths (or plan amended).
+- Scoped test and lint pass recorded (`record-test --scope scoped --result pass` and `record-lint --scope scoped --result pass`).
 - No new behavior outside `Claimed Write Scope`.
 - Fix is not a refactor — comment, test, typo, single guard, import, type hint.
 
@@ -44,9 +44,9 @@ Mandatory when any:
 ## Machine steps
 
 ```bash
-# After scoped fix + record-test pass:
+# After scoped fix + record-test and record-lint pass:
 node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID
-# → decide_fix_loop when lastTestResult=pass in fix-loop
+# → decide_fix_loop when both scoped results are pass in fix-loop
 
 node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "finding F1: added test X; scoped green"
 # OR

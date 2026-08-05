@@ -222,15 +222,15 @@ node .ai/runtime/orchestrator-state.mjs model-hint --role review
 The generated workflow follows:
 
 ```text
-issue -> plan -> implement -> test -> review
+issue -> plan -> implement -> review -> scoped test + lint -> full verify
 ```
 
 The orchestrator keeps review cost under control:
 
-- scoped tests are expected before review
+- review runs immediately after implementation; no pre-review gate is run
+- scoped tests and lint are required after review
 - full verification is reserved for the final gate
-- review depth is selected from the change itself: `simple` for small local diffs, `full` for risky or broad work
-- after a fix, the orchestrator chooses `skip-rereview` or `require-rereview` instead of spending review iterations by habit
+- medium/high/critical findings trigger a bounded fix loop; repeat review only when the fix is non-trivial or explicitly required
 
 ## MCP
 

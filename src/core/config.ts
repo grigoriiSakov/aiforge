@@ -63,7 +63,7 @@ export function createConfig(params: {
     },
     workflow: {
       tracker: profile.trackerDefault,
-      phases: ["issue", "plan", "implement", "test", "review"],
+      phases: ["issue", "plan", "implement", "review", "test"],
       language: profile.languageDefault,
       trackerStates: {
         planReady: "Todo",
@@ -83,14 +83,14 @@ export function createConfig(params: {
     orchestrator: {
       worktreeRoot: `~/worktrees/${params.projectSlug}`,
       branchPrefix: "agent/",
-      maxReviewIterations: 2,
+      maxReviewIterations: 1,
       auditGate: "never",
-      simplifyGate: "optional"
+      simplifyGate: "never"
     },
     minimalism: {
       enabled: true,
       level: "full",
-      reviewGate: "before-review"
+      reviewGate: "never"
     },
     execution: createDefaultExecutionConfig(task),
     artifacts: {
@@ -440,7 +440,7 @@ function normalizeOrchestratorSimplifyGate(value: string | undefined): Orchestra
     return value;
   }
 
-  return "optional";
+  return "never";
 }
 
 function normalizeMinimalismLevel(value: string | undefined): MinimalismLevel {
@@ -456,7 +456,7 @@ function normalizeMinimalismReviewGate(value: string | undefined): MinimalismRev
     return value;
   }
 
-  return "before-review";
+  return "never";
 }
 
 function normalizeMinimalismConfig(

@@ -55,6 +55,7 @@ alwaysApply: true
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
 - Completion means all required OpenSpec, implementation, verification, and review points are done; partial completion is not completion.
 {% if minimalism_enabled and minimalism_level != "off" -%}
-- When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. Orchestrator may delegate `/simplify-review` when `orchestrator.simplifyGate` ≠ `never`.
+- When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. The orchestrator does not run a separate pre-review simplify gate.
 {% endif -%}
-- If review produces `high` or `medium` findings, the workflow must loop back through `implement -> test -> verify -> review` until those severities are eliminated.
+- The default post-implementation order is `implement -> review -> scoped test + lint -> full verify`.
+- If review produces `high`, `critical`, or `medium` findings, fix them and run scoped test + lint. Repeat review only when the fix is non-trivial or the review verdict requires it; do not run a pre-review gate.

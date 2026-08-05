@@ -22,7 +22,8 @@ const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
 const PENDING_STATUSES = new Set(["queued", "blocked-by-conflict"]);
 const FLOW_COMPLETE_STATUSES = new Set(["done"]);
 const HUMAN_GATE_STATUSES = new Set(["awaiting-human-approval"]);
-const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high"]);
+const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high", "critical"]);
+const BLOCKING_REVIEW_RESULTS = new Set(["medium", "high", "critical"]);
 const TEST_SCOPES = new Set(["scoped", "full"]);
 const MODEL_HINT_SKIP = new Set(["auto", "default", "none", ""]);
 const AGENT_RUNTIME_IDS = ["cursor", "codex", "claude", "agent", "agents"];
@@ -33,10 +34,10 @@ const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.m
 const ALLOWED_STATUS_TRANSITIONS = {
   submitted: new Set(["reserved", "queued", "blocked-by-conflict", "aborted"]),
   reserved: new Set(["building", "testing", "aborted"]),
-  building: new Set(["building", "testing", "fix-loop", "aborted"]),
+  building: new Set(["building", "testing", "reviewing", "fix-loop", "aborted"]),
   testing: new Set(["testing", "reviewing", "fix-loop", "aborted"]),
   reviewing: new Set(["reviewing", "fix-loop", "pre-finalize", "awaiting-human-approval", "aborted"]),
-  "fix-loop": new Set(["fix-loop", "testing", "awaiting-human-approval", "aborted"]),
+  "fix-loop": new Set(["fix-loop", "building", "testing", "reviewing", "awaiting-human-approval", "aborted"]),
   "pre-finalize": new Set(["pre-finalize", "testing", "awaiting-finalize", "awaiting-human-approval", "aborted"]),
   "awaiting-human-approval": new Set([
     "awaiting-human-approval",
@@ -237,6 +238,9 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     lastTestScope: overrides.lastTestScope ?? existingRun?.lastTestScope ?? null,
     lastTestResult: overrides.lastTestResult ?? existingRun?.lastTestResult ?? null,
     lastTestFingerprint: overrides.lastTestFingerprint ?? existingRun?.lastTestFingerprint ?? null,
+    lastLintScope: overrides.lastLintScope ?? existingRun?.lastLintScope ?? null,
+    lastLintResult: overrides.lastLintResult ?? existingRun?.lastLintResult ?? null,
+    lastLintFingerprint: overrides.lastLintFingerprint ?? existingRun?.lastLintFingerprint ?? null,
     lastReviewResult: overrides.lastReviewResult ?? existingRun?.lastReviewResult ?? null,
     lastReviewFingerprint: overrides.lastReviewFingerprint ?? existingRun?.lastReviewFingerprint ?? null,
     submittedAt: existingRun?.submittedAt ?? utcNow(),
@@ -352,6 +356,19 @@ function requirePassingTest(run) {
   }
   if (run.lastTestFingerprint !== currentWorkspaceFingerprint(run)) {
     throw new Error("worktree changed after the last passing test; rerun tests first");
+  }
+}
+
+function requirePassingScopedValidation(run) {
+  if (run.lastTestResult !== "pass" || run.lastTestScope !== "scoped") {
+    throw new Error("cannot finalize scoped validation without passing scoped test evidence");
+  }
+  if (run.lastLintResult !== "pass" || run.lastLintScope !== "scoped") {
+    throw new Error("cannot finalize scoped validation without passing scoped lint evidence");
+  }
+  const fingerprint = currentWorkspaceFingerprint(run);
+  if (run.lastTestFingerprint !== fingerprint || run.lastLintFingerprint !== fingerprint) {
+    throw new Error("worktree changed after scoped validation; rerun test and lint");
   }
 }
 
@@ -515,16 +532,9 @@ function commandSetStatus(args) {
   }
 
   requireTransition(run.status, nextStatus);
-  if (nextStatus === "reviewing") {
-    requirePassingTest(run);
-  }
   if (nextStatus === "awaiting-finalize") {
     requirePassingTest(run);
     requireCleanReview(run);
-  }
-  if (["building", "testing", "fix-loop"].includes(nextStatus)) {
-    run.lastReviewResult = null;
-    run.lastReviewFingerprint = null;
   }
 
   run.status = nextStatus;
@@ -568,8 +578,6 @@ function commandRecordTest(args) {
   run.lastTestScope = scope;
   run.lastTestResult = result;
   run.lastTestFingerprint = currentWorkspaceFingerprint(run);
-  run.lastReviewResult = null;
-  run.lastReviewFingerprint = null;
 
   if (result === "fail" && scope === "full") {
     run.status = "awaiting-human-approval";
@@ -577,6 +585,55 @@ function commandRecordTest(args) {
   } else if (result === "fail") {
     run.status = "fix-loop";
     run.currentStep = currentStep ?? "scoped-tests-failed";
+  } else if (scope === "scoped" && run.status === "testing" && run.lastLintResult === "pass") {
+    requirePassingScopedValidation(run);
+    run.status = "pre-finalize";
+    run.currentStep = currentStep ?? "run-full-verify";
+  } else if (scope === "full" && run.status === "pre-finalize") {
+    run.status = "awaiting-finalize";
+    run.currentStep = currentStep ?? "awaiting-user-finalize";
+  } else if (currentStep) {
+    run.currentStep = currentStep;
+  }
+
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandRecordLint(args) {
+  const issueId = requireOption(args, "--issue");
+  const result = requireOption(args, "--result");
+  const scope = getOption(args, "--scope", "scoped");
+  const currentStep = getOption(args, "--current-step", null);
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (!["pass", "fail"].includes(result)) {
+    throw new Error("record-lint result must be pass or fail");
+  }
+  if (!TEST_SCOPES.has(scope)) {
+    throw new Error("record-lint --scope must be scoped or full");
+  }
+
+  run.lastLintScope = scope;
+  run.lastLintResult = result;
+  run.lastLintFingerprint = currentWorkspaceFingerprint(run);
+
+  if (result === "fail" && scope === "full") {
+    run.status = "awaiting-human-approval";
+    run.currentStep = currentStep ?? "full-lint-failed";
+  } else if (result === "fail") {
+    run.status = "fix-loop";
+    run.currentStep = currentStep ?? "scoped-lint-failed";
+  } else if (scope === "scoped" && run.status === "testing" && run.lastTestResult === "pass") {
+    requirePassingScopedValidation(run);
+    run.status = "pre-finalize";
+    run.currentStep = currentStep ?? "run-full-verify";
   } else if (scope === "full" && run.status === "pre-finalize") {
     run.status = "awaiting-finalize";
     run.currentStep = currentStep ?? "awaiting-user-finalize";
@@ -607,7 +664,6 @@ function commandRecordReview(args) {
     throw new Error(`unknown review result: ${result}`);
   }
 
-  requirePassingTest(run);
   run.lastReviewResult = result;
   run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
   const hintIdx = args.indexOf("--after-fix-rereview");
@@ -620,14 +676,9 @@ function commandRecordReview(args) {
   }
 
   if (["clean", "low"].includes(result)) {
-    if (run.lastTestScope === "full" && run.lastTestResult === "pass") {
-      run.status = "awaiting-finalize";
-      run.currentStep = currentStep ?? "awaiting-user-finalize";
-    } else {
-      run.status = "pre-finalize";
-      run.currentStep = currentStep ?? "run-full-suite";
-    }
-  } else {
+    run.status = "testing";
+    run.currentStep = currentStep ?? "run-scoped-validation";
+  } else if (BLOCKING_REVIEW_RESULTS.has(result)) {
     const nextIteration = Number(run.reviewIteration ?? 0) + 1;
     if (nextIteration > MAX_REVIEW_ITERATIONS) {
       run.reviewIteration = nextIteration;
@@ -903,9 +954,15 @@ function commandRecordFixResolution(args) {
       "record-fix-resolution requires scoped test pass first (record-test --scope scoped --result pass)"
     );
   }
-  if (!["medium", "high", "low"].includes(run.lastReviewResult ?? "")) {
+  if (run.lastLintResult !== "pass" || run.lastLintScope !== "scoped") {
     throw new Error(
-      "record-fix-resolution applies after a review with findings (lastReviewResult medium/high/low)"
+      "record-fix-resolution requires scoped lint pass first (record-lint --scope scoped --result pass)"
+    );
+  }
+  requirePassingScopedValidation(run);
+  if (!["medium", "high", "critical", "low"].includes(run.lastReviewResult ?? "")) {
+    throw new Error(
+      "record-fix-resolution applies after a review with findings (lastReviewResult medium/high/critical/low)"
     );
   }
 
@@ -1022,7 +1079,13 @@ function commandGraphNext(args) {
         "Stop automation. Ask the user what to do next. To resume fix-loop after approval: approve-fix-loop.",
       ...limits
     };
-  } else if (run.status === "fix-loop" && run.lastTestResult === "pass" && run.lastTestScope === "scoped") {
+  } else if (
+    run.status === "fix-loop" &&
+    run.lastTestResult === "pass" &&
+    run.lastTestScope === "scoped" &&
+    run.lastLintResult === "pass" &&
+    run.lastLintScope === "scoped"
+  ) {
     payload = {
       step: "pending",
       action: "decide_fix_loop",
@@ -1034,14 +1097,48 @@ function commandGraphNext(args) {
         "Scoped tests passed after fix. Read review findings + diff; choose skip-rereview or require-rereview (see orchestrator-fix-loop-decision.md). Do not auto-launch review subagent.",
       ...limits
     };
-  } else if (["reserved", "building", "testing", "fix-loop"].includes(run.status)) {
+  } else if (run.status === "testing") {
     payload = {
       step: "pending",
-      action: "run_build",
+      action: "run_scoped_validation",
       issue: issueId,
       worktreePath: run.worktreePath,
       testScope: "scoped",
-      message: "Use scoped lint/tests only — not the full project suite.",
+      lintScope: "scoped",
+      message: "Run scoped tests and lint after review; record both as pass before full verification.",
+      ...limits
+    };
+  } else if (run.status === "building") {
+    payload = {
+      step: "pending",
+      action: "run_implementation",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      message: "Complete implementation, then move directly to reviewing; do not run pre-review tests or lint.",
+      ...limits
+    };
+  } else if (
+    run.status === "fix-loop" &&
+    ((run.lastTestResult === "pass" && run.lastTestScope === "scoped") ||
+      (run.lastLintResult === "pass" && run.lastLintScope === "scoped"))
+  ) {
+    payload = {
+      step: "pending",
+      action: "run_scoped_validation",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      testScope: "scoped",
+      lintScope: "scoped",
+      message: "Finish the missing scoped test or lint check before resolving the fix loop.",
+      ...limits
+    };
+  } else if (run.status === "fix-loop") {
+    payload = {
+      step: "pending",
+      action: "run_implementation_fix",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      message: "Apply review findings, then run scoped tests and lint until both are green.",
       ...limits
     };
   } else if (run.status === "reviewing") {
@@ -1107,6 +1204,9 @@ function main() {
       return;
     case "record-test":
       commandRecordTest(args);
+      return;
+    case "record-lint":
+      commandRecordLint(args);
       return;
     case "record-review":
       commandRecordReview(args);

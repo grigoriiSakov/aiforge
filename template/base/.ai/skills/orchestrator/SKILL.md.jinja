@@ -1,13 +1,13 @@
 ---
 name: orchestrator
-description: Own the issue -> plan -> implement -> test -> review pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
+description: Own the issue -> plan -> implement -> review -> test pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
 ---
 
 # Orchestrator
 
 Pipeline owner for:
 
-`issue -> plan -> implement -> test -> review`
+`issue -> plan -> implement -> review -> test`
 
 ## Rule preflight
 
@@ -37,7 +37,7 @@ Pipeline owner for:
    - reservation
    - queue / conflict state
    - worktree assignment
-   - implement / test / review transitions
+   - implement / review / test transitions
    - terminal release
 5. Accept exactly one issue ID per orchestrator run.
 6. Do not start implementation until `openspec validate <change-id>` passes and `design.md` contains machine-readable `Claimed Write Scope`.
@@ -83,25 +83,28 @@ Pipeline owner for:
 
 ## Test strategy (token guard)
 
-20. **Между фазами и в fix-loop — только scoped:** узкий lint/test по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite между review-итерациями.
-21. Запись scoped evidence:
+20. **Review first:** после implementation сразу переходи к review. Не запускай pre-review test, lint, simplify-review или другой предварительный review gate.
+21. **После review и в fix-loop — только scoped:** узкий lint/test по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
+22. Запись scoped evidence:
     - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped`
-22. Перед review gate: scoped pass обязателен; затем `set-status --status reviewing`.
-23. **Полный suite — один раз в конце:** только после clean/low review gate, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
+23. Перед review gate scoped evidence не требуется; после review запиши оба результата:
+    - `record-test --issue ISSUE-ID --result pass|fail --scope scoped`
+    - `record-lint --issue ISSUE-ID --result pass|fail --scope scoped`
+24. **Полный suite — один раз в конце:** только после clean/low review gate и зелёного scoped test + lint, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
     - `{{ execution_verify_entrypoint }}` (full)
     - `record-test --issue ISSUE-ID --result pass|fail --scope full`
     - при **fail** full — **стоп**, статус `awaiting-human-approval`; пользователь решает; **не** начинай новый fix-loop автоматически
     - при **pass** full — runtime переводит в `awaiting-finalize`
-24. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** — **потолок** полных review→fix циклов, не цель. Счётчик растёт только на `record-review` с `medium`/`high`, **не** на `skip-rereview`. После потолка — `awaiting-human-approval` + `approve-fix-loop`.
+25. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** — потолок повторных review→fix циклов, не цель. Счётчик растёт только на `record-review` с `medium`/`high`/`critical`, **не** на `skip-rereview`. После потолка — `awaiting-human-approval` + `approve-fix-loop`.
 
 ## Phase evidence
 
 25. A phase is not complete without evidence:
    - `plan` -> complete and validated OpenSpec change
    - `implement` -> `openspec-apply-change <change-id>` tasks and code changes aligned with the selected OpenSpec change
-   - `test` -> scoped canonical evidence (п. 20–21)
+   - `test` -> scoped canonical test + lint evidence (п. 20–23)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
-   - **Quality bar (in-scope):** нельзя уходить в review без scoped green по затронутому поведению в `Claimed Write Scope`.
+   - **Quality bar (in-scope):** после review нельзя уходить в full verify без scoped green по тестам и линтеру в `Claimed Write Scope`.
    - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
    - **«Старые» ошибки внутри скоупа:** не отмазка.
 
@@ -142,18 +145,10 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
     - следуй полю `instruction` в JSON: передавай model preference только нативному subagent tool текущего host; если он не поддерживает выбор, используй inherited compatible model и зафиксируй fallback.
     - запрещено превращать model hint в shell launch (`codex exec`, `claude`, `cursor-agent`) или PTY polling.
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
-27. После scoped `record-test --result pass`{% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %} и **до** `set-status --status reviewing`{% endif %}:
-{% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %}
-    - **simplify gate (`{{ orchestrator_simplify_gate }}`):** subagent `.ai/skills/simplify-review/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role simplifyReview`.
-    - распарсь `orchestrator_simplify_verdict` из YAML ответа.
-    - `return_to_implement: required` **или** (`{{ orchestrator_simplify_gate }}` = `always` и `result: blocking`) → fix-loop: упрости код по findings → scoped test → `graph next` (не запускай review subagent пока blocking не снят).
-    - `{{ orchestrator_simplify_gate }}` = `optional` и `return_to_implement: optional` → оркестратор решает по `net_lines_cut_possible` и blast radius; зафиксируй в `progress.md` → `### Simplify gate`.
-    - `result: lean` или advisory-only → продолжай к review gate.
-{% endif %}
-    - `set-status --status reviewing`
+27. После implementation сразу выполни `set-status --status reviewing` — без pre-review test/lint и без simplify-review.
     - **review-depth triage (обязательно до делегирования):** модель-оркестратор классифицирует изменение по diff + `Claimed Write Scope` + `Execution Contract`, выбирает ровно один режим и записывает выбор в `progress.md` → `### Review gate`:
       - `simple` — только если все признаки одновременно верны: <=2 claimed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, план без открытых спорных решений.
-      - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high`, `after_fix_re_review: required`, или оркестратор сомневается.
+      - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high|critical`, `after_fix_re_review: required`, или оркестратор сомневается.
       - default при сомнении — `full`; запрещено запускать одновременно `simple` и `full` review для одного gate.
     - **ровно один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change / `progress.md`.
 {% if orchestrator_audit_gate == "always" %}
@@ -168,13 +163,13 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
     - после ответа review subagent распарсь `after_fix_re_review` из YAML и при `record-review` передай:  
       `--after-fix-rereview required|optional|not_needed` (как в вердикте).
 28. По вердиктам:
-    - review `medium`/`high`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking`{% endif %} -> `record-review` (+ опционально `--after-fix-rereview required|optional|not_needed` из YAML review) -> `fix-loop` → scoped fix → `record-test --scope scoped --result pass` → **`graph next` → `decide_fix_loop`** (п. 29), **не** автоматический повтор review.
-    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> `pre-finalize` / full suite (п. 23)
+    - review `medium`/`high`/`critical`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking`{% endif %} -> `record-review` (+ опционально `--after-fix-rereview required|optional|not_needed` из YAML review) -> `fix-loop` → scoped fix → **оба** `record-test` и `record-lint` с `pass` → **`graph next` → `decide_fix_loop`** (п. 29), **не** автоматический повтор review.
+    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> scoped test + lint -> `pre-finalize` / full suite (п. 24)
 29. **После фикса — решение оркестратора (обязательно):** см. `.ai/reference/orchestrator-fix-loop-decision.md`. Кратко:
     - прочитай `orchestrator_review_verdict` и diff; сопоставь каждый finding с правкой;
-    - **`skip-rereview`** (типичный trivial fix): все findings закрыты, scoped green, локальный diff →  
+    - **`skip-rereview`** (типичный trivial fix): все findings закрыты, scoped test + lint green, локальный diff →  
       `node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "..."`  
-      → `pre-finalize` / full suite (п. 23) **без** нового review subagent;
+      → `pre-finalize` / full suite (п. 24) **без** нового review subagent;
     - **`require-rereview`**: сомнение, partial fix, `after_fix_re_review: required`, security/architecture →  
       `record-fix-resolution --decision require-rereview` → затем **один** review subagent (п. 27);
     - зафиксируй выбор в `progress.md` → `### Fix resolution`;

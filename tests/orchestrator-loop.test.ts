@@ -105,17 +105,25 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
   const runPath = path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", `${issueId}.json`);
   const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
   run.worktreePath = repoRoot;
-  run.status = "testing";
+  run.status = "building";
   fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
-  runNodeScript(
-    runtimePath,
-    ["record-test", "--issue", issueId, "--result", "pass", "--scope", "scoped"],
-    repoRoot
-  );
   runNodeScript(runtimePath, ["set-status", "--issue", issueId, "--status", "reviewing"], repoRoot);
 }
 
 describe("orchestrator loop guards", () => {
+  test("implementation moves directly to review without pre-review test evidence", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-review-first-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-8");
+
+    prepareForReview(runtimePath, repoRoot, "APP-8");
+
+    const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-8"], repoRoot));
+    expect(graph.action).toBe("run_review");
+  });
+
   test("record-review beyond max iterations sets awaiting-human-approval", () => {
     const repoRoot = makeTempRepo("aiforge-orch-limit-");
     initGitRepo(repoRoot);
@@ -144,7 +152,7 @@ describe("orchestrator loop guards", () => {
     expect(approved.status).toBe("fix-loop");
   });
 
-  test("clean review moves to pre-finalize until full scoped test recorded", () => {
+  test("clean review requires scoped test and lint before full verification", () => {
     const repoRoot = makeTempRepo("aiforge-orch-prefinalize-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "2");
@@ -156,7 +164,28 @@ describe("orchestrator loop guards", () => {
     const afterReview = JSON.parse(
       runNodeScript(runtimePath, ["record-review", "--issue", "APP-10", "--result", "clean"], repoRoot)
     );
-    expect(afterReview.status).toBe("pre-finalize");
+    expect(afterReview.status).toBe("testing");
+
+    const validationGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot));
+    expect(validationGraph.action).toBe("run_scoped_validation");
+
+    const afterTest = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        ["record-test", "--issue", "APP-10", "--result", "pass", "--scope", "scoped"],
+        repoRoot
+      )
+    );
+    expect(afterTest.status).toBe("testing");
+
+    const afterLint = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        ["record-lint", "--issue", "APP-10", "--result", "pass", "--scope", "scoped"],
+        repoRoot
+      )
+    );
+    expect(afterLint.status).toBe("pre-finalize");
 
     const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot));
     expect(graph.action).toBe("run_full_verify");
@@ -262,9 +291,18 @@ describe("orchestrator loop guards", () => {
     run.status = "fix-loop";
     run.lastReviewResult = "medium";
     run.reviewIteration = 1;
-    run.lastTestResult = "pass";
-    run.lastTestScope = "scoped";
     fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
+
+    runNodeScript(
+      runtimePath,
+      ["record-test", "--issue", "APP-11", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      ["record-lint", "--issue", "APP-11", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
 
     const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-11"], repoRoot));
     expect(graph.action).toBe("decide_fix_loop");

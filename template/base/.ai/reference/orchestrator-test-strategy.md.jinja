@@ -6,11 +6,11 @@ title: "Orchestrator Test Strategy"
 
 ## Goal
 
-Cut token burn from `implement -> full test -> review -> fix` loops. Default: **scoped** validation between phases; **full** project verify once after a clean review gate.
+Cut token burn from `implement -> test -> review -> fix` loops. Default: **review first**, then scoped test + lint; **full** project verify once after a clean review gate.
 
 ## Scoped runs (default)
 
-During `building`, `testing`, `fix-loop`, and before the first `record-test` for a review gate:
+During `testing` and `fix-loop`, after the review gate:
 
 - Run **only** tests/checks tied to `Claimed Write Scope` and the active plan step.
 - Examples: Pest `--filter=…`, single test file, path from plan `Verify:` line, scoped lint on touched paths.
@@ -20,6 +20,7 @@ Record evidence:
 
 ```bash
 node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped
+node .ai/runtime/orchestrator-state.mjs record-lint --issue ISSUE-ID --result pass|fail --scope scoped
 ```
 
 Document the exact scoped command in `progress.md`.
@@ -42,7 +43,7 @@ node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pa
 
 `orchestrator.maxReviewIterations` in `ai.config.yaml` (template default: **{{ orchestrator_max_review_iterations }}**).
 
-When review returns `medium`/`high` (or audit `blocking` when audit ran) beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
+When review returns `medium`/`high`/`critical` (or audit `blocking` when audit ran) beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
 
 ```bash
 node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID

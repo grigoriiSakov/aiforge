@@ -28,7 +28,7 @@ Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix 
 2. Step — files — verify command
 
 ### Re-verify
-- scoped: `{{ task_command }} {{ task_verify_name }}` (paths from Claimed Write Scope)
+- scoped test + lint: `{{ task_command }} {{ task_test_name }}` and `{{ task_command }} {{ task_lint_name }}` (paths from Claimed Write Scope)
 - then: orchestrator **decides** skip-rereview vs require-rereview (`.ai/reference/orchestrator-fix-loop-decision.md`)
 
 ### Fix resolution
@@ -42,4 +42,4 @@ Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix 
 - Fix plans target **Claimed Write Scope** only unless the plan is amended.
 - Do not close the issue on chat-only “looks fine”; require command evidence from the plan.
 - After a fix loop, update `Spec Conformance` in progress and shrink open items.
-- Orchestrator: after scoped `record-test pass`, use `record-fix-resolution` — **not** automatic review subagent every time.
+- Orchestrator: after scoped `record-test pass` and `record-lint pass`, use `record-fix-resolution` — **not** automatic review subagent every time.
