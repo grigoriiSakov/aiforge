@@ -772,6 +772,21 @@ process.exit(0);
     fs.writeFileSync(evidencePath, '{"status":"done"}\n');
     fs.writeFileSync(userNotePath, "historical note\n");
 
+    const dryRun = await runSyncCommand(repoRoot, true);
+
+    expect(dryRun.ok).toBe(true);
+    expect(dryRun.details?.wouldRemove).toEqual(
+      [
+        path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"),
+        ...retiredFiles.map((parts) => path.join(...parts))
+      ]
+    );
+    for (const parts of retiredFiles) {
+      expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(true);
+    }
+    expect(fs.readFileSync(evidencePath, "utf8")).toContain('"done"');
+    expect(fs.readFileSync(userNotePath, "utf8")).toContain("historical note");
+
     const result = await runSyncCommand(repoRoot, false);
 
     expect(result.ok).toBe(true);

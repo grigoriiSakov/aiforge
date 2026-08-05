@@ -5,7 +5,7 @@ import {
   runCopierCopy,
   writeTemporaryAnswersFile
 } from "../core/copier.js";
-import { finalizeAfterCopierCopy } from "../core/setup.js";
+import { finalizeAfterCopierCopy, previewRetiredGeneratedFiles } from "../core/setup.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
 import { resolveTemplatePath } from "../core/template.js";
 import type { CommandResult, ProjectProfileId } from "../core/types.js";
@@ -39,7 +39,10 @@ export async function runSyncCommand(
       ok: true,
       code: 0,
       message: "Dry-run sync completed",
-      details: { profileId: config.profile.id }
+      details: {
+        profileId: config.profile.id,
+        wouldRemove: previewRetiredGeneratedFiles(repoRoot)
+      }
     };
   }
 

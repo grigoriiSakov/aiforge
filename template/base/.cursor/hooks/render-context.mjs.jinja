@@ -11,7 +11,6 @@ const taskStatePath = path.join(projectDir, ".ai", "runtime", "task-state.json")
 const reviewStatePath = path.join(projectDir, ".ai", "runtime", "review-verdict.json");
 const orchestratorRegistryPath = path.join(projectDir, ".ai", "runtime", "orchestrator", "registry.json");
 const orchestratorRunsDir = path.join(projectDir, ".ai", "runtime", "orchestrator", "runs");
-const supervisorRunsDir = path.join(projectDir, ".ai", "runtime", "supervisor", "runs");
 const contextDir = path.join(projectDir, ".ai", "context");
 const currentPath = path.join(contextDir, "current.md");
 
@@ -93,33 +92,6 @@ function getCurrentOrchestratorRun() {
   return null;
 }
 
-function getCurrentSupervisorRun() {
-  if (!fs.existsSync(supervisorRunsDir)) {
-    return null;
-  }
-
-  const branchName = currentBranch();
-  if (!branchName) {
-    return null;
-  }
-
-  for (const entry of fs.readdirSync(supervisorRunsDir)) {
-    if (!entry.endsWith(".json")) {
-      continue;
-    }
-    const run = readJson(path.join(supervisorRunsDir, entry));
-    if (!run || !["running", "paused"].includes(String(run.status ?? ""))) {
-      continue;
-    }
-    if (branchName !== String(run.managerBranch ?? "")) {
-      continue;
-    }
-    return run;
-  }
-
-  return null;
-}
-
 function nextActionForRun(run) {
   if (!run) {
     return "none";
@@ -141,7 +113,6 @@ if (!manifest) {
 const taskState = readJson(taskStatePath) ?? { history: [] };
 const reviewState = readJson(reviewStatePath);
 const orchestratorRun = getCurrentOrchestratorRun();
-const supervisorRun = getCurrentSupervisorRun();
 const eventPayload = loadEvent(eventFilePath);
 const recentTasks = Array.isArray(taskState.history) ? taskState.history.slice(-5).reverse() : [];
 const llmsGlobs = Array.isArray(manifest.llms?.sourceGlobs) ? manifest.llms.sourceGlobs : [];
@@ -162,15 +133,6 @@ const lines = [
   `- Worktree strategy: ${manifest.execution?.worktreeStrategy ?? "direct"}`,
   `- Verify entrypoint: ${manifest.execution?.entrypoints?.verify ?? `${manifest.task?.command ?? "task"} ${manifest.task?.tasks?.verify ?? "verify"}`}`,
   `- Review verdict: ${reviewState?.status ?? "missing"}`,
-  "",
-  "## Supervisor",
-  supervisorRun
-    ? `- Slug: ${supervisorRun.slug}
-- Status: ${supervisorRun.status}
-- Manager branch: ${supervisorRun.managerBranch ?? "missing"}
-- Current issue: ${supervisorRun.currentIssueId ?? "none"}
-- Rule: manager must not edit product code in the main checkout; use isolated worker runs.`
-    : "- No active supervisor run.",
   "",
   "## Orchestrator",
   orchestratorRun

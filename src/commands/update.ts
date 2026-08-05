@@ -5,7 +5,7 @@ import {
   writeTemporaryAnswersFile
 } from "../core/copier.js";
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
-import { finalizeAfterCopierCopy } from "../core/setup.js";
+import { finalizeAfterCopierCopy, previewRetiredGeneratedFiles } from "../core/setup.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
 import { resolveTemplatePath } from "../core/template.js";
 import type { CommandResult, ProjectProfileId } from "../core/types.js";
@@ -33,7 +33,11 @@ export async function runUpdateCommand(
       return {
         ok: true,
         code: 0,
-        message: "Dry-run template update completed"
+        message: "Dry-run template update completed",
+        details: {
+          profileId: config.profile.id,
+          wouldRemove: previewRetiredGeneratedFiles(repoRoot)
+        }
       };
     } finally {
       cleanupTemporaryAnswersFile(answersFilePath);

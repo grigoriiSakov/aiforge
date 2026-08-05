@@ -170,7 +170,7 @@ describe("generic reusable surfaces", () => {
     }
     expect(fs.existsSync(path.join(process.cwd(), "src", "commands", "supervisor.ts"))).toBe(false);
     expect(cliSource).not.toContain('.command("supervisor")');
-    for (const runtime of [".codex", ".claude"]) {
+    for (const runtime of [".cursor", ".codex", ".claude"]) {
       const hooksRoot = path.join(root, runtime, "hooks");
       for (const fileName of fs.readdirSync(hooksRoot)) {
         if (fileName.endsWith(".mjs.jinja")) {

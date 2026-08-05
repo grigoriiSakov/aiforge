@@ -32,6 +32,12 @@ const RETIRED_GENERATED_DIRECTORIES = [
   path.join(".ai", "runtime", "supervisor-launchers")
 ];
 
+export function previewRetiredGeneratedFiles(repoRoot: string): string[] {
+  return RETIRED_GENERATED_FILES.filter((relativePath) =>
+    fs.existsSync(path.join(repoRoot, relativePath))
+  );
+}
+
 /**
  * Shared post-Copier steps for init/adopt/sync/update success paths.
  * Order matches historical `init` behavior.
