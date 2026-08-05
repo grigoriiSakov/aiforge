@@ -90,48 +90,6 @@ function getCurrentOrchestratorRun() {
   return null;
 }
 
-function getCurrentSupervisorRun() {
-  const runsDir = path.join(process.cwd(), ".ai", "runtime", "supervisor", "runs");
-  if (!fs.existsSync(runsDir)) {
-    return null;
-  }
-
-  const branchName = currentBranch();
-  for (const fileName of fs.readdirSync(runsDir)) {
-    if (!fileName.endsWith(".json")) {
-      continue;
-    }
-    const run = readJson(path.join(runsDir, fileName));
-    if (!run || String(run.status ?? "") !== "running") {
-      continue;
-    }
-    if (branchName !== String(run.managerBranch ?? "")) {
-      continue;
-    }
-    return run;
-  }
-
-  return null;
-}
-
-function nextActionForSupervisor(run) {
-  const issueId = run.currentIssueId ?? null;
-  const issue = issueId ? run.issues?.[issueId] : null;
-  if (!issue) {
-    return "launch_worker";
-  }
-  if (issue.status === "worker-running") {
-    return "wait_worker";
-  }
-  if (issue.status === "worker-completed") {
-    return "run_manager_review";
-  }
-  if (issue.status === "manager-accepted") {
-    return "finalize_issue";
-  }
-  return "launch_worker";
-}
-
 function nextActionForRun(run) {
   if (run.status === "reserved" && !run.worktreePath) {
     return "start_worktree";
@@ -152,7 +110,6 @@ process.stdin.on("end", () => {
   const command = String(input?.tool_input?.command ?? "");
   const manifest = readManifest();
   const activeRun = getCurrentOrchestratorRun();
-  const activeSupervisor = getCurrentSupervisorRun();
   const taskCommand = String(manifest?.task?.command ?? "task");
   const tasks = manifest?.task?.tasks ?? {};
   const canonicalTaskNames = [tasks.verify, tasks.review, tasks.test, tasks.lint, tasks.implement].filter(
@@ -171,23 +128,6 @@ process.stdin.on("end", () => {
           systemMessage:
             `Orchestrator issue ${activeRun.issueId} is still active (status=${activeRun.status}, step=${activeRun.currentStep ?? "unknown"}). ` +
             `Do not stop after this command. Next action: ${nextAction}. Continue until the orchestrator reaches flow_complete.`
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
-
-  if (activeSupervisor) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          continue: true,
-          systemMessage:
-            `Supervisor ${activeSupervisor.slug} is still active on manager branch ${activeSupervisor.managerBranch}. ` +
-            `Do not stop after this command. Next action: ${nextActionForSupervisor(activeSupervisor)}. ` +
-            "Manager mode must keep state on disk, launch isolated workers, and accept/reject work explicitly."
         },
         null,
         2

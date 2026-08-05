@@ -43,8 +43,38 @@ function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2"): strin
   return runtimePath;
 }
 
-function runNodeScript(runtimePath: string, args: string[], cwd: string): string {
-  const result = spawnSync("node", [runtimePath, ...args], { cwd, encoding: "utf8" });
+function isolatedAgentEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...overrides };
+  for (const marker of [
+    "AIFORGE_ACTIVE_RUNTIME",
+    "AIFORGE_RUNTIME_PROVIDER",
+    "CODEX_THREAD_ID",
+    "CODEX_CI",
+    "CODEX_SANDBOX",
+    "CODEX_ENV",
+    "CODEX_ROOT",
+    "CURSOR_TRACE_ID",
+    "CURSOR_AGENT",
+    "CURSOR_SESSION_ID",
+    "CLAUDECODE",
+    "CLAUDE_CODE"
+  ]) {
+    delete env[marker];
+  }
+  return { ...env, ...overrides };
+}
+
+function runNodeScript(
+  runtimePath: string,
+  args: string[],
+  cwd: string,
+  envOverrides: Record<string, string> = {}
+): string {
+  const result = spawnSync("node", [runtimePath, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: isolatedAgentEnv(envOverrides)
+  });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || `orchestrator failed: ${args.join(" ")}`);
   }
@@ -148,7 +178,7 @@ describe("orchestrator loop guards", () => {
     expect(finalizeGraph.changeId).toBe("app-10");
   });
 
-  test("model-hint uses codex block when CODEX_ENV is set", () => {
+  test("Codex Goal thread markers select only the Codex model namespace", () => {
     const repoRoot = makeTempRepo("aiforge-orch-model-codex-");
     fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });
     fs.writeFileSync(
@@ -158,7 +188,7 @@ describe("orchestrator loop guards", () => {
           roles: { review: { tier: "budget" } },
           runtimeModels: {
             cursor: { budget: "gpt-5-mini" },
-            codex: { budget: "gpt-5.4-mini" }
+            codex: { budget: "gpt-5.6-terra" }
           }
         },
         null,
@@ -167,23 +197,25 @@ describe("orchestrator loop guards", () => {
     );
     const runtimePath = renderOrchestratorRuntime(repoRoot);
 
-    const prev = process.env.CODEX_ENV;
-    process.env.CODEX_ENV = "1";
-    delete process.env.CURSOR_AGENT;
-    try {
-      const hint = JSON.parse(
-        runNodeScript(runtimePath, ["model-hint", "--role", "review"], repoRoot)
-      );
-      expect(hint.activeRuntime).toBe("codex");
-      expect(hint.model).toBe("gpt-5.4-mini");
-      expect(hint.instruction).toContain("codex -m");
-    } finally {
-      if (prev === undefined) {
-        delete process.env.CODEX_ENV;
-      } else {
-        process.env.CODEX_ENV = prev;
-      }
-    }
+    const runtime = JSON.parse(
+      runNodeScript(runtimePath, ["active-runtime"], repoRoot, {
+        CODEX_THREAD_ID: "thread-123",
+        CURSOR_AGENT: "1"
+      })
+    );
+    const hint = JSON.parse(
+      runNodeScript(runtimePath, ["model-hint", "--role", "review"], repoRoot, {
+        CODEX_THREAD_ID: "thread-123",
+        CURSOR_AGENT: "1"
+      })
+    );
+
+    expect(runtime.detected).toBe("codex");
+    expect(hint.activeRuntime).toBe("codex");
+    expect(hint.model).toBe("gpt-5.6-terra");
+    expect(hint.instruction).toContain("native subagent");
+    expect(hint.instruction).toContain("Never run codex exec");
+    expect(hint.instruction).not.toContain("codex -m");
   });
 
   test("model-hint ignores --runtime cursor when codex is active", () => {
@@ -196,7 +228,7 @@ describe("orchestrator loop guards", () => {
           roles: { review: { tier: "budget" } },
           runtimeModels: {
             cursor: { budget: "gpt-5-mini" },
-            codex: { budget: "gpt-5.4-mini" }
+            codex: { budget: "gpt-5.6-terra" }
           }
         },
         null,
@@ -204,26 +236,17 @@ describe("orchestrator loop guards", () => {
       )}\n`
     );
     const runtimePath = renderOrchestratorRuntime(repoRoot);
-    const prev = process.env.CODEX_ENV;
-    process.env.CODEX_ENV = "1";
-    try {
-      const hint = JSON.parse(
-        runNodeScript(
-          runtimePath,
-          ["model-hint", "--role", "review", "--runtime", "cursor"],
-          repoRoot
-        )
-      );
-      expect(hint.activeRuntime).toBe("codex");
-      expect(hint.model).toBe("gpt-5.4-mini");
-      expect(hint.warnings.length).toBeGreaterThan(0);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.CODEX_ENV;
-      } else {
-        process.env.CODEX_ENV = prev;
-      }
-    }
+    const hint = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        ["model-hint", "--role", "review", "--runtime", "cursor"],
+        repoRoot,
+        { CODEX_CI: "1" }
+      )
+    );
+    expect(hint.activeRuntime).toBe("codex");
+    expect(hint.model).toBe("gpt-5.6-terra");
+    expect(hint.warnings.length).toBeGreaterThan(0);
   });
 
   test("record-fix-resolution skip-rereview moves to pre-finalize without new review iteration", () => {

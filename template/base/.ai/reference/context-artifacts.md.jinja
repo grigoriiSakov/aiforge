@@ -15,8 +15,6 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (canonical `PROGRESS::ISSUE-ID` artifact)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
-- `.ai/runtime/supervisor/runs/<slug>.json`
-- `.ai/runtime/supervisor/current/<slug>.md`
 
 Configured in `ai.config.yaml` as `artifacts.planProgressRoot` (template default: `.ai/context/runtime`).
 
@@ -47,10 +45,13 @@ If work is coordinated through `/orchestrator`, the source of truth for reservat
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 
-## Supervisor runtime
+## Goal-mode initiative state
 
-If a multi-issue flow is being executed through `supervisor`, the source of truth is:
+Goal mode owns conversational continuity, not a second durable state machine. Before selecting each issue, rehydrate from:
 
 - `.ai/context/initiatives/<slug>/issues-manifest.json`
-- `.ai/runtime/supervisor/runs/<slug>.json`
-- `.ai/runtime/supervisor/current/<slug>.md`
+- the selected `openspec/changes/<change-id>/`
+- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+- `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+
+Historical files under `.ai/runtime/supervisor/` may be retained as evidence, but they are not active workflow state.

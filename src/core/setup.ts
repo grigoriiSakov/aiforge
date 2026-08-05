@@ -11,11 +11,25 @@ import { applyRuntimeFlags } from "./runtime.js";
 import { ensureTaskRunnerInstalled } from "./task-runner.js";
 import type { ProjectConfig } from "./types.js";
 
-const RETIRED_REFERENCE_SURFACES = [
+const RETIRED_GENERATED_FILES = [
   path.join(".ai", "reference", "PROMPT_OPTIMIZATION_STRATEGY.md"),
   path.join(".ai", "reference", "issue-spec-template.md"),
   path.join(".ai", "reference", "plan-progress-template.md"),
-  path.join(".ai", "reference", "plan-template.md")
+  path.join(".ai", "reference", "plan-template.md"),
+  path.join(".ai", "skills", "supervisor", "SKILL.md"),
+  path.join(".ai", "runtime", "supervisor-state.mjs"),
+  path.join(".ai", "runtime", "supervisor-context.mjs"),
+  path.join(".ai", "runtime", "supervisor-daemon.mjs"),
+  path.join(".ai", "runtime", "supervisor-linear-sync.mjs"),
+  path.join(".ai", "runtime", "supervisor-launchers", "headless.mjs"),
+  path.join(".ai", "runtime", "supervisor-launchers", "cursor.mjs"),
+  path.join(".ai", "runtime", "supervisor-launchers", "claude.mjs"),
+  path.join(".ai", "runtime", "supervisor-launchers", "codex.mjs")
+];
+
+const RETIRED_GENERATED_DIRECTORIES = [
+  path.join(".ai", "skills", "supervisor"),
+  path.join(".ai", "runtime", "supervisor-launchers")
 ];
 
 /**
@@ -36,7 +50,7 @@ export async function finalizeAfterCopierCopy(
   applyRuntimeFlags(repoRoot);
   ensureOpenSpecProject(repoRoot, config);
   generateManifesto(repoRoot);
-  removeRetiredReferenceSurfaces(repoRoot);
+  removeRetiredGeneratedSurfaces(repoRoot);
   if (config.features.llms) {
     await buildLlms(repoRoot);
   } else {
@@ -45,9 +59,17 @@ export async function finalizeAfterCopierCopy(
   scaffoldMcp(repoRoot);
 }
 
-function removeRetiredReferenceSurfaces(repoRoot: string): void {
-  for (const relativePath of RETIRED_REFERENCE_SURFACES) {
+function removeRetiredGeneratedSurfaces(repoRoot: string): void {
+  for (const relativePath of RETIRED_GENERATED_FILES) {
     fs.rmSync(path.join(repoRoot, relativePath), { force: true });
+  }
+
+  for (const relativePath of RETIRED_GENERATED_DIRECTORIES) {
+    try {
+      fs.rmdirSync(path.join(repoRoot, relativePath));
+    } catch {
+      // Preserve non-generated files that may share a former generated directory.
+    }
   }
 }
 

@@ -18,16 +18,6 @@ import { runLlmsBuildCommand } from "../commands/llms-build.js";
 import { runManifestoInitCommand } from "../commands/manifesto-init.js";
 import { runMcpScaffoldCommand } from "../commands/mcp-scaffold.js";
 import { runProjectStubCommand } from "../commands/project-stub.js";
-import {
-  runSupervisorAbortCommand,
-  runSupervisorDaemonCommand,
-  runSupervisorInitFromSourceCommand,
-  runSupervisorNextCommand,
-  runSupervisorPauseCommand,
-  runSupervisorResumeCommand,
-  runSupervisorStatusCommand,
-  runSupervisorSyncImportCommand
-} from "../commands/supervisor.js";
 import { runSkillsAddGitCommand } from "../commands/skills-add.js";
 import { runSkillsListCommand } from "../commands/skills-list.js";
 import { runSkillsRemoveCommand } from "../commands/skills-remove.js";
@@ -35,10 +25,6 @@ import { runSyncCommand } from "../commands/sync.js";
 import { runUpdateCommand } from "../commands/update.js";
 import { printResult } from "../core/output.js";
 import type { ProjectProfileId } from "../core/types.js";
-
-function collectOption(value: string, previous: string[]): string[] {
-  return [...previous, value];
-}
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -170,163 +156,6 @@ async function main(): Promise<void> {
     .option("--json", "Print JSON output", false)
     .action((options: { repo: string; json: boolean }) => {
       const result = runDoctorCommand(options.repo);
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  const supervisor = program.command("supervisor").description("Supervisor control plane");
-  supervisor
-    .command("import")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--source <path>", "Tracker/project snapshot path")
-    .option("--manifest <path>", "Existing local issues-manifest path")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; source?: string; manifest?: string; repo: string; json: boolean }) => {
-      const result = runSupervisorSyncImportCommand(options.repo, {
-        slug: options.slug,
-        ...(options.source ? { source: options.source } : {}),
-        ...(options.manifest ? { manifest: options.manifest } : {})
-      });
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  supervisor
-    .command("init")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--source <path>", "Normalized supervisor source snapshot")
-    .option("--manifest <path>", "Existing local issues-manifest path")
-    .option("--team <name>", "Include only issues for this team (repeatable)", collectOption, [])
-    .option("--issue <id>", "Include this explicit issue id (repeatable)", collectOption, [])
-    .option("--base-branch <name>", "Base branch for the manager branch")
-    .option("--manager-branch <name>", "Manager branch name")
-    .option("--max-attempts <count>", "Max worker attempts per issue")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action(
-      (options: {
-        slug: string;
-        source?: string;
-        manifest?: string;
-        team: string[];
-        issue: string[];
-        baseBranch?: string;
-        managerBranch?: string;
-        maxAttempts?: string;
-        repo: string;
-        json: boolean;
-      }) => {
-        const parsedMaxAttempts =
-          options.maxAttempts !== undefined ? Number.parseInt(options.maxAttempts, 10) : undefined;
-        const hasMaxAttempts = typeof parsedMaxAttempts === "number" && Number.isFinite(parsedMaxAttempts);
-        const result = runSupervisorInitFromSourceCommand(options.repo, {
-          slug: options.slug,
-          ...(options.source ? { source: options.source } : {}),
-          ...(options.manifest ? { manifest: options.manifest } : {}),
-          ...(options.team.length > 0 ? { teams: options.team } : {}),
-          ...(options.issue.length > 0 ? { issueIds: options.issue } : {}),
-          ...(options.baseBranch ? { baseBranch: options.baseBranch } : {}),
-          ...(options.managerBranch ? { managerBranch: options.managerBranch } : {}),
-          ...(hasMaxAttempts ? { maxAttempts: parsedMaxAttempts } : {})
-        });
-        printResult(result, options.json);
-        process.exit(result.code);
-      }
-    );
-
-  supervisor
-    .command("daemon")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--launcher <name>", "Launcher adapter name")
-    .option("--tick-limit <count>", "Maximum daemon ticks before exit")
-    .option("--poll-ms <ms>", "Polling delay for idle/wait states")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action(
-      (options: {
-        slug: string;
-        launcher?: string;
-        tickLimit?: string;
-        pollMs?: string;
-        repo: string;
-        json: boolean;
-      }) => {
-        const parsedTickLimit =
-          options.tickLimit !== undefined ? Number.parseInt(options.tickLimit, 10) : undefined;
-        const parsedPollMs = options.pollMs !== undefined ? Number.parseInt(options.pollMs, 10) : undefined;
-        const result = runSupervisorDaemonCommand(options.repo, {
-          slug: options.slug,
-          ...(options.launcher ? { launcher: options.launcher } : {}),
-          ...(typeof parsedTickLimit === "number" && Number.isFinite(parsedTickLimit)
-            ? { tickLimit: parsedTickLimit }
-            : {}),
-          ...(typeof parsedPollMs === "number" && Number.isFinite(parsedPollMs) ? { pollMs: parsedPollMs } : {})
-        });
-        printResult(result, options.json);
-        process.exit(result.code);
-      }
-    );
-
-  supervisor
-    .command("status")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runSupervisorStatusCommand(options.repo, options.slug);
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  supervisor
-    .command("next")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runSupervisorNextCommand(options.repo, options.slug);
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  supervisor
-    .command("pause")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--reason <text>", "Pause reason")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
-      const result = runSupervisorPauseCommand(options.repo, {
-        slug: options.slug,
-        ...(options.reason ? { reason: options.reason } : {})
-      });
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  supervisor
-    .command("resume")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; repo: string; json: boolean }) => {
-      const result = runSupervisorResumeCommand(options.repo, options.slug);
-      printResult(result, options.json);
-      process.exit(result.code);
-    });
-
-  supervisor
-    .command("abort")
-    .requiredOption("--slug <slug>", "Supervisor slug")
-    .option("--reason <text>", "Abort reason")
-    .option("--repo <path>", "Repository root", process.cwd())
-    .option("--json", "Print JSON output", false)
-    .action((options: { slug: string; reason?: string; repo: string; json: boolean }) => {
-      const result = runSupervisorAbortCommand(options.repo, {
-        slug: options.slug,
-        ...(options.reason ? { reason: options.reason } : {})
-      });
       printResult(result, options.json);
       process.exit(result.code);
     });

@@ -3,10 +3,10 @@ import type { RuntimeFlags } from "./types.js";
 export const AGENT_RUNTIME_IDS = ["cursor", "codex", "claude", "agent", "agents"] as const;
 export type AgentRuntimeId = (typeof AGENT_RUNTIME_IDS)[number];
 
-/** Slugs that belong to Cursor Task / UI naming, not Codex CLI. */
+/** Slugs that belong to Cursor Task / UI naming, not the Codex model namespace. */
 const CURSOR_ONLY_SLUG = /^(auto|composer[\w.-]*|gpt-5\.5-(medium|fast)|claude-opus-4-8-thinking-high)$/i;
 
-/** Slugs that are Codex CLI ids per OpenAI docs, not Cursor. */
+/** Slugs that belong to the Codex model namespace, not Cursor. */
 const CODEX_ONLY_SLUG = /^gpt-5\.3-codex/i;
 
 export function isAgentRuntimeId(value: string): value is AgentRuntimeId {
@@ -28,13 +28,13 @@ export function detectActiveRuntime(env: NodeJS.ProcessEnv = process.env): Agent
     return provider;
   }
 
-  if (env.CLAUDECODE || env.CLAUDE_CODE) {
-    return "claude";
+  // Codex before Cursor — some environments expose both; prefer Codex-specific signals.
+  if (env.CODEX_THREAD_ID || env.CODEX_CI || env.CODEX_SANDBOX || env.CODEX_ENV || env.CODEX_ROOT) {
+    return "codex";
   }
 
-  // Codex before Cursor — some environments expose both; prefer Codex-specific signals.
-  if (env.CODEX_SANDBOX || env.CODEX_ENV || env.CODEX_ROOT) {
-    return "codex";
+  if (env.CLAUDECODE || env.CLAUDE_CODE) {
+    return "claude";
   }
 
   if (env.CURSOR_TRACE_ID || env.CURSOR_AGENT || env.CURSOR_SESSION_ID) {
@@ -56,7 +56,7 @@ export function validateModelSlugForRuntime(
   if (runtime === "codex" && (CURSOR_ONLY_SLUG.test(normalized) || /\bmedium\b|\bfast\b/i.test(normalized))) {
     return {
       model: null,
-      rejectedReason: `slug "${normalized}" looks like a Cursor model id; use Codex ids (gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, …) under agents.runtimeModels.codex`
+      rejectedReason: `slug "${normalized}" looks like a Cursor model id; use Codex model ids under agents.runtimeModels.codex`
     };
   }
 
@@ -77,23 +77,23 @@ export function delegationInstruction(
 ): string {
   if (runtime === "cursor") {
     return model
-      ? `Cursor only: Task tool must use model="${model}". Do not use Codex/Claude CLI flags.`
-      : `Cursor only: omit Task model param; use UI/tier ${tier}. Never pass Codex model slugs.`;
+      ? `Cursor native subagent preference: model="${model}" when the Task tool supports it. Never shell-launch another agent CLI.`
+      : `Cursor native subagent: use an inherited compatible model for tier ${tier}. Never shell-launch another agent CLI.`;
   }
 
   if (runtime === "codex") {
     return model
-      ? `Codex only: delegate with codex -m ${model} (or /model). Never use Cursor Task model= or Cursor slugs like composer/gpt-5.5-medium.`
-      : `Codex only: pick tier ${tier} via Codex UI or config.toml model=. Never use Cursor Task tool or Cursor runtimeModels.cursor slugs.`;
+      ? `Codex native subagent preference: model="${model}" when native delegation supports selection; otherwise inherit a compatible model and record the fallback. Never run codex exec or poll a PTY.`
+      : `Codex native subagent: inherit a compatible model for tier ${tier}. Never read agents.runtimeModels.cursor, run codex exec, or poll a PTY.`;
   }
 
   if (runtime === "claude") {
     return model
-      ? `Claude Code: use model ${model} when the CLI supports explicit selection.`
-      : `Claude Code: use tier ${tier} default; do not use Cursor Task model= or codex -m from cursor block.`;
+      ? `Claude native subagent preference: model="${model}" when supported. Never shell-launch another agent CLI.`
+      : `Claude native subagent: use an inherited compatible model for tier ${tier}. Never shell-launch another agent CLI.`;
   }
 
-  return `Runtime ${runtime}, tier ${tier}${model ? `, model ${model}` : ""}. Use only ${runtime} model namespace from agents.runtimeModels.${runtime}.`;
+  return `Runtime ${runtime}, tier ${tier}${model ? `, model ${model}` : ""}. Use only native subagent tools and agents.runtimeModels.${runtime}.`;
 }
 
 export function pickEnabledRuntime(

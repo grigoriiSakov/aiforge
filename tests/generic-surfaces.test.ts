@@ -36,22 +36,13 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/implement/SKILL.md.jinja",
       ".ai/skills/review/SKILL.md.jinja",
       ".ai/skills/issue/SKILL.md.jinja",
-      ".ai/skills/supervisor/SKILL.md.jinja",
       ".ai/skills/check/SKILL.md.jinja",
       ".ai/skills/debug/SKILL.md.jinja",
       ".ai/skills/docs/SKILL.md.jinja",
       ".ai/skills/tracker/SKILL.md.jinja",
       ".ai/runtime/task-state.mjs.jinja",
       ".ai/runtime/review-state.mjs.jinja",
-      ".ai/runtime/orchestrator-state.mjs.jinja",
-      ".ai/runtime/supervisor-state.mjs.jinja",
-      ".ai/runtime/supervisor-context.mjs.jinja",
-      ".ai/runtime/supervisor-daemon.mjs.jinja",
-      ".ai/runtime/supervisor-linear-sync.mjs.jinja",
-      ".ai/runtime/supervisor-launchers/headless.mjs.jinja",
-      ".ai/runtime/supervisor-launchers/cursor.mjs.jinja",
-      ".ai/runtime/supervisor-launchers/claude.mjs.jinja",
-      ".ai/runtime/supervisor-launchers/codex.mjs.jinja"
+      ".ai/runtime/orchestrator-state.mjs.jinja"
     ];
 
     for (const relativePath of expectedPaths) {
@@ -70,7 +61,6 @@ describe("generic reusable surfaces", () => {
       "docs/SKILL.md.jinja",
       "investigate/SKILL.md.jinja",
       "initiative/SKILL.md.jinja",
-      "supervisor/SKILL.md.jinja",
       "issue/SKILL.md.jinja",
       "orchestrator/SKILL.md.jinja",
       "plan/SKILL.md.jinja",
@@ -114,6 +104,9 @@ describe("generic reusable surfaces", () => {
     expect(implementSkill).toContain("openspec/changes/<change-id>/");
     expect(orchestratorSkill).toContain("plan memory: `openspec/changes/<change-id>/`");
     expect(orchestratorSkill).toContain("openspec validate <change-id>");
+    expect(orchestratorSkill).toContain("openspec-apply-change <change-id>");
+    expect(orchestratorSkill).toContain("shell-launched agent CLI or PTY polling");
+    expect(orchestratorSkill).not.toContain("codex -m");
   });
 
   test("skeptic and review validate the selected OpenSpec change", () => {
@@ -137,14 +130,54 @@ describe("generic reusable surfaces", () => {
     expect(gates).not.toContain("Spec Coverage Matrix");
   });
 
-  test("supervisor worker and review contexts point to OpenSpec changes", () => {
-    const runtimeRoot = path.join(process.cwd(), "template", "base", ".ai", "runtime");
-    const state = fs.readFileSync(path.join(runtimeRoot, "supervisor-state.mjs.jinja"), "utf8");
-    const context = fs.readFileSync(path.join(runtimeRoot, "supervisor-context.mjs.jinja"), "utf8");
+  test("Goal mode owns multi-task management and delegates one OpenSpec change natively", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const agents = fs.readFileSync(path.join(root, "AGENTS.md.jinja"), "utf8");
+    const workflow = fs.readFileSync(path.join(root, ".ai", "rules", "workflow.mdc.jinja"), "utf8");
+    const initiative = fs.readFileSync(path.join(root, ".ai", "skills", "initiative", "SKILL.md.jinja"), "utf8");
 
-    expect(state).toContain('path.join("openspec", "changes", openSpecChangeId(issueId))');
-    expect(context).toContain("OpenSpec change: openspec/changes/${openSpecChangeId(issue.id)}");
-    expect(context).not.toContain("Plan path:");
+    for (const content of [agents, workflow]) {
+      expect(content).toContain("Goal mode");
+      expect(content).toContain("one issue");
+      expect(content).toContain("one OpenSpec `changeId`");
+      expect(content).toContain("openspec-apply-change");
+      expect(content).toContain("native");
+      expect(content).toContain("PTY");
+    }
+    expect(initiative).toContain('"changeId": "app-1"');
+    expect(initiative).toContain('"repository": "backend"');
+    expect(initiative).not.toContain("managerBranch");
+    expect(initiative).not.toContain("maxAttemptsPerIssue");
+  });
+
+  test("retired supervisor templates are absent and provider hooks ignore historical evidence", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const cliSource = fs.readFileSync(path.join(process.cwd(), "src", "cli", "index.ts"), "utf8");
+    const retiredPaths = [
+      ".ai/skills/supervisor/SKILL.md.jinja",
+      ".ai/runtime/supervisor-state.mjs.jinja",
+      ".ai/runtime/supervisor-context.mjs.jinja",
+      ".ai/runtime/supervisor-daemon.mjs.jinja",
+      ".ai/runtime/supervisor-linear-sync.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/headless.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/cursor.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/claude.mjs.jinja",
+      ".ai/runtime/supervisor-launchers/codex.mjs.jinja"
+    ];
+
+    for (const relativePath of retiredPaths) {
+      expect(fs.existsSync(path.join(root, relativePath))).toBe(false);
+    }
+    expect(fs.existsSync(path.join(process.cwd(), "src", "commands", "supervisor.ts"))).toBe(false);
+    expect(cliSource).not.toContain('.command("supervisor")');
+    for (const runtime of [".codex", ".claude"]) {
+      const hooksRoot = path.join(root, runtime, "hooks");
+      for (const fileName of fs.readdirSync(hooksRoot)) {
+        if (fileName.endsWith(".mjs.jinja")) {
+          expect(fs.readFileSync(path.join(hooksRoot, fileName), "utf8")).not.toMatch(/supervisor/i);
+        }
+      }
+    }
   });
 
   test("OpenSpec sync and archive run only at the orchestrator terminal gate", () => {

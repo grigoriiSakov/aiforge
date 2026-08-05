@@ -7,13 +7,15 @@ import {
 } from "../src/core/active-runtime.js";
 
 describe("active-runtime", () => {
-  test("detects codex before cursor when codex env is set", () => {
+  test("detects Codex Goal sessions before competing host markers", () => {
     expect(
       detectActiveRuntime({
-        CODEX_ENV: "1",
-        CURSOR_AGENT: "1"
+        CODEX_THREAD_ID: "thread-123",
+        CURSOR_AGENT: "1",
+        CLAUDECODE: "1"
       })
     ).toBe("codex");
+    expect(detectActiveRuntime({ CODEX_CI: "1" })).toBe("codex");
   });
 
   test("AIFORGE_ACTIVE_RUNTIME overrides heuristics", () => {
@@ -31,15 +33,16 @@ describe("active-runtime", () => {
     expect(result.rejectedReason).toContain("Cursor");
   });
 
-  test("accepts codex cli slug", () => {
+  test("accepts a Codex model slug", () => {
     const result = validateModelSlugForRuntime("codex", "gpt-5.4-mini");
     expect(result.model).toBe("gpt-5.4-mini");
   });
 
-  test("codex instruction never mentions Task tool", () => {
-    const text = delegationInstruction("codex", "budget", "gpt-5.4-mini");
-    expect(text).toContain("codex -m");
-    expect(text).not.toContain("Task tool");
+  test("codex instruction requires native delegation without recursive CLI", () => {
+    const text = delegationInstruction("codex", "budget", "gpt-5.6-terra");
+    expect(text).toContain("native subagent");
+    expect(text).toContain("Never run codex exec");
+    expect(text).not.toContain("codex -m");
   });
 
   test("cursor instruction uses Task tool", () => {

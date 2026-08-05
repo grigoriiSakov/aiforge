@@ -49,6 +49,8 @@ Start a change with:
 /opsx:propose "describe the change"
 ```
 
+For a multi-change initiative, start one host Goal and give it the ordered issue/change manifest. The Goal thread manages dependencies and integration; it delegates one `issue + changeId` at a time through native subagents. Each worker runs the repository orchestrator in its own worktree and uses `openspec-apply-change` for implementation. Recursive agent CLI launches, PTY polling, and a separate project manager daemon are not part of the workflow.
+
 ## Supported Profiles
 
 Profiles are starter defaults, not hard locks. After `init` or `adopt`, edit `ai.config.yaml` if a repository has different commands.

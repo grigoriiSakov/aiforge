@@ -60,6 +60,8 @@ Pipeline owner for:
 10. Create the isolated worktree only through:
     - `node .ai/runtime/orchestrator-state.mjs start-worktree --issue ISSUE-ID`
 11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов и файлов из `Claimed Write Scope` выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
+    - Implementation phase entrypoint: use the installed `openspec-apply-change` skill for the exact `<change-id>` and follow `openspec instructions apply --change <change-id>` inside that worktree.
+    - Do not replace native skill delegation with a shell-launched agent CLI or PTY polling.
 12. After every side effect, re-check the next machine action through:
     - `node .ai/runtime/orchestrator-state.mjs graph next ISSUE-ID`
     - если `action` = `await_human_decision` — **остановись** и спроси пользователя; не продолжай цикл без ответа
@@ -96,7 +98,7 @@ Pipeline owner for:
 
 25. A phase is not complete without evidence:
    - `plan` -> complete and validated OpenSpec change
-   - `implement` -> code changes aligned with plan
+   - `implement` -> `openspec-apply-change <change-id>` tasks and code changes aligned with the selected OpenSpec change
    - `test` -> scoped canonical evidence (п. 20–21)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
    - **Quality bar (in-scope):** нельзя уходить в review без scoped green по затронутому поведению в `Claimed Write Scope`.
@@ -137,7 +139,8 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
     ```
     - **Никогда** не передавай `--runtime cursor` из Codex-сессии и наоборот.
     - `model-hint` читает **только** `agents.runtimeModels.<activeRuntime>` из `ai.config.yaml` / `.ai/project.model-profiles.json`.
-    - следуй полю `instruction` в JSON (Cursor → Task `model=`; Codex → `codex -m …`; не смешивать).
+    - следуй полю `instruction` в JSON: передавай model preference только нативному subagent tool текущего host; если он не поддерживает выбор, используй inherited compatible model и зафиксируй fallback.
+    - запрещено превращать model hint в shell launch (`codex exec`, `claude`, `cursor-agent`) или PTY polling.
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
 27. После scoped `record-test --result pass`{% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %} и **до** `set-status --status reviewing`{% endif %}:
 {% if orchestrator_simplify_gate != "never" and minimalism_enabled and minimalism_level != "off" %}

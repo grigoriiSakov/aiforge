@@ -43,6 +43,15 @@ alwaysApply: true
 {% endif -%}
   - `Решения по ходу`
 - If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
+- Multi-issue work uses the host product's Goal mode as its only long-running manager:
+  - the main Goal thread selects runnable work, delegates it, verifies evidence, integrates accepted output, and does not edit product code;
+  - one native worker owns exactly one issue, one OpenSpec `changeId`, and one repository-local orchestrator worktree;
+  - the worker runs `/orchestrator`, and its implementation phase uses `openspec-apply-change <changeId>` plus `openspec instructions apply --change <changeId>`;
+  - native host subagent tools are mandatory; recursive agent CLI launches, PTY polling, and a project-owned manager daemon are not fallback mechanisms;
+  - unavailable model preferences fall back only to a compatible native or inherited model, with the fallback recorded;
+  - dependent work waits for accepted review, full verification, terminal OpenSpec sync/archive, and integration into the next base;
+  - Goal state is rehydrated from the initiative manifest, OpenSpec, progress, and orchestrator artifacts; do not create a duplicate ledger;
+  - repository, conflict, approval, live MR, deployment, failed full-suite, and human-decision boundaries pause execution.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
 - Completion means all required OpenSpec, implementation, verification, and review points are done; partial completion is not completion.
 {% if minimalism_enabled and minimalism_level != "off" -%}

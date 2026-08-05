@@ -47,45 +47,6 @@ function isRunBoundToCurrentContext(run, branchName) {
   return Boolean(branchName && run.branch && branchName === String(run.branch));
 }
 
-function getCurrentSupervisorSummary() {
-  const runsRoot = path.join(process.cwd(), ".ai", "runtime", "supervisor", "runs");
-  if (!fs.existsSync(runsRoot)) {
-    return null;
-  }
-
-  const branchName = currentBranch();
-  if (!branchName) {
-    return null;
-  }
-
-  for (const entry of fs.readdirSync(runsRoot)) {
-    if (!entry.endsWith(".json")) {
-      continue;
-    }
-    const run = readJson(path.join(runsRoot, entry));
-    if (!run || !["running", "paused"].includes(String(run.status ?? ""))) {
-      continue;
-    }
-    if (branchName !== String(run.managerBranch ?? "")) {
-      continue;
-    }
-
-    const currentIssueId = run.currentIssueId ?? "none";
-    const currentIssue = currentIssueId !== "none" ? run.issues?.[currentIssueId] : null;
-    const nextAction =
-      currentIssue?.status === "worker-running"
-        ? "wait_worker"
-        : currentIssue?.status === "worker-completed"
-          ? "run_manager_review"
-          : currentIssue?.status === "manager-accepted"
-            ? "finalize_issue"
-            : "launch_worker";
-    return `${run.slug}:${run.status}:${currentIssueId}:${nextAction}`;
-  }
-
-  return null;
-}
-
 function getCurrentOrchestratorSummary() {
   const registryPath = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "registry.json");
   const runsDir = path.join(process.cwd(), ".ai", "runtime", "orchestrator", "runs");
@@ -135,9 +96,6 @@ const additionalContext = [
   `Execution root: ${manifest.execution?.canonicalRoot ?? "."}`,
   `Worktree strategy: ${manifest.execution?.worktreeStrategy ?? "direct"}`,
   `Verify entrypoint: ${manifest.execution?.entrypoints?.verify ?? `${manifest.task.command} ${manifest.task.tasks.verify}`}`,
-  getCurrentSupervisorSummary()
-    ? `Active supervisor: ${getCurrentSupervisorSummary()}`
-    : "Active supervisor: none",
   getCurrentOrchestratorSummary()
     ? `Active orchestrator run: ${getCurrentOrchestratorSummary()}`
     : "Active orchestrator run: none"

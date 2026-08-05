@@ -62,3 +62,15 @@ Canonical phases:
 - {{ note }}
 {% endfor -%}
 {% endif -%}
+
+## Goal-Mode Multi-Task Contract
+
+- Use the host product's Goal mode as the only long-running manager for initiatives with multiple issues or OpenSpec changes.
+- The main Goal thread is manager-only: resolve dependencies, delegate one bounded unit, verify evidence, integrate accepted output, then select the next unit. Do not implement product code in the manager checkout.
+- One write-capable worker owns exactly one issue, one OpenSpec `changeId`, and one repository-local orchestrator worktree.
+- The worker runs the repository `orchestrator`; during implementation it uses `openspec-apply-change <changeId>` and follows `openspec instructions apply --change <changeId>`.
+- Delegate only through the active host's native subagent tools. Never launch a recursive `codex exec`, `claude`, `cursor-agent`, or equivalent shell CLI, never poll its PTY, and never add a project-owned manager daemon as a fallback.
+- Treat configured worker/review model names as native-tool preferences. If a model is unavailable, use a compatible native or inherited model and record the fallback.
+- Do not launch dependent work until the prior change has clean/accepted review evidence, full verification, terminal OpenSpec sync/archive, and its accepted commit is integrated into the next worker's base.
+- Rehydrate initiative state from `.ai/context/initiatives/<slug>/issues-manifest.json`, the selected OpenSpec change, `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`, and orchestrator JSON. Do not create a second Goal ledger.
+- Pause at repository, conflict, approval, live MR, deployment, failed full-suite, and explicit human-decision boundaries.

@@ -1,90 +1,5 @@
 #!/usr/bin/env node
 
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-
-function readJson(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function normalizePath(input) {
-  return String(input ?? "")
-    .replaceAll("\\", "/")
-    .replace(/\/+/g, "/")
-    .replace(/\/$/, "");
-}
-
-function currentBranch() {
-  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd: process.cwd(),
-    encoding: "utf8"
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
-}
-
-function getActiveSupervisorRun() {
-  const runsRoot = path.join(process.cwd(), ".ai", "runtime", "supervisor", "runs");
-  if (!fs.existsSync(runsRoot)) {
-    return null;
-  }
-
-  const branchName = currentBranch();
-  if (!branchName) {
-    return null;
-  }
-
-  for (const entry of fs.readdirSync(runsRoot)) {
-    if (!entry.endsWith(".json")) {
-      continue;
-    }
-    const run = readJson(path.join(runsRoot, entry));
-    if (!run || !["running", "paused"].includes(String(run.status ?? ""))) {
-      continue;
-    }
-    if (branchName !== String(run.managerBranch ?? "")) {
-      continue;
-    }
-    return run;
-  }
-
-  return null;
-}
-
-function extractCandidatePaths(toolInput) {
-  const candidates = [];
-  const pushIfString = (value) => {
-    if (typeof value === "string" && value.trim()) {
-      candidates.push(value.trim());
-    }
-  };
-
-  pushIfString(toolInput?.path);
-  pushIfString(toolInput?.file_path);
-  pushIfString(toolInput?.target_file);
-  pushIfString(toolInput?.target_notebook);
-  pushIfString(toolInput?.new_path);
-  pushIfString(toolInput?.old_path);
-  return candidates;
-}
-
-function isAllowedManagerPath(targetPath) {
-  const normalized = normalizePath(targetPath);
-  return (
-    normalized.startsWith(".ai/runtime/supervisor/") ||
-    normalized.startsWith(".ai/context/initiatives/") ||
-    normalized === ".ai/context/current.md" ||
-    normalized.startsWith(".ai/runtime/orchestrator/")
-  );
-}
-
 function deny(reason) {
   process.stdout.write(
     `${JSON.stringify(
@@ -109,31 +24,12 @@ process.stdin.on("data", (chunk) => {
 });
 process.stdin.on("end", () => {
   const input = raw.trim() ? JSON.parse(raw) : {};
-  const toolName = String(input?.tool_name ?? input?.toolName ?? input?.name ?? "");
   const toolInput = input?.tool_input ?? input?.toolInput ?? {};
   const command = String(toolInput?.command ?? "");
 
   if (/\bgit\s+reset\s+--hard\b/.test(command)) {
     deny("Destructive git reset is blocked by aiforge workflow.");
     return;
-  }
-
-  const activeSupervisor = getActiveSupervisorRun();
-  if (!activeSupervisor) {
-    process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);
-    return;
-  }
-
-  const editingTools = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "ApplyPatch"]);
-  if (editingTools.has(toolName)) {
-    const candidatePaths = extractCandidatePaths(toolInput);
-    if (toolName === "ApplyPatch" || candidatePaths.length === 0 || candidatePaths.some((entry) => !isAllowedManagerPath(entry))) {
-      deny(
-        `Supervisor ${activeSupervisor.slug} is active on manager branch ${activeSupervisor.managerBranch}. ` +
-          "Manager mode must not edit product code in the main checkout; use isolated worker runs and only update supervisor runtime files here."
-      );
-      return;
-    }
   }
 
   process.stdout.write(`${JSON.stringify({ continue: true }, null, 2)}\n`);

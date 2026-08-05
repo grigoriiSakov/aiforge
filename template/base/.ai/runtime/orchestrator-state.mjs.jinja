@@ -732,11 +732,11 @@ function detectActiveRuntime() {
   if (provider && isAgentRuntimeId(provider)) {
     return provider;
   }
+  if (env.CODEX_THREAD_ID || env.CODEX_CI || env.CODEX_SANDBOX || env.CODEX_ENV || env.CODEX_ROOT) {
+    return "codex";
+  }
   if (env.CLAUDECODE || env.CLAUDE_CODE) {
     return "claude";
-  }
-  if (env.CODEX_SANDBOX || env.CODEX_ENV || env.CODEX_ROOT) {
-    return "codex";
   }
   if (env.CURSOR_TRACE_ID || env.CURSOR_AGENT || env.CURSOR_SESSION_ID) {
     return "cursor";
@@ -763,7 +763,7 @@ function validateModelSlugForRuntime(runtime, slug) {
   ) {
     return {
       model: null,
-      rejectedReason: `slug "${normalized}" is a Cursor-style id; configure agents.runtimeModels.codex with Codex CLI ids (gpt-5.5, gpt-5.4-mini, gpt-5.3-codex, …)`
+      rejectedReason: `slug "${normalized}" is a Cursor-style id; configure Codex model ids under agents.runtimeModels.codex`
     };
   }
   if (runtime === "cursor" && CODEX_ONLY_SLUG.test(normalized)) {
@@ -778,20 +778,20 @@ function validateModelSlugForRuntime(runtime, slug) {
 function delegationInstruction(runtime, tier, model) {
   if (runtime === "cursor") {
     return model
-      ? `Cursor only: Task tool model="${model}". Never use codex -m or agents.runtimeModels.codex slugs.`
-      : `Cursor only: omit Task model param; tier ${tier} via UI. Never pass Codex slugs.`;
+      ? `Cursor native subagent preference: model="${model}" when the Task tool supports it. Never shell-launch another agent CLI.`
+      : `Cursor native subagent: use an inherited compatible model for tier ${tier}. Never shell-launch another agent CLI.`;
   }
   if (runtime === "codex") {
     return model
-      ? `Codex only: codex -m ${model} or /model. Never Cursor Task model= or composer/gpt-5.5-medium slugs.`
-      : `Codex only: tier ${tier} via config.toml or /model. Never read agents.runtimeModels.cursor.`;
+      ? `Codex native subagent preference: model="${model}" when native delegation supports selection; otherwise inherit a compatible model and record the fallback. Never run codex exec or poll a PTY.`
+      : `Codex native subagent: inherit a compatible model for tier ${tier}. Never read agents.runtimeModels.cursor, run codex exec, or poll a PTY.`;
   }
   if (runtime === "claude") {
     return model
-      ? `Claude Code: use ${model} when supported.`
-      : `Claude Code: tier ${tier} default; never Cursor Task model= or codex slugs from wrong block.`;
+      ? `Claude native subagent preference: model="${model}" when supported. Never shell-launch another agent CLI.`
+      : `Claude native subagent: use an inherited compatible model for tier ${tier}. Never shell-launch another agent CLI.`;
   }
-  return `Runtime ${runtime}, tier ${tier}. Use only agents.runtimeModels.${runtime}.`;
+  return `Runtime ${runtime}, tier ${tier}. Use only native subagent tools and agents.runtimeModels.${runtime}.`;
 }
 
 function resolveActiveRuntime(requestedRuntime) {

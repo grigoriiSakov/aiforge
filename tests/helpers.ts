@@ -60,13 +60,22 @@ if (mode === "copy") {
   if (projectRulesMarkdown) {
     projectProfileLines.push("", "## Project-Specific Rules", "", projectRulesMarkdown);
   }
-  const agentsContent =
+  const agentsBase =
     agentsMarkdown ||
     [
       "# AGENTS.md",
       "",
       "This repository uses the aiforge workflow baseline."
     ].join("\\n");
+  const agentsContent = [
+    agentsBase,
+    "",
+    "## Goal-Mode Multi-Task Contract",
+    "",
+    "- The Goal thread is manager-only and delegates one issue plus one OpenSpec change at a time.",
+    "- Each worker uses one orchestrator worktree and openspec-apply-change <changeId>.",
+    "- Use native subagents only; never shell-launch another agent CLI or poll a PTY."
+  ].join("\\n");
   ensureDir(path.join(destinationPath, ".ai", "skills", "plan"));
   ensureDir(path.join(destinationPath, ".ai", "rules"));
   ensureDir(path.join(destinationPath, ".ai", "reference"));

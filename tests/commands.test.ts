@@ -13,16 +13,6 @@ import { runLlmsBuildCommand } from "../src/commands/llms-build.js";
 import { runManifestoInitCommand } from "../src/commands/manifesto-init.js";
 import { runMcpScaffoldCommand } from "../src/commands/mcp-scaffold.js";
 import { runProjectStubCommand } from "../src/commands/project-stub.js";
-import {
-  runSupervisorAbortCommand,
-  runSupervisorDaemonCommand,
-  runSupervisorInitFromSourceCommand,
-  runSupervisorNextCommand,
-  runSupervisorPauseCommand,
-  runSupervisorResumeCommand,
-  runSupervisorStatusCommand,
-  runSupervisorSyncImportCommand
-} from "../src/commands/supervisor.js";
 import { runSyncCommand } from "../src/commands/sync.js";
 import { runUpdateCommand } from "../src/commands/update.js";
 import { CONFIG_FILE_NAME, loadConfig, saveConfig } from "../src/core/config.js";
@@ -32,7 +22,6 @@ import {
   copyFixture,
   createFakeCopierBin,
   createFakeOpenSpecBin,
-  installClaudeHookTemplates,
   installCodexHookTemplates,
   installCursorHookTemplates,
   installReviewRuntime,
@@ -41,61 +30,6 @@ import {
   runNodeScript,
   runNodeScriptWithInput
 } from "./helpers.js";
-
-function installSupervisorRuntimeTemplates(repoRoot: string, mainBranch = "main"): void {
-  const runtimeDir = path.join(repoRoot, ".ai", "runtime");
-  fs.mkdirSync(runtimeDir, { recursive: true });
-
-  const replacements = [
-    ["{{ main_branch }}", mainBranch],
-    ["{{ plan_progress_runtime_root }}", ".ai/context/runtime"],
-    ["{{ manifesto_path }}", "MANIFESTO.md"]
-  ] as const;
-
-  const runtimeFiles = [
-    ["supervisor-state.mjs.jinja", "supervisor-state.mjs"],
-    ["supervisor-context.mjs.jinja", "supervisor-context.mjs"],
-    ["supervisor-daemon.mjs.jinja", "supervisor-daemon.mjs"],
-    ["supervisor-linear-sync.mjs.jinja", "supervisor-linear-sync.mjs"]
-  ] as const;
-
-  for (const [templateName, targetName] of runtimeFiles) {
-    const templatePath = path.join(process.cwd(), "template", "base", ".ai", "runtime", templateName);
-    let content = fs.readFileSync(templatePath, "utf8");
-    for (const [needle, replacement] of replacements) {
-      content = content.replaceAll(needle, replacement);
-    }
-    fs.writeFileSync(path.join(runtimeDir, targetName), content, { mode: 0o755 });
-  }
-
-  const launcherDir = path.join(runtimeDir, "supervisor-launchers");
-  fs.mkdirSync(launcherDir, { recursive: true });
-  for (const launcherName of ["headless", "cursor", "claude", "codex"]) {
-    const templatePath = path.join(
-      process.cwd(),
-      "template",
-      "base",
-      ".ai",
-      "runtime",
-      "supervisor-launchers",
-      `${launcherName}.mjs.jinja`
-    );
-    fs.copyFileSync(templatePath, path.join(launcherDir, `${launcherName}.mjs`));
-    fs.chmodSync(path.join(launcherDir, `${launcherName}.mjs`), 0o755);
-  }
-}
-
-function writeInitiativeManifest(
-  repoRoot: string,
-  slug: string,
-  payload: Record<string, unknown>
-): string {
-  const initiativeDir = path.join(repoRoot, ".ai", "context", "initiatives", slug);
-  fs.mkdirSync(initiativeDir, { recursive: true });
-  const manifestPath = path.join(initiativeDir, "issues-manifest.json");
-  fs.writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`);
-  return manifestPath;
-}
 
 describe("command flow", () => {
   const originalPath = process.env.PATH ?? "";
@@ -118,11 +52,6 @@ process.exit(0);
     delete process.env.AI_SIMPLE_COPIER_USE_PYTHON;
     delete process.env.AIFORGE_TASK_INSTALLER_BIN;
     delete process.env.AIFORGE_RUNTIME_PROVIDER;
-    delete process.env.AIFORGE_SUPERVISOR_LAUNCHER;
-    delete process.env.AIFORGE_SUPERVISOR_HEADLESS_BIN;
-    delete process.env.AIFORGE_SUPERVISOR_CURSOR_BIN;
-    delete process.env.AIFORGE_SUPERVISOR_CLAUDE_BIN;
-    delete process.env.AIFORGE_SUPERVISOR_CODEX_BIN;
   });
 
   test("init creates config and generated artifacts", async () => {
@@ -146,6 +75,9 @@ process.exit(0);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "rules", "linear-mcp.mdc"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "skills", "plan", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs"))).toBe(true);
+    expect(fs.readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8")).toContain(
+      "## Goal-Mode Multi-Task Contract"
+    );
     expect(fs.existsSync(path.join(repoRoot, DEFAULT_TASK_COMMAND))).toBe(true);
     expect(loadConfig(repoRoot).task.command).toBe(DEFAULT_TASK_COMMAND);
     const answersContent = fs.readFileSync(path.join(repoRoot, ".copier-answers.yml"), "utf8");
@@ -447,612 +379,6 @@ process.exit(0);
     }).stdout.trim();
     expect(worktreeHead2).toBe(mainTip);
     expect(worktreeHead2).not.toBe(git(["rev-parse", "HEAD"]));
-  });
-
-  test("supervisor runtime persists issue order, rework loop, and completion", { timeout: 20000 }, () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-runtime-");
-    installSupervisorRuntimeTemplates(repoRoot, "main");
-
-    const manifestPath = writeInitiativeManifest(repoRoot, "billing-v2", {
-      version: 1,
-      slug: "billing-v2",
-      baseBranch: "main",
-      managerBranch: "supervisor/billing-v2",
-      maxAttemptsPerIssue: 3,
-      artifacts: {
-        prd: ".ai/context/initiatives/billing-v2/prd.md"
-      },
-      issues: [
-        { id: "APP-1", title: "Backend contract", order: 10, blockedBy: [] },
-        { id: "APP-2", title: "Frontend adoption", order: 20, blockedBy: ["APP-1"] }
-      ]
-    });
-
-    const syncPath = path.join(repoRoot, ".ai", "runtime", "supervisor-linear-sync.mjs");
-    const statePath = path.join(repoRoot, ".ai", "runtime", "supervisor-state.mjs");
-
-    const imported = JSON.parse(
-      runNodeScript(syncPath, ["import", "--slug", "billing-v2", "--manifest", manifestPath], repoRoot)
-    );
-    const initialized = JSON.parse(
-      runNodeScript(statePath, ["init-from-linear", "--slug", "billing-v2", "--source", String(imported.snapshotPath)], repoRoot)
-    );
-    expect(initialized.managerBranch).toBe("supervisor/billing-v2");
-    runNodeScript(statePath, ["resume", "--slug", "billing-v2"], repoRoot);
-
-    const firstNext = JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot));
-    expect(firstNext.action).toBe("launch_worker");
-    expect(firstNext.issue).toBe("APP-1");
-
-    const workerContext = JSON.parse(
-      runNodeScript(statePath, ["write-worker-context", "--slug", "billing-v2"], repoRoot)
-    );
-    expect(fs.existsSync(path.join(repoRoot, String(workerContext.contextPath)))).toBe(true);
-
-    runNodeScript(
-      statePath,
-      [
-        "record-worker",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--status",
-        "launched",
-        "--run-id",
-        "w1"
-      ],
-      repoRoot
-    );
-    expect(JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)).action).toBe(
-      "wait_worker"
-    );
-
-    runNodeScript(
-      statePath,
-      [
-        "record-worker",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--status",
-        "completed",
-        "--run-id",
-        "w1",
-        "--worktree-path",
-        "/tmp/worktrees/APP-1"
-      ],
-      repoRoot
-    );
-    expect(JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)).action).toBe(
-      "run_manager_review"
-    );
-
-    const findings = JSON.parse(
-      runNodeScript(statePath, ["write-findings-stub", "--slug", "billing-v2", "--issue", "APP-1"], repoRoot)
-    );
-    runNodeScript(
-      statePath,
-      [
-        "record-review",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--result",
-        "rework",
-        "--findings-path",
-        String(findings.findingsPath)
-      ],
-      repoRoot
-    );
-    const relaunch = JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot));
-    expect(relaunch.action).toBe("launch_worker");
-    expect(relaunch.issue).toBe("APP-1");
-
-    runNodeScript(
-      statePath,
-      [
-        "record-worker",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--status",
-        "launched",
-        "--run-id",
-        "w2"
-      ],
-      repoRoot
-    );
-    runNodeScript(
-      statePath,
-      [
-        "record-worker",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--status",
-        "completed",
-        "--run-id",
-        "w2",
-        "--worktree-path",
-        "/tmp/worktrees/APP-1"
-      ],
-      repoRoot
-    );
-    runNodeScript(
-      statePath,
-      [
-        "record-review",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-1",
-        "--result",
-        "accept",
-        "--summary",
-        "manager accepted",
-        "--commit-sha",
-        "abc123"
-      ],
-      repoRoot
-    );
-    expect(JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)).action).toBe(
-      "finalize_issue"
-    );
-
-    runNodeScript(
-      statePath,
-      ["mark-issue-done", "--slug", "billing-v2", "--issue", "APP-1", "--commit-sha", "abc123"],
-      repoRoot
-    );
-    expect(JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)).issue).toBe(
-      "APP-2"
-    );
-
-    runNodeScript(statePath, ["pause", "--slug", "billing-v2", "--reason", "manual"], repoRoot);
-    expect(JSON.parse(runNodeScript(statePath, ["graph", "next", "--slug", "billing-v2"], repoRoot)).action).toBe(
-      "wait_resume"
-    );
-    runNodeScript(statePath, ["resume", "--slug", "billing-v2"], repoRoot);
-
-    runNodeScript(
-      statePath,
-      ["record-worker", "--slug", "billing-v2", "--issue", "APP-2", "--status", "launched", "--run-id", "w3"],
-      repoRoot
-    );
-    runNodeScript(
-      statePath,
-      [
-        "record-worker",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-2",
-        "--status",
-        "completed",
-        "--run-id",
-        "w3",
-        "--worktree-path",
-        "/tmp/worktrees/APP-2"
-      ],
-      repoRoot
-    );
-    runNodeScript(
-      statePath,
-      [
-        "record-review",
-        "--slug",
-        "billing-v2",
-        "--issue",
-        "APP-2",
-        "--result",
-        "accept",
-        "--commit-sha",
-        "def456"
-      ],
-      repoRoot
-    );
-    runNodeScript(
-      statePath,
-      ["mark-issue-done", "--slug", "billing-v2", "--issue", "APP-2", "--commit-sha", "def456"],
-      repoRoot
-    );
-
-    const finished = JSON.parse(runNodeScript(statePath, ["status", "--slug", "billing-v2"], repoRoot));
-    expect(finished.status).toBe("done");
-    expect(finished.issues["APP-1"].commitSha).toBe("abc123");
-    expect(finished.issues["APP-2"].commitSha).toBe("def456");
-    expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "supervisor", "current", "billing-v2.md"))).toBe(
-      true
-    );
-  });
-
-  test("supervisor sync imports manifest and selection treats external blockers as metadata", () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-selection-");
-    installSupervisorRuntimeTemplates(repoRoot, "dev");
-
-    const manifestPath = writeInitiativeManifest(repoRoot, "training-plans-v1", {
-      version: 1,
-      slug: "training-plans-v1",
-      baseBranch: "dev",
-      managerBranch: "supervisor/training-plans-v1",
-      issues: [
-        { id: "MPB-49", title: "Backend foundation", team: "backend", order: 10, blockedBy: [] },
-        { id: "MPB-50", title: "Backend publish", team: "backend", order: 20, blockedBy: ["MPB-49"] },
-        { id: "MPF-947", title: "Frontend coach flows", team: "frontend", order: 30, blockedBy: ["MPB-49", "MPB-50"] }
-      ]
-    });
-
-    const syncPath = path.join(repoRoot, ".ai", "runtime", "supervisor-linear-sync.mjs");
-    const statePath = path.join(repoRoot, ".ai", "runtime", "supervisor-state.mjs");
-    const imported = JSON.parse(
-      runNodeScript(syncPath, ["import", "--slug", "training-plans-v1", "--manifest", manifestPath], repoRoot)
-    );
-
-    const frontendOnly = JSON.parse(
-      runNodeScript(
-        statePath,
-        [
-          "init-from-linear",
-          "--slug",
-          "training-plans-v1-frontend",
-          "--source",
-          String(imported.snapshotPath),
-          "--team",
-          "frontend"
-        ],
-        repoRoot
-      )
-    );
-    expect(frontendOnly.selection.teams).toEqual(["frontend"]);
-    expect(frontendOnly.issueOrder).toEqual(["MPF-947"]);
-    expect(frontendOnly.issues["MPF-947"].blockedBy).toEqual([]);
-    expect(frontendOnly.issues["MPF-947"].externalBlockedBy).toEqual(["MPB-49", "MPB-50"]);
-    runNodeScript(statePath, ["resume", "--slug", "training-plans-v1-frontend"], repoRoot);
-
-    const next = JSON.parse(
-      runNodeScript(statePath, ["graph", "next", "--slug", "training-plans-v1-frontend"], repoRoot)
-    );
-    expect(next.action).toBe("wait_dependencies");
-  });
-
-  test("supervisor worker context does not imply a pinned base branch by default", () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-default-base-");
-    installSupervisorRuntimeTemplates(repoRoot, "dev");
-
-    const manifestPath = writeInitiativeManifest(repoRoot, "training-plans-v1", {
-      version: 1,
-      slug: "training-plans-v1",
-      managerBranch: "supervisor/training-plans-v1",
-      issues: [{ id: "MPB-51", title: "Routing fix", team: "backend", order: 10, blockedBy: [] }]
-    });
-
-    const syncPath = path.join(repoRoot, ".ai", "runtime", "supervisor-linear-sync.mjs");
-    const statePath = path.join(repoRoot, ".ai", "runtime", "supervisor-state.mjs");
-    const contextPath = path.join(repoRoot, ".ai", "runtime", "supervisor-context.mjs");
-
-    const imported = JSON.parse(
-      runNodeScript(syncPath, ["import", "--slug", "training-plans-v1", "--manifest", manifestPath], repoRoot)
-    );
-    const state = JSON.parse(
-      runNodeScript(
-        statePath,
-        ["init-from-linear", "--slug", "training-plans-v1", "--source", String(imported.snapshotPath)],
-        repoRoot
-      )
-    );
-
-    expect(state.baseBranch).toBeNull();
-    runNodeScript(statePath, ["resume", "--slug", "training-plans-v1"], repoRoot);
-
-    const rendered = JSON.parse(
-      runNodeScript(contextPath, ["render", "--slug", "training-plans-v1", "--role", "worker"], repoRoot)
-    );
-    const workerBrief = fs.readFileSync(path.join(repoRoot, rendered.contextPath), "utf8");
-
-    expect(workerBrief).toContain("Base branch override: none");
-    expect(workerBrief).toContain("Do not pass `--base-branch` unless a pinned base branch override is explicitly provided above");
-  });
-
-  test("supervisor command wrappers import, init, daemon, status, pause, resume, and abort", { timeout: 20000 }, async () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-cli-");
-    await runInitCommand({
-      repoRoot,
-      projectName: "Supervisor CLI Demo",
-      profileId: "python-fastapi-docker",
-      dryRun: false
-    });
-    installSupervisorRuntimeTemplates(repoRoot, "main");
-
-    const manifestPath = writeInitiativeManifest(repoRoot, "kernel", {
-      version: 1,
-      slug: "kernel",
-      baseBranch: "main",
-      managerBranch: "supervisor/kernel",
-      issues: [{ id: "APP-77", title: "Refactor kernel", team: "backend", order: 10, blockedBy: [] }]
-    });
-
-    fs.mkdirSync(path.join(repoRoot, ".tmp"), { recursive: true });
-    const fakeAgentBin = createFakeExecutable(
-      path.join(repoRoot, ".tmp"),
-      "fake-supervisor-agent.sh",
-      `#!/usr/bin/env bash
-set -eu
-role=""
-issue=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --role) role="$2"; shift 2 ;;
-    --issue) issue="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-if [ "$role" = "worker" ]; then
-  printf '{"status":"completed","runId":"worker-%s","summary":"worker ok","worktreePath":"/tmp/%s"}\n' "$issue" "$issue"
-  exit 0
-fi
-printf '{"result":"accept","summary":"review ok","commitSha":"sha-%s"}\n' "$issue"
-`
-    );
-    process.env.AIFORGE_SUPERVISOR_HEADLESS_BIN = fakeAgentBin;
-
-    const imported = runSupervisorSyncImportCommand(repoRoot, { slug: "kernel", manifest: manifestPath });
-    expect(imported.ok).toBe(true);
-    const snapshotPath = ((imported.details as Record<string, unknown>).snapshotPath as string) ?? "";
-
-    const initialized = runSupervisorInitFromSourceCommand(repoRoot, {
-      slug: "kernel",
-      source: snapshotPath,
-      teams: ["backend"]
-    });
-    expect(initialized.ok).toBe(true);
-    expect((initialized.details as Record<string, unknown>).status).toBe("paused");
-
-    const paused = runSupervisorPauseCommand(repoRoot, { slug: "kernel", reason: "manual hold" });
-    expect((paused.details as Record<string, unknown>).pauseReason).toBe("manual hold");
-
-    const resumed = runSupervisorResumeCommand(repoRoot, "kernel");
-    expect((resumed.details as Record<string, unknown>).status).toBe("running");
-
-    const daemon = runSupervisorDaemonCommand(repoRoot, { slug: "kernel", launcher: "headless", tickLimit: 20 });
-    expect(daemon.ok).toBe(true);
-
-    const status = runSupervisorStatusCommand(repoRoot, "kernel");
-    expect((status.details as Record<string, unknown>).status).toBe("done");
-    expect((status.details as Record<string, unknown>).currentIssueId).toBeNull();
-
-    const aborted = runSupervisorAbortCommand(repoRoot, { slug: "kernel", reason: "stop now" });
-    expect((aborted.details as Record<string, unknown>).status).toBe("aborted");
-  });
-
-  test("supervisor daemon runs headless worker and review adapters end-to-end", { timeout: 20000 }, async () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-daemon-");
-    await runInitCommand({
-      repoRoot,
-      projectName: "Supervisor Daemon Demo",
-      profileId: "python-fastapi-docker",
-      dryRun: false
-    });
-    installSupervisorRuntimeTemplates(repoRoot, "main");
-
-    const manifestPath = writeInitiativeManifest(repoRoot, "billing-v2", {
-      version: 1,
-      slug: "billing-v2",
-      baseBranch: "main",
-      managerBranch: "supervisor/billing-v2",
-      issues: [
-        { id: "APP-1", title: "Backend contract", order: 10, blockedBy: [] },
-        { id: "APP-2", title: "Frontend adoption", order: 20, blockedBy: ["APP-1"] }
-      ]
-    });
-
-    fs.mkdirSync(path.join(repoRoot, ".tmp"), { recursive: true });
-    const fakeAgentBin = createFakeExecutable(
-      path.join(repoRoot, ".tmp"),
-      "fake-daemon-agent.sh",
-      `#!/usr/bin/env bash
-set -eu
-role=""
-issue=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --role) role="$2"; shift 2 ;;
-    --issue) issue="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-if [ "$role" = "worker" ]; then
-  printf '{"status":"completed","runId":"worker-%s","summary":"worker %s complete","worktreePath":"/tmp/%s"}\n' "$issue" "$issue" "$issue"
-  exit 0
-fi
-printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\n' "$issue" "$issue"
-`
-    );
-    process.env.AIFORGE_SUPERVISOR_HEADLESS_BIN = fakeAgentBin;
-
-    const imported = runSupervisorSyncImportCommand(repoRoot, { slug: "billing-v2", manifest: manifestPath });
-    const snapshotPath = ((imported.details as Record<string, unknown>).snapshotPath as string) ?? "";
-    const initialized = runSupervisorInitFromSourceCommand(repoRoot, { slug: "billing-v2", source: snapshotPath });
-    expect(initialized.ok).toBe(true);
-    runSupervisorResumeCommand(repoRoot, "billing-v2");
-
-    const daemon = runSupervisorDaemonCommand(repoRoot, {
-      slug: "billing-v2",
-      launcher: "headless",
-      tickLimit: 50,
-      pollMs: 10
-    });
-    expect((daemon.details as Record<string, unknown>).status).toBe("done");
-
-    const status = runSupervisorStatusCommand(repoRoot, "billing-v2");
-    expect((status.details as Record<string, unknown>).status).toBe("done");
-    const issues = (status.details as Record<string, unknown>).issues as Record<string, Record<string, unknown>>;
-    expect(issues["APP-1"]?.commitSha).toBe("commit-APP-1");
-    expect(issues["APP-2"]?.commitSha).toBe("commit-APP-2");
-    expect(fs.existsSync(path.join(repoRoot, ".ai", "runtime", "supervisor", "leases", "billing-v2.json"))).toBe(
-      true
-    );
-  });
-
-  test("codex guards block manager-mode edits when supervisor is active", async () => {
-    const repoRoot = makeTempRepo("ai-simple-supervisor-guard-");
-    const git = (args: string[]) => {
-      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
-      if (result.status !== 0) {
-        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
-      }
-      return result.stdout.trim();
-    };
-
-    git(["init"]);
-    git(["config", "user.email", "t@t.t"]);
-    git(["config", "user.name", "t"]);
-    fs.writeFileSync(path.join(repoRoot, "README.md"), "# demo\n");
-    git(["add", "."]);
-    git(["commit", "-m", "base"]);
-    git(["branch", "-M", "main"]);
-    git(["checkout", "-b", "supervisor/demo"]);
-
-    await runInitCommand({
-      repoRoot,
-      projectName: "Supervisor Guard Demo",
-      profileId: "python-fastapi-docker",
-      dryRun: false
-    });
-
-    installCodexHookTemplates(repoRoot);
-    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "supervisor", "runs"), { recursive: true });
-    fs.writeFileSync(
-      path.join(repoRoot, ".ai", "runtime", "supervisor", "runs", "demo.json"),
-      JSON.stringify(
-        {
-          slug: "demo",
-          status: "running",
-          managerBranch: "supervisor/demo",
-          currentIssueId: "APP-1",
-          issues: {
-            "APP-1": {
-              status: "worker-completed"
-            }
-          }
-        },
-        null,
-        2
-      ) + "\n"
-    );
-
-    const preToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "pre-tool-use-guard.mjs");
-    const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
-    const postToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "post-tool-use-guard.mjs");
-
-    const deniedEdit = JSON.parse(
-      runNodeScriptWithInput(
-        preToolUseGuardPath,
-        [],
-        repoRoot,
-        JSON.stringify({ tool_name: "Edit", tool_input: { path: "src/app.ts" } })
-      ).stdout
-    );
-    expect(deniedEdit.hookSpecificOutput.permissionDecision).toBe("deny");
-    expect(deniedEdit.systemMessage).toContain("Manager mode");
-
-    const allowedRuntimeEdit = JSON.parse(
-      runNodeScriptWithInput(
-        preToolUseGuardPath,
-        [],
-        repoRoot,
-        JSON.stringify({
-          tool_name: "Edit",
-          tool_input: { path: ".ai/runtime/supervisor/findings/demo/APP-1-attempt-1.md" }
-        })
-      ).stdout
-    );
-    expect(allowedRuntimeEdit.continue).toBe(true);
-
-    const postToolUse = JSON.parse(
-      runNodeScriptWithInput(
-        postToolUseGuardPath,
-        [],
-        repoRoot,
-        JSON.stringify({ tool_input: { command: "git status" } })
-      ).stdout
-    );
-    expect(postToolUse.systemMessage).toContain("Supervisor demo is still active");
-    expect(postToolUse.systemMessage).toContain("run_manager_review");
-
-    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
-    expect(stopGuard.stopReason).toBe("supervisor_incomplete");
-    expect(stopGuard.systemMessage).toContain("run_manager_review");
-  });
-
-  test("claude hooks block manager-mode edits when supervisor is active", async () => {
-    const repoRoot = makeTempRepo("ai-simple-claude-guard-");
-    const git = (args: string[]) => {
-      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
-      if (result.status !== 0) {
-        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
-      }
-      return result.stdout.trim();
-    };
-
-    git(["init"]);
-    git(["config", "user.email", "t@t.t"]);
-    git(["config", "user.name", "t"]);
-    fs.writeFileSync(path.join(repoRoot, "README.md"), "# demo\n");
-    git(["add", "."]);
-    git(["commit", "-m", "base"]);
-    git(["branch", "-M", "main"]);
-    git(["checkout", "-b", "supervisor/demo"]);
-
-    await runInitCommand({
-      repoRoot,
-      projectName: "Claude Guard Demo",
-      profileId: "python-fastapi-docker",
-      dryRun: false
-    });
-
-    installClaudeHookTemplates(repoRoot);
-    fs.mkdirSync(path.join(repoRoot, ".ai", "runtime", "supervisor", "runs"), { recursive: true });
-    fs.writeFileSync(
-      path.join(repoRoot, ".ai", "runtime", "supervisor", "runs", "demo.json"),
-      JSON.stringify(
-        {
-          slug: "demo",
-          status: "running",
-          managerBranch: "supervisor/demo",
-          currentIssueId: "APP-1",
-          issues: {
-            "APP-1": {
-              status: "worker-completed"
-            }
-          }
-        },
-        null,
-        2
-      ) + "\n"
-    );
-
-    const preToolUseGuardPath = path.join(repoRoot, ".claude", "hooks", "pre-tool-use-guard.mjs");
-    const stopGuardPath = path.join(repoRoot, ".claude", "hooks", "stop-delivery-guard.mjs");
-
-    const deniedEdit = JSON.parse(
-      runNodeScriptWithInput(
-        preToolUseGuardPath,
-        [],
-        repoRoot,
-        JSON.stringify({ tool_name: "Edit", tool_input: { path: "src/app.ts" } })
-      ).stdout
-    );
-    expect(deniedEdit.hookSpecificOutput.permissionDecision).toBe("deny");
-    expect(deniedEdit.systemMessage).toContain("Manager mode");
-
-    const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
-    expect(stopGuard.stopReason).toBe("supervisor_incomplete");
-    expect(stopGuard.systemMessage).toContain("Supervisor demo");
   });
 
   test("dry-run init does not write config", async () => {
@@ -1389,6 +715,8 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     const syncedAgents = fs.readFileSync(agentsPath, "utf8");
     expect(syncedAgents).toContain("## Repo-Specific Constraints");
     expect(syncedAgents).toContain("Always treat `apps/api` as the system-of-record boundary.");
+    expect(syncedAgents).toContain("## Goal-Mode Multi-Task Contract");
+    expect(syncedAgents).toContain("openspec-apply-change <changeId>");
     expect(syncedAgents).not.toContain("This repository uses the `ai-simple-template` workflow baseline.");
 
     fs.writeFileSync(agentsPath, "# manual agents overwrite\n");
@@ -1399,6 +727,7 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     const updatedAgents = fs.readFileSync(agentsPath, "utf8");
     expect(updatedAgents).toContain("## Repo-Specific Constraints");
     expect(updatedAgents).toContain("Never modify deployment manifests without updating rollout notes.");
+    expect(updatedAgents).toContain("## Goal-Mode Multi-Task Contract");
     expect(updatedAgents).not.toContain("# manual agents overwrite");
   });
 
@@ -1415,6 +744,42 @@ printf '{"result":"accept","summary":"review %s clean","commitSha":"commit-%s"}\
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, ".copier-update-marker"))).toBe(false);
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
+  });
+
+  test("sync removes exact retired supervisor code while preserving historical evidence", async () => {
+    const repoRoot = copyFixture("python-fastapi-docker");
+    await runAdoptCommand({ repoRoot, dryRun: false });
+
+    const retiredFiles = [
+      [".ai", "skills", "supervisor", "SKILL.md"],
+      [".ai", "runtime", "supervisor-state.mjs"],
+      [".ai", "runtime", "supervisor-context.mjs"],
+      [".ai", "runtime", "supervisor-daemon.mjs"],
+      [".ai", "runtime", "supervisor-linear-sync.mjs"],
+      [".ai", "runtime", "supervisor-launchers", "headless.mjs"],
+      [".ai", "runtime", "supervisor-launchers", "cursor.mjs"],
+      [".ai", "runtime", "supervisor-launchers", "claude.mjs"],
+      [".ai", "runtime", "supervisor-launchers", "codex.mjs"]
+    ];
+    for (const parts of retiredFiles) {
+      const targetPath = path.join(repoRoot, ...parts);
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, "// retired generated file\n");
+    }
+    const evidencePath = path.join(repoRoot, ".ai", "runtime", "supervisor", "runs", "old-run.json");
+    const userNotePath = path.join(repoRoot, ".ai", "skills", "supervisor", "notes.md");
+    fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
+    fs.writeFileSync(evidencePath, '{"status":"done"}\n');
+    fs.writeFileSync(userNotePath, "historical note\n");
+
+    const result = await runSyncCommand(repoRoot, false);
+
+    expect(result.ok).toBe(true);
+    for (const parts of retiredFiles) {
+      expect(fs.existsSync(path.join(repoRoot, ...parts))).toBe(false);
+    }
+    expect(fs.readFileSync(evidencePath, "utf8")).toContain('"done"');
+    expect(fs.readFileSync(userNotePath, "utf8")).toContain("historical note");
   });
 
   test("update restores shared skills and rules links for existing projects", async () => {

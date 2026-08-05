@@ -38,11 +38,11 @@ title: "Model Profiles"
 {{ agent_runtime_models_json }}
 ```
 
-| Runtime | Typical CLI / UI | Example ids |
-|---------|------------------|-------------|
-| `cursor` | Cursor Task `model=` | `composer-2.5-fast`, `gpt-5-mini`, … |
-| `codex` | `codex -m …` / `config.toml` | `gpt-5.5`, `gpt-5.4-mini`, `gpt-5.3-codex` |
-| `claude` | Claude Code model picker | per your account |
+| Runtime | Native selection surface | Model ids |
+|---------|--------------------------|-----------|
+| `cursor` | Cursor native Task/subagent model preference | project-configured Cursor ids |
+| `codex` | Codex native subagent model preference | project-configured Codex ids |
+| `claude` | Claude native subagent model preference | project-configured Claude ids |
 
 Reserved in any block: `auto` (UI-only, not passed to tools).
 
@@ -55,7 +55,8 @@ node .ai/runtime/orchestrator-state.mjs model-hint --role review
 
 - **Do not** pass `--runtime cursor` when you are in Codex (or the reverse).
 - Override detection: `AIFORGE_ACTIVE_RUNTIME=codex` (or `cursor`, `claude`).
-- Follow JSON `instruction` — Cursor uses Task `model=`; Codex uses `codex -m`; they are **not** interchangeable.
+- Follow JSON `instruction` and pass the preference only to the active host's native subagent tool. If explicit model selection is unavailable, inherit a compatible native model and record the fallback.
+- Never turn a model hint into a shell-launched agent CLI or PTY polling loop.
 
 ## Editing
 

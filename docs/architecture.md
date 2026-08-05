@@ -109,6 +109,7 @@ The test suite covers:
 - command behavior in temporary repositories
 - generated surface contracts
 - orchestrator loop guards
+- Goal-mode manager/worker contracts built on native host subagents and one OpenSpec change per worker
 - security gate behavior
 - runtime/model hint helpers
 
