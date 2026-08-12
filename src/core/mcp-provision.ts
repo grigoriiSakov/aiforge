@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
+import { loadAiforgeEnvironment } from "./local-config.js";
 import { AIFORGE_MCP_SERVER_KEY_PREFIX, resolvePlaceholdersToBlocks } from "./mcp-registry.js";
 import { loadInstallerStateOrNull, saveInstallerState, type AiforgeInstallerState } from "./state.js";
 import type { ProjectConfig } from "./types.js";
@@ -40,11 +41,23 @@ function mergeMcpServers(
 }
 
 function serverBlocksFromResolved(
-  resolved: ReturnType<typeof resolvePlaceholdersToBlocks>
+  resolved: ReturnType<typeof resolvePlaceholdersToBlocks>,
+  environment: NodeJS.ProcessEnv
 ): Record<string, unknown> {
   const entries: Record<string, unknown> = {};
   for (const row of resolved) {
-    entries[row.key] = { ...row.definition.block };
+    const block = structuredClone(row.definition.block);
+    if (block.env) {
+      for (const [key, rawValue] of Object.entries(block.env)) {
+        const match = rawValue.match(/^\$\{([A-Z][A-Z0-9_]*)\}$/);
+        const envName = match?.[1];
+        const resolvedValue = envName ? environment[envName] : undefined;
+        if (resolvedValue) {
+          block.env[key] = resolvedValue;
+        }
+      }
+    }
+    entries[row.key] = block;
   }
   return entries;
 }
@@ -96,7 +109,9 @@ export function provisionManagedMcp(repoRoot: string, config: ProjectConfig): st
   }
 
   const resolved = resolvePlaceholdersToBlocks(config.mcp.placeholders ?? []);
-  const serverBlocks = serverBlocksFromResolved(resolved);
+  // Runtime MCP files are local/ignored and may safely materialize credentials.
+  // This lets IDEs launch MCP servers without inheriting the shell that ran sync.
+  const serverBlocks = serverBlocksFromResolved(resolved, loadAiforgeEnvironment(repoRoot));
   const written: string[] = [];
   const runtimeTargets: string[] = [];
 

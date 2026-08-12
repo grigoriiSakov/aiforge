@@ -184,7 +184,7 @@ DATABASE_URL=
 # PROJECT_DOCKER_ROOT=/absolute/path/to/docker
 ```
 
-The repo-local `.ai/bin/go-task` wrapper and `aiforge doctor` load `.aiforge.credentials.env`. Variables already present in the process environment take precedence. Secret values are never copied into `ai.config.yaml`, `.ai/project.manifest.json`, `.aiforge.json`, or Copier answers.
+The repo-local `.ai/bin/go-task` wrapper, MCP provisioning, and `aiforge doctor` load `.aiforge.credentials.env`. Variables already present in the process environment take precedence. During `sync`, available credentials are materialized only into ignored runtime MCP JSON files so Cursor, Codex, and Claude can launch their servers without inheriting the original shell. Secret values are never copied into `ai.config.yaml`, tracked AI surfaces, `.ai/project.manifest.json`, `.aiforge.json`, or Copier answers.
 
 ### What belongs in Git
 
