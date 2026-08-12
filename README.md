@@ -142,6 +142,70 @@ aiforge doctor
 
 The CLI uses the current working directory by default. Pass `--repo /path/to/repo` when you want to operate on another checkout.
 
+## Joining an Existing Managed Repository
+
+An existing project must commit its shared workflow contract before another developer can synchronize it. At minimum, the repository should contain `ai.config.yaml`, `Taskfile.yml`, `AGENTS.md`, `MANIFESTO.md`, and durable `openspec/**` artifacts. The team should also pin the aiforge version or source revision used to render managed surfaces.
+
+Recommended onboarding flow:
+
+1. Clone the application repository and any required sibling repositories. Docker-first projects commonly keep Compose files in a parent or sibling `docker` checkout; follow the topology documented by that project.
+2. Install the project-pinned aiforge version and its prerequisites. For an npm release: `npm install --global "aiforge@$(cat .aiforge-version)"`. During source development, check out the matching source revision, run `npm ci && npm run build`, and link that build.
+3. Run `aiforge sync`. This must succeed from a clean clone using committed project config and safe defaults; missing integrations are reported as hints rather than blocking generation.
+4. Copy `.aiforge.local.example.yaml` to `.aiforge.local.yaml` when the project provides one, then set this developer's worktree path, enabled runtimes, and model mappings.
+5. Copy `.aiforge.credentials.example.env` to `.aiforge.credentials.env` and fill only the tokens, connection strings, and machine-specific project paths needed here.
+6. Run `aiforge sync` again so the local overlay is reflected in machine-generated runtime files.
+7. Run `aiforge doctor`, `.ai/bin/go-task --list`, and the project's canonical lint, test, or verify task from the repository root.
+
+Example local config:
+
+```yaml
+schemaVersion: 1
+orchestrator:
+  worktreeRoot: /home/alex/worktrees/example-project
+runtimes:
+  cursor: true
+  codex: true
+  claude: false
+agents:
+  runtimeModels:
+    codex:
+      quality: gpt-5.6-sol
+      balanced: gpt-5.6-terra
+```
+
+`.aiforge.local.yaml` deliberately supports only machine/user fields: `orchestrator.worktreeRoot`, runtime enablement, and concrete per-runtime model hints. Project commands, tracker scope, rules, and workflow cannot be overridden locally.
+
+Example credentials and task environment file:
+
+```dotenv
+LINEAR_API_KEY=
+DATABASE_URL=
+# Project-specific path overrides may also live here:
+# PROJECT_DOCKER_ROOT=/absolute/path/to/docker
+```
+
+The repo-local `.ai/bin/go-task` wrapper and `aiforge doctor` load `.aiforge.credentials.env`. Variables already present in the process environment take precedence. Secret values are never copied into `ai.config.yaml`, `.ai/project.manifest.json`, `.aiforge.json`, or Copier answers.
+
+### What belongs in Git
+
+Commit shared project truth and durable collaboration artifacts:
+
+- `ai.config.yaml`, `Taskfile.yml`, `AGENTS.md`, and `MANIFESTO.md`
+- `.aiforge-version`, which lets `aiforge doctor` reject a mismatched CLI
+- `openspec/**`
+- project-owned rules, guidelines, skills, and initiative bundles
+- scripts/configuration required by canonical Task commands
+- `.aiforge.local.example.yaml` and `.aiforge.credentials.example.env` with no real credentials
+
+Keep machine/user state ignored:
+
+- `.aiforge.local.yaml` and `.aiforge.credentials.env`
+- `.aiforge.json` and `.copier-answers.yml`
+- `.ai/project.manifest.json`, model-profile mirrors, task/review/orchestrator state, reports, and temporary files
+- runtime MCP JSON, audit logs, session context, and files containing absolute user paths
+
+Do not ignore all of `.ai/**` when the repository stores project-owned rules, skills, or initiative artifacts there. Prefer narrow ignore patterns for generated and runtime state. Teams that commit deterministic generated surfaces should pin aiforge and run `aiforge sync && git diff --exit-code` in CI.
+
 ## Common Commands
 
 ```bash
@@ -170,6 +234,28 @@ aiforge skills add-git --url https://example.com/skills.git --id team-skills
 aiforge skills list
 aiforge skills remove <id>
 ```
+
+## Working with Skills
+
+`.ai/skills` is the shared skill kernel for the repository. Enabled runtimes expose that same directory through links such as `.cursor/skills`, `.codex/skills`, `.claude/skills`, `.agent/skills`, and `.agents/skills`; do not maintain separate copies for each IDE.
+
+Skills come from four sources:
+
+- Core aiforge skills are rendered by the template, including `issue`, `plan`, `implement`, `review`, `orchestrator`, `tracker`, and supporting review/debug skills.
+- Official OpenSpec skills are installed during `init`, `adopt`, `sync`, and `update`. They own proposal, specification, design, task, sync, and archive workflows under `openspec/`.
+- Project-owned skills live at `.ai/skills/<name>/SKILL.md`. Use a unique name, document when the skill should trigger, keep project-specific knowledge inside the repository, and commit it for the whole team.
+- Remote skills and extension-provided skills are installed through the commands above. They pass the aiforge security gate, but still require human review and a trusted source.
+
+Practical rules:
+
+- Read `AGENTS.md`, `MANIFESTO.md`, `ai.config.yaml`, and relevant `.ai/rules/*` before applying a project skill.
+- Invoke a skill by its runtime-supported slash/name mechanism; every runtime sees the same `SKILL.md` content through the shared links.
+- Edit the canonical `.ai/skills/...` source, not a runtime symlink.
+- After editing shared config or template-managed skills, run `aiforge sync`, `aiforge doctor`, and the relevant canonical Task checks.
+- Remote-skill installation state is machine-local in `.aiforge.json`. If every developer must receive a skill automatically, promote it to a reviewed project-owned skill and commit it instead of relying on one developer's installer state.
+- Never put tokens, `.env` files, private keys, or personal absolute paths inside a skill. Reference environment variable names or local config instead.
+
+For normal feature work, use OpenSpec for durable intent and aiforge skills for execution. A typical flow is `/opsx:propose` → `implement`/`orchestrator` → canonical tests → `review` → OpenSpec sync/archive at the terminal gate.
 
 ## How Updates Work
 
@@ -246,6 +332,8 @@ The orchestrator keeps review cost under control:
 - project database
 
 Run `aiforge doctor` for missing environment hints.
+
+Managed MCP entries contain environment-variable placeholders. Authentication values belong in the process environment, `.aiforge.credentials.env`, or the runtime's approved credential store. Non-`aiforge-*` entries are preserved during scaffolding, but runtime MCP files remain local because they may contain credentials, DSNs, and absolute paths.
 
 ## Development
 

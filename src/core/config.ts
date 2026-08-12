@@ -11,7 +11,9 @@ import { AGENT_RUNTIME_IDS, isAgentRuntimeId, validateModelSlugForRuntime } from
 import { ensureDir, readTextFileIfExists, writeTextFile } from "./filesystem.js";
 import { ensureInstallerState } from "./state.js";
 import { getProfileDefinition } from "./profiles/definitions.js";
+import { applyLocalConfig, loadLocalConfig } from "./local-config.js";
 import { DEFAULT_TASK_COMMAND, renderTaskCommands } from "./task-runner.js";
+import { AIFORGE_VERSION } from "./version.js";
 import type {
   DetectionResult,
   MinimalismLevel,
@@ -127,6 +129,7 @@ export function createConfig(params: {
       markdown: ""
     },
     managedSurfaces: [
+      { path: ".aiforge-version", policy: "managed" },
       { path: ".aiforge.json", policy: "managed" },
       { path: ".ai/project.model-profiles.json", policy: "managed" },
       { path: ".ai", policy: "managed" },
@@ -159,12 +162,20 @@ export function loadConfig(repoRoot: string): ProjectConfig {
   return normalized;
 }
 
+/** Load committed project truth plus the narrow, ignored machine/user overlay. */
+export function loadEffectiveConfig(repoRoot: string): ProjectConfig {
+  const effective = applyLocalConfig(loadConfig(repoRoot), loadLocalConfig(repoRoot));
+  const normalized = normalizeConfig(effective);
+  validateConfig(normalized);
+  return normalized;
+}
+
 export function saveConfig(repoRoot: string, config: ProjectConfig): string {
   const normalized = normalizeConfig(config);
   validateConfig(normalized);
   const configPath = path.join(repoRoot, CONFIG_FILE_NAME);
   writeTextFile(configPath, YAML.stringify(normalized));
-  writeMachineManifest(repoRoot, normalized);
+  writeMachineManifest(repoRoot, applyLocalConfig(normalized, loadLocalConfig(repoRoot)));
   return configPath;
 }
 
@@ -181,6 +192,7 @@ export function writeMachineManifest(repoRoot: string, config: ProjectConfig): s
 
 export function buildCopierAnswers(config: ProjectConfig): Record<string, unknown> {
   return {
+    aiforge_version: AIFORGE_VERSION,
     project_slug: config.project.slug,
     project_name: config.project.name,
     main_branch: config.project.mainBranch,

@@ -6,7 +6,12 @@ tasks:
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_implement_name }}
 {% for command in commands.implement %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
       - {{ command }}
+{% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_implement_name }}
 
@@ -15,7 +20,12 @@ tasks:
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_test_name }}
 {% for command in commands.test %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
       - {{ command }}
+{% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_test_name }}
 
@@ -24,7 +34,12 @@ tasks:
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_lint_name }}
 {% for command in commands.lint %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
       - {{ command }}
+{% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_lint_name }}
 
@@ -33,7 +48,12 @@ tasks:
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_verify_name }}
 {% for command in commands.verify %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
       - {{ command }}
+{% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_verify_name }}
 
@@ -43,6 +63,11 @@ tasks:
       - node .ai/runtime/task-state.mjs pre {{ task_review_name }}
       - node .ai/runtime/review-state.mjs start
 {% for command in commands.review %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
       - {{ command }}
+{% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_review_name }}

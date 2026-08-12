@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
-import { CONFIG_FILE_NAME, MACHINE_MANIFEST_PATH, loadConfig } from "./config.js";
+import { CONFIG_FILE_NAME, MACHINE_MANIFEST_PATH, loadEffectiveConfig } from "./config.js";
 import { readJsonFileIfExists } from "./filesystem.js";
+import { loadAiforgeEnvironment } from "./local-config.js";
 import { resolveMcpProvider } from "./mcp-registry.js";
 import { resolveOpenSpecTools } from "./openspec.js";
 import { INSTALLER_STATE_FILE_NAME, loadInstallerStateOrNull } from "./state.js";
 import type { CommandResult, RuntimeFlags } from "./types.js";
+import { AIFORGE_VERSION } from "./version.js";
 
 function runtimesEqual(a: RuntimeFlags, b: RuntimeFlags): boolean {
   return (
@@ -24,17 +27,37 @@ export function runDoctor(repoRoot: string): CommandResult {
     return { ok: false, code: 2, message: `Missing ${CONFIG_FILE_NAME}` };
   }
 
-  const config = loadConfig(repoRoot);
+  const versionPath = path.join(repoRoot, ".aiforge-version");
+  if (fs.existsSync(versionPath)) {
+    const expectedVersion = fs.readFileSync(versionPath, "utf8").trim();
+    if (expectedVersion && expectedVersion !== AIFORGE_VERSION) {
+      return {
+        ok: false,
+        code: 3,
+        message: "Installed aiforge version does not match the project pin",
+        details: {
+          expected: expectedVersion,
+          actual: AIFORGE_VERSION,
+          remediation: `Install aiforge@${expectedVersion}, then run aiforge sync.`
+        }
+      };
+    }
+  }
+
+  const config = loadEffectiveConfig(repoRoot);
+  const localEnv = loadAiforgeEnvironment(repoRoot);
   const machineManifest = readJsonFileIfExists<Record<string, unknown>>(path.join(repoRoot, MACHINE_MANIFEST_PATH));
   const requiredSurfaces = [...config.managedSurfaces.map((surface) => surface.path), MACHINE_MANIFEST_PATH];
   const missing = requiredSurfaces.filter((surface) => {
-    if (surface === ".agent" && !config.runtimes.agent) {
-      return false;
-    }
-    if (surface === ".cursor" && !config.runtimes.cursor) {
-      return false;
-    }
-    if (surface === ".codex" && !config.runtimes.codex) {
+    const runtimeSurface = {
+      ".cursor": "cursor",
+      ".codex": "codex",
+      ".claude": "claude",
+      ".agent": "agent",
+      ".agents": "agents"
+    } as const;
+    const runtime = runtimeSurface[surface as keyof typeof runtimeSurface];
+    if (runtime && !config.runtimes[runtime]) {
       return false;
     }
     return !fs.existsSync(path.join(repoRoot, surface));
@@ -46,6 +69,28 @@ export function runDoctor(repoRoot: string): CommandResult {
       code: 3,
       message: "Managed surfaces are missing",
       details: { missing, profile: config.profile.id, remediation: "Run aiforge sync or init." }
+    };
+  }
+
+  const taskCommand = config.task.command.includes(path.sep)
+    ? path.resolve(repoRoot, config.task.command)
+    : config.task.command;
+  const taskCheck = spawnSync(taskCommand, ["--list"], {
+    cwd: repoRoot,
+    env: localEnv,
+    encoding: "utf8",
+    stdio: "pipe"
+  });
+  if (taskCheck.status !== 0) {
+    return {
+      ok: false,
+      code: 3,
+      message: "Task runner or Taskfile is invalid",
+      details: {
+        taskCommand: config.task.command,
+        exitCode: taskCheck.status,
+        remediation: "Run aiforge sync, then ensure `.ai/bin/go-task --list` succeeds."
+      }
     };
   }
 
@@ -138,7 +183,7 @@ export function runDoctor(repoRoot: string): CommandResult {
         continue;
       }
       for (const envName of def.requiredEnv) {
-        if (!process.env[envName]) {
+        if (!localEnv[envName]) {
           mcpEnvHints.push(`${def.id}: set environment variable ${envName}`);
         }
       }

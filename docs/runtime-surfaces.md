@@ -27,3 +27,12 @@ Everything shared or machine-readable now lives in `.ai`:
 So `.agents/` is now just an optional Codex agent-mode compatibility surface, not a shared source of truth.
 
 OpenSpec installs its workflow skills through the enabled runtime adapters. Because runtime skill directories point to `.ai/skills`, the generated OpenSpec skills are shared without duplicating their content. Runtime-native command files, such as Cursor OPSX commands, remain in the directories expected by that runtime.
+
+## Local boundary
+
+- `.aiforge.local.yaml` — ignored machine/user overrides for worktree root, enabled runtimes, and concrete runtime model hints.
+- `.aiforge.credentials.env` — ignored credentials plus project-specific environment/path overrides loaded by `aiforge doctor` and `.ai/bin/go-task`.
+- `.aiforge.json` and `.copier-answers.yml` — ignored installer and Copier state.
+- runtime MCP JSON, audit logs, task state, review verdicts, and orchestrator run state — ignored local state.
+
+Secrets never enter `.ai/project.manifest.json` or `.ai/project.model-profiles.json`.

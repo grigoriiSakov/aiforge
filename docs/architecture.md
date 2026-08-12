@@ -19,12 +19,17 @@ Machine-readable mirrors are generated for tools that should not parse YAML:
 - `.ai/project.model-profiles.json`
 - `.aiforge.json`
 
+Machine/user overrides may be stored in `.aiforge.local.yaml`. The overlay is intentionally limited to `orchestrator.worktreeRoot`, runtime enablement, and per-runtime model hints. Tokens and connection strings are loaded from `.aiforge.credentials.env` into the current process only and are never merged into `ProjectConfig` or its machine-readable mirrors.
+
 Precedence:
 
 1. CLI flags
-2. local config
-3. selected profile defaults
-4. template defaults
+2. existing process environment
+3. `.aiforge.credentials.env` for missing environment variables
+4. `.aiforge.local.yaml`
+5. committed `ai.config.yaml`
+6. selected profile defaults
+7. template defaults
 
 ## Managed Surfaces
 

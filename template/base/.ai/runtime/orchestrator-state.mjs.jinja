@@ -108,7 +108,7 @@ function defaultRegistry() {
   return {
     version: 1,
     updatedAt: utcNow(),
-    worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT),
+    worktreeRoot: configuredWorktreeRoot(),
     branchPrefix: DEFAULT_BRANCH_PREFIX,
     activeReservations: {},
     queue: [],
@@ -124,7 +124,14 @@ function loadRegistry() {
     saveRegistry(registry);
     return registry;
   }
-  return readJson(registryPath(), defaultRegistry());
+  const registry = readJson(registryPath(), defaultRegistry());
+  registry.worktreeRoot = configuredWorktreeRoot();
+  return registry;
+}
+
+function configuredWorktreeRoot() {
+  const manifest = readJson(machineManifestPath(), null);
+  return expandHome(manifest?.orchestrator?.worktreeRoot || DEFAULT_WORKTREE_ROOT);
 }
 
 function saveRegistry(registry) {
@@ -746,7 +753,7 @@ function commandStartWorktree(args) {
     throw new Error(`worktree already exists for ${issueId}: ${run.worktreePath}`);
   }
 
-  const worktreeRoot = expandHome(registry.worktreeRoot || DEFAULT_WORKTREE_ROOT);
+  const worktreeRoot = registry.worktreeRoot || configuredWorktreeRoot();
   const worktreePath = path.join(worktreeRoot, issueId);
   ensureDir(worktreeRoot);
   if (fs.existsSync(worktreePath)) {
@@ -1072,7 +1079,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "start_worktree",
       issue: issueId,
-      worktreeRoot: expandHome(DEFAULT_WORKTREE_ROOT),
+      worktreeRoot: configuredWorktreeRoot(),
       ...limits
     };
   } else if (run.status === "pre-finalize") {

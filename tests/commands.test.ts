@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import YAML from "yaml";
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -65,6 +66,7 @@ process.exit(0);
 
     expect(result.ok).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, CONFIG_FILE_NAME))).toBe(true);
+    expect(fs.readFileSync(path.join(repoRoot, ".aiforge-version"), "utf8").trim()).toBe("0.1.0");
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "llms.txt"))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, ".ai", "linear-scope.json"))).toBe(true);
@@ -584,6 +586,83 @@ process.exit(0);
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
+  test("sync renders multiline task commands as valid YAML block scalars", async () => {
+    const repoRoot = makeTempRepo("aiforge-multiline-task-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Multiline Task Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+    const config = loadConfig(repoRoot);
+    config.commands.test = [
+      [
+        'task_root="${AIFORGE_WORKTREE_PATH:-$(pwd)}"',
+        'if [ -n "$task_root" ]; then',
+        '  echo "$task_root"',
+        "fi"
+      ].join("\n")
+    ];
+    saveConfig(repoRoot, config);
+    fs.writeFileSync(
+      path.join(repoRoot, ".aiforge.local.yaml"),
+      "schemaVersion: 1\norchestrator:\n  worktreeRoot: /tmp/local-machine-worktrees\n"
+    );
+
+    // This assertion covers the real Jinja template; the suite-wide fake
+    // Copier intentionally writes only a minimal placeholder Taskfile.
+    delete process.env.AI_SIMPLE_COPIER_BIN;
+    await runSyncCommand(repoRoot, false);
+
+    const taskfile = fs.readFileSync(path.join(repoRoot, "Taskfile.yml"), "utf8");
+    const parsed = YAML.parse(taskfile) as { tasks?: { test?: { cmds?: unknown[] } } };
+    expect(taskfile).toContain("      - |\n        task_root=");
+    expect(parsed.tasks?.test?.cmds).toHaveLength(3);
+    const runtimePath = path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs");
+    expect(fs.readFileSync(runtimePath, "utf8")).not.toContain("/tmp/local-machine-worktrees");
+    const runtimeStatus = spawnSync("node", [runtimePath, "status"], {
+      cwd: repoRoot,
+      encoding: "utf8"
+    });
+    expect(runtimeStatus.status).toBe(0);
+    expect(JSON.parse(runtimeStatus.stdout)).toMatchObject({
+      worktreeRoot: "/tmp/local-machine-worktrees"
+    });
+  });
+
+  test("doctor fails when the canonical task runner cannot list tasks", async () => {
+    const repoRoot = makeTempRepo("aiforge-doctor-task-parse-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Broken Task Demo",
+      profileId: "laravel-docker",
+      dryRun: false
+    });
+    createFakeExecutable(path.join(repoRoot, ".ai", "bin"), "task", "#!/bin/sh\nexit 2\n");
+
+    const result = runDoctorCommand(repoRoot);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Task runner or Taskfile is invalid");
+  });
+
+  test("doctor fails when the installed CLI does not match the project pin", async () => {
+    const repoRoot = makeTempRepo("aiforge-doctor-version-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Version Pin Demo",
+      profileId: "laravel-docker",
+      dryRun: false
+    });
+    fs.writeFileSync(path.join(repoRoot, ".aiforge-version"), "99.0.0\n");
+
+    const result = runDoctorCommand(repoRoot);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("does not match the project pin");
+    expect(result.details).toMatchObject({ expected: "99.0.0", actual: "0.1.0" });
+  });
+
   test("sync rewrites ai.config.yaml only when profile override is requested", async () => {
     const repoRoot = makeTempRepo("ai-simple-sync-profile-override-");
     await runInitCommand({
@@ -975,6 +1054,34 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     expect(fs.existsSync(path.join(repoRoot, ".cursor", "mcp", "README.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "MANIFESTO.md"))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, "llms", "README.md"))).toBe(true);
+  });
+
+  test("llms index excludes Git-ignored machine files", async () => {
+    const repoRoot = makeTempRepo("ai-simple-llms-gitignore-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "LLMs Git Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.features.llms = true;
+    config.llms.sourceGlobs = ["app/**/*.py"];
+    saveConfig(repoRoot, config);
+
+    fs.mkdirSync(path.join(repoRoot, "app"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "app", "tracked.py"), "print('shared')\n");
+    fs.writeFileSync(path.join(repoRoot, "app", "machine.py"), "print('local')\n");
+    fs.writeFileSync(path.join(repoRoot, ".gitignore"), "app/machine.py\n");
+    spawnSync("git", ["init"], { cwd: repoRoot });
+    spawnSync("git", ["add", ".gitignore", "app/tracked.py"], { cwd: repoRoot });
+
+    await runLlmsBuildCommand(repoRoot);
+
+    const index = fs.readFileSync(path.join(repoRoot, "llms.txt"), "utf8");
+    expect(index).toContain("app/tracked.py");
+    expect(index).not.toContain("app/machine.py");
   });
 
   test("linear init scaffolds scope and settings files", async () => {

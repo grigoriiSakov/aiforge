@@ -57,6 +57,24 @@ const scriptPath = fileURLToPath(import.meta.url);
 const scriptDir = path.dirname(scriptPath);
 const args = process.argv.slice(2);
 const candidates = [path.join(scriptDir, "task"), "go-task", "task"];
+const credentialsPath = path.resolve(scriptDir, "../..", ".aiforge.credentials.env");
+
+if (fs.existsSync(credentialsPath)) {
+  for (const rawLine of fs.readFileSync(credentialsPath, "utf8").split(/\\r?\\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const normalized = line.startsWith("export ") ? line.slice(7).trim() : line;
+    const separator = normalized.indexOf("=");
+    if (separator <= 0) continue;
+    const key = normalized.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || process.env[key] !== undefined) continue;
+    let value = normalized.slice(separator + 1).trim();
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
 
 for (const candidate of candidates) {
   if (candidate.includes(path.sep) && !fs.existsSync(candidate)) {

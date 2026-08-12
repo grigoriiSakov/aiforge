@@ -5,6 +5,7 @@ import {
   writeTemporaryAnswersFile
 } from "../core/copier.js";
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
+import { applyLocalConfig, loadLocalConfig } from "../core/local-config.js";
 import { finalizeAfterCopierCopy, previewRetiredGeneratedSurfaces } from "../core/setup.js";
 import { cleanupSnapshot, createManagedSnapshot, restoreManagedSnapshot } from "../core/snapshot.js";
 import { resolveTemplatePath } from "../core/template.js";
@@ -17,8 +18,10 @@ export async function runUpdateCommand(
 ): Promise<CommandResult> {
   ensureCopierInstalled();
   const loadedConfig = loadConfig(repoRoot);
-  const config = profileId ? applyProfileToConfig(loadedConfig, profileId) : loadedConfig;
-  const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(config));
+  const sharedConfig = profileId ? applyProfileToConfig(loadedConfig, profileId) : loadedConfig;
+  const config = applyLocalConfig(sharedConfig, loadLocalConfig(repoRoot));
+  // Never render machine/user overrides into shared, versioned surfaces.
+  const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(sharedConfig));
 
   if (dryRun) {
     try {
@@ -48,10 +51,9 @@ export async function runUpdateCommand(
   const templatePath = resolveTemplatePath();
   try {
     if (profileId) {
-      saveConfig(repoRoot, config);
-    } else {
-      writeMachineManifest(repoRoot, config);
+      saveConfig(repoRoot, sharedConfig);
     }
+    writeMachineManifest(repoRoot, config);
     runCopierCopy({
       templatePath,
       destinationPath: repoRoot,

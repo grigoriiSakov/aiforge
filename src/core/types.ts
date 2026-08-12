@@ -96,6 +96,22 @@ export interface AgentsConfig {
   runtimeModels?: Partial<Record<keyof RuntimeFlags, RuntimeModelHints>>;
 }
 
+/**
+ * Developer/machine-specific overrides loaded from `.aiforge.local.yaml`.
+ * Keep this intentionally narrow: project workflow truth and credentials do
+ * not belong in the local overlay.
+ */
+export interface LocalProjectConfig {
+  schemaVersion?: number;
+  orchestrator?: {
+    worktreeRoot?: string;
+  };
+  runtimes?: Partial<RuntimeFlags>;
+  agents?: {
+    runtimeModels?: Partial<Record<keyof RuntimeFlags, RuntimeModelHints>>;
+  };
+}
+
 export interface ProjectConfig {
   schemaVersion: number;
   project: {

@@ -85,6 +85,7 @@ if (mode === "copy") {
   ensureDir(path.join(destinationPath, ".claude"));
   ensureDir(path.join(destinationPath, ".agent"));
   ensureDir(path.join(destinationPath, ".ai", "runtime"));
+  writeFile(path.join(destinationPath, ".aiforge-version"), "0.1.0\\n");
   writeFile(path.join(destinationPath, "AGENTS.md"), agentsContent + "\\n");
   writeFile(path.join(destinationPath, "Taskfile.yml"), "version: \\"3\\"\\n");
   writeFile(path.join(destinationPath, ".codex", "hooks.json"), "{}\\n");

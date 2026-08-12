@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { loadConfig } from "./config.js";
+import { loadEffectiveConfig } from "./config.js";
 import type { RuntimeFlags } from "./types.js";
 
 const RUNTIME_PATHS = {
@@ -41,7 +41,7 @@ const CONTEXT_LINK_RUNTIMES = {
 } as const;
 
 export function applyRuntimeFlags(repoRoot: string): void {
-  const config = loadConfig(repoRoot);
+  const config = loadEffectiveConfig(repoRoot);
 
   for (const [runtime, relativePath] of Object.entries(RUNTIME_PATHS)) {
     const enabled = config.runtimes[runtime as keyof typeof config.runtimes];

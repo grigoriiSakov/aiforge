@@ -1,4 +1,5 @@
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import fg from "fast-glob";
 
@@ -7,11 +8,12 @@ import { ensureDir, writeTextFile } from "./filesystem.js";
 
 export async function buildLlms(repoRoot: string): Promise<string[]> {
   const config = loadConfig(repoRoot);
-  const entries = await fg(config.llms.sourceGlobs, {
+  let entries = await fg(config.llms.sourceGlobs, {
     cwd: repoRoot,
     dot: true,
     onlyFiles: true
   });
+  entries = filterGitVisibleFiles(repoRoot, entries).sort();
 
   const llmsRoot = path.join(repoRoot, config.llms.rootDir);
   ensureDir(llmsRoot);
@@ -30,4 +32,20 @@ export async function buildLlms(repoRoot: string): Promise<string[]> {
   writeTextFile(indexPath, indexContent);
 
   return [txtPath, readmePath, indexPath];
+}
+
+function filterGitVisibleFiles(repoRoot: string, entries: string[]): string[] {
+  const result = spawnSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+
+  // Non-Git directories are supported too. In that case fast-glob remains the
+  // source of truth instead of silently producing an empty index.
+  if (result.status !== 0) {
+    return entries;
+  }
+
+  const visibleFiles = new Set(result.stdout.split("\0").filter(Boolean));
+  return entries.filter((entry) => visibleFiles.has(entry));
 }

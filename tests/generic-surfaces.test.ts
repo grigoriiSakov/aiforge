@@ -202,6 +202,11 @@ describe("generic reusable surfaces", () => {
     expect(readme).toContain("publishes both the `aiforge` and `openspec` commands");
     expect(readme).toContain("/opsx:propose");
     expect(readme).toContain("aiforge owns execution");
+    expect(readme).toContain("## Joining an Existing Managed Repository");
+    expect(readme).toContain(".aiforge.local.yaml");
+    expect(readme).toContain(".aiforge.credentials.env");
+    expect(readme).toContain("## Working with Skills");
+    expect(readme).toContain("Project-owned skills live at `.ai/skills/<name>/SKILL.md`");
   });
 
   test("Taskfile.yml.jinja must not use Jinja trim that eats YAML list indentation", () => {
@@ -211,6 +216,7 @@ describe("generic reusable surfaces", () => {
     // `{% endfor -%}` strips indent before the following `post` line when loops are empty.
     expect(content).not.toMatch(/\{%\s*for[^%]*-\s*%\}/);
     expect(content).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
+    expect(content).toContain("command | indent(8, true)");
   });
 
   test("SKILL.md.jinja must not use trailing trim on if/else/endif around indented markdown sublists", () => {

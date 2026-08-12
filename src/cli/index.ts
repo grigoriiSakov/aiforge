@@ -25,13 +25,14 @@ import { runSyncCommand } from "../commands/sync.js";
 import { runUpdateCommand } from "../commands/update.js";
 import { printResult } from "../core/output.js";
 import type { ProjectProfileId } from "../core/types.js";
+import { AIFORGE_VERSION } from "../core/version.js";
 
 async function main(): Promise<void> {
   const program = new Command();
   program
     .name("aiforge")
     .description("MVP CLI configurator for managed AI surfaces")
-    .version("0.1.0");
+    .version(AIFORGE_VERSION);
 
   program
     .command("detect")

@@ -8,9 +8,16 @@ import {
   CONFIG_FILE_NAME,
   MACHINE_MANIFEST_PATH,
   createConfig,
+  loadEffectiveConfig,
   loadConfig,
-  saveConfig
+  saveConfig,
+  writeMachineManifest
 } from "../src/core/config.js";
+import {
+  CREDENTIALS_ENV_FILE_NAME,
+  LOCAL_CONFIG_FILE_NAME,
+  loadAiforgeEnvironment
+} from "../src/core/local-config.js";
 import { DEFAULT_TASK_COMMAND } from "../src/core/task-runner.js";
 import { makeTempRepo } from "./helpers.js";
 
@@ -66,6 +73,71 @@ describe("config lifecycle", () => {
     expect(config.execution.worktreeStrategy).toBe("direct");
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
     expect(config.managedSurfaces).toContainEqual({ path: "openspec", policy: "semi-managed" });
+  });
+
+  test("local config overrides only machine/user fields and credentials stay out of manifests", () => {
+    const repoRoot = makeTempRepo("aiforge-local-config-");
+    const shared = createConfig({
+      repoRoot,
+      projectSlug: "local-demo",
+      projectName: "Local Demo",
+      profileId: "python-fastapi-docker"
+    });
+    saveConfig(repoRoot, shared);
+    fs.writeFileSync(
+      path.join(repoRoot, LOCAL_CONFIG_FILE_NAME),
+      [
+        "schemaVersion: 1",
+        "orchestrator:",
+        "  worktreeRoot: /tmp/alex/worktrees/local-demo",
+        "runtimes:",
+        "  claude: false",
+        "agents:",
+        "  runtimeModels:",
+        "    codex:",
+        "      budget: gpt-5.6-luna",
+        ""
+      ].join("\n")
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, CREDENTIALS_ENV_FILE_NAME),
+      "LINEAR_API_KEY=local-secret-value\nVERTEX_DOCKER_ROOT=/tmp/vertex/docker\n"
+    );
+
+    const committed = loadConfig(repoRoot);
+    const effective = loadEffectiveConfig(repoRoot);
+    const env = loadAiforgeEnvironment(repoRoot, {});
+    writeMachineManifest(repoRoot, effective);
+    const manifest = fs.readFileSync(path.join(repoRoot, MACHINE_MANIFEST_PATH), "utf8");
+
+    expect(committed.orchestrator.worktreeRoot).toBe("~/worktrees/local-demo");
+    expect(committed.runtimes.claude).toBe(true);
+    expect(effective.orchestrator.worktreeRoot).toBe("/tmp/alex/worktrees/local-demo");
+    expect(effective.runtimes.claude).toBe(false);
+    expect(effective.agents.runtimeModels?.codex?.budget).toBe("gpt-5.6-luna");
+    expect(env.LINEAR_API_KEY).toBe("local-secret-value");
+    expect(env.VERTEX_DOCKER_ROOT).toBe("/tmp/vertex/docker");
+    expect(manifest).not.toContain("local-secret-value");
+    expect(manifest).not.toContain("LINEAR_API_KEY");
+  });
+
+  test("local config rejects project-truth and credential keys", () => {
+    const repoRoot = makeTempRepo("aiforge-local-config-invalid-");
+    saveConfig(
+      repoRoot,
+      createConfig({
+        repoRoot,
+        projectSlug: "invalid-local",
+        projectName: "Invalid Local",
+        profileId: "laravel-docker"
+      })
+    );
+    fs.writeFileSync(
+      path.join(repoRoot, LOCAL_CONFIG_FILE_NAME),
+      "schemaVersion: 1\ncommands:\n  test: [echo unsafe]\n"
+    );
+
+    expect(() => loadEffectiveConfig(repoRoot)).toThrow(/unsupported key "commands"/);
   });
 
   test("rejects cursor model slug under runtimeModels.codex", () => {

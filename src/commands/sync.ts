@@ -1,4 +1,5 @@
 import { applyProfileToConfig, buildCopierAnswers, loadConfig, saveConfig, writeMachineManifest } from "../core/config.js";
+import { applyLocalConfig, loadLocalConfig } from "../core/local-config.js";
 import {
   cleanupTemporaryAnswersFile,
   ensureCopierInstalled,
@@ -18,8 +19,11 @@ export async function runSyncCommand(
   ensureCopierInstalled();
 
   const loadedConfig = loadConfig(repoRoot);
-  const config = profileId ? applyProfileToConfig(loadedConfig, profileId) : loadedConfig;
-  const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(config));
+  const sharedConfig = profileId ? applyProfileToConfig(loadedConfig, profileId) : loadedConfig;
+  const config = applyLocalConfig(sharedConfig, loadLocalConfig(repoRoot));
+  // Tracked Copier surfaces must be identical for every developer. Local
+  // overlays are written to ignored machine manifests and consumed at runtime.
+  const answersFilePath = writeTemporaryAnswersFile(buildCopierAnswers(sharedConfig));
 
   if (dryRun) {
     try {
@@ -50,10 +54,9 @@ export async function runSyncCommand(
   const templatePath = resolveTemplatePath();
   try {
     if (profileId) {
-      saveConfig(repoRoot, config);
-    } else {
-      writeMachineManifest(repoRoot, config);
+      saveConfig(repoRoot, sharedConfig);
     }
+    writeMachineManifest(repoRoot, config);
     runCopierCopy({
       templatePath,
       destinationPath: repoRoot,

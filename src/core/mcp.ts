@@ -1,12 +1,12 @@
 import path from "node:path";
 
-import { loadConfig } from "./config.js";
+import { loadEffectiveConfig } from "./config.js";
 import { ensureDir, writeTextFile } from "./filesystem.js";
 import { listKnownMcpProviderIds, resolveMcpProvider } from "./mcp-registry.js";
 import { provisionManagedMcp } from "./mcp-provision.js";
 
 export function scaffoldMcp(repoRoot: string): string[] {
-  const config = loadConfig(repoRoot);
+  const config = loadEffectiveConfig(repoRoot);
   const mcpDir = path.join(repoRoot, ".cursor", "mcp");
   ensureDir(mcpDir);
 
