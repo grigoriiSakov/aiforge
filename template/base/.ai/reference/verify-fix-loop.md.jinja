@@ -28,7 +28,7 @@ Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix 
 2. Step — files — verify command
 
 ### Re-verify
-- scoped test + lint: `{{ task_command }} {{ task_test_name }}` and `{{ task_command }} {{ task_lint_name }}` (paths from Claimed Write Scope)
+- scoped test + lint: `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>` and `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>` (targets from Claimed Write Scope)
 - then: orchestrator **decides** skip-rereview vs require-rereview (`.ai/reference/orchestrator-fix-loop-decision.md`)
 
 ### Fix resolution

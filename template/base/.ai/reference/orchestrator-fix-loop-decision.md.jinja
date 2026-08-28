@@ -4,7 +4,7 @@ title: "Orchestrator Fix-Loop Decision"
 
 # Orchestrator Fix-Loop Decision
 
-`maxReviewIterations` is a **ceiling**, not a target. Do **not** burn a review subagent after every trivial fix.
+One automatic fix iteration is a **ceiling**, not a target. Do **not** burn a review subagent after every trivial fix.
 
 ## When fix-loop status + scoped test pass
 
@@ -15,7 +15,7 @@ title: "Orchestrator Fix-Loop Decision"
 | Path | When | Next commands |
 |------|------|----------------|
 | **Skip re-review** | All blocking findings addressed; scoped test + lint green; localized diff; review said `after_fix_re_review: not_needed` or `optional` and you can attest closure | `record-fix-resolution --decision skip-rereview --note "..."` → `pre-finalize` / full suite |
-| **Require re-review** | Partial fix, ambiguous closure, architecture/spec risk, security, cross-cutting change, or review said `after_fix_re_review: required` | `record-fix-resolution --decision require-rereview --note "..."` → `set-status reviewing` → **one** review subagent |
+| **Require re-review** | Partial fix, ambiguous closure, architecture/spec risk, security, cross-cutting change, or review said `after_fix_re_review: required` | `record-fix-resolution --decision require-rereview --note "..."` → **one delta-only closure** review subagent |
 
 ## Skip re-review (default for trivial fixes)
 
@@ -40,6 +40,8 @@ Mandatory when any:
 - You are unsure the fix matches the finding.
 - First review was `high` on correctness/security.
 - Fix touched more than finding cited paths.
+
+The closure reviewer inspects only unresolved findings and the post-fix delta. A blocking closure verdict enters the human gate; no third automatic review is allowed.
 
 ## Machine steps
 

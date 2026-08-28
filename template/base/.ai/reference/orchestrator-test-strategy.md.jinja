@@ -6,21 +6,23 @@ title: "Orchestrator Test Strategy"
 
 ## Goal
 
-Cut token burn from `implement -> test -> review -> fix` loops. Default: **review first**, then scoped test + lint; **full** project verify once after a clean review gate.
+Cut token burn from repeated `implement -> full test -> review -> fix` loops. Default: a cheap fingerprinted scoped handoff, one initial review, and one full project verify after a clean review gate.
 
 ## Scoped runs (default)
 
-During `testing` and `fix-loop`, after the review gate:
+During implementation handoff and `fix-loop`:
 
 - Run **only** tests/checks tied to `Claimed Write Scope` and the active plan step.
 - Examples: Pest `--filter=…`, single test file, path from plan `Verify:` line, scoped lint on touched paths.
 - Do **not** run full `{{ task_command }} {{ task_verify_name }}` / full project suite unless the user explicitly asked in this turn.
+- Use `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>` and `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>`; both reject empty targets.
 
 Record evidence:
 
 ```bash
 node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped
 node .ai/runtime/orchestrator-state.mjs record-lint --issue ISSUE-ID --result pass|fail --scope scoped
+node .ai/runtime/orchestrator-state.mjs record-handoff --issue ISSUE-ID --progress-path {{ plan_progress_runtime_root }}/ISSUE-ID/progress.md
 ```
 
 Document the exact scoped command in `progress.md`.
@@ -37,11 +39,12 @@ node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pa
 ```
 
 3. On **pass** + clean review already recorded: runtime moves to `awaiting-finalize`.
-4. On **fail**: runtime sets `awaiting-human-approval` — **stop**. Do not start another fix loop. Summarize failures; the user decides next steps.
+4. On the first suspected out-of-scope flaky **fail**, record one exact target with `--exact-target`, rerun that target once with `--scope exact --target`, and permit one final full retry only after an exact pass.
+5. Exact fail, full fail without a credible exact target, or the final full retry failing sets `awaiting-human-approval` — **stop**.
 
 ## Fix-loop limit
 
-`orchestrator.maxReviewIterations` in `ai.config.yaml` (template default: **{{ orchestrator_max_review_iterations }}**).
+`orchestrator.maxReviewIterations` in `ai.config.yaml` is capped at one automatic fix iteration (template default: **{{ orchestrator_max_review_iterations }}**): initial review plus at most one delta-only closure review.
 
 When review returns `medium`/`high`/`critical` (or audit `blocking` when audit ran) beyond the limit, runtime sets `awaiting-human-approval`. Ask the user explicitly before another round. To continue after approval:
 
@@ -49,4 +52,4 @@ When review returns `medium`/`high`/`critical` (or audit `blocking` when audit r
 node .ai/runtime/orchestrator-state.mjs approve-fix-loop --issue ISSUE-ID
 ```
 
-Then resume with **scoped** tests only until the next review gate.
+Then resume with explicit human direction. A third automatic review is forbidden.

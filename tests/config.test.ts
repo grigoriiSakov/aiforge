@@ -128,6 +128,27 @@ describe("config lifecycle", () => {
     expect(manifest).not.toContain("LINEAR_API_KEY");
   });
 
+  test("preserves custom workflow phase order while canonicalizing only the standard pipeline", () => {
+    const repoRoot = makeTempRepo("aiforge-config-custom-phases-");
+    const config = createConfig({
+      repoRoot,
+      projectSlug: "custom-phases",
+      projectName: "Custom Phases",
+      profileId: "python-fastapi-docker"
+    });
+    config.workflow.phases = ["issue", "plan", "implement", "deploy", "review", "test"];
+    saveConfig(repoRoot, config);
+
+    expect(loadConfig(repoRoot).workflow.phases).toEqual([
+      "issue",
+      "plan",
+      "implement",
+      "deploy",
+      "review",
+      "test"
+    ]);
+  });
+
   test("local config rejects project-truth and credential keys", () => {
     const repoRoot = makeTempRepo("aiforge-local-config-invalid-");
     saveConfig(
@@ -248,7 +269,8 @@ describe("config lifecycle", () => {
     const config = loadConfig(repoRoot);
 
     expect(config.task.command).toBe(DEFAULT_TASK_COMMAND);
-    expect(config.workflow.phases).toEqual(["issue", "plan", "implement", "test", "review"]);
+    expect(config.workflow.phases).toEqual(["issue", "plan", "implement", "review", "test"]);
+    expect(config.orchestrator.maxReviewIterations).toBe(1);
     expect(config.task.tasks.implement).toBe("implement");
     expect(config.commands.implement).toEqual([
       'echo "No dedicated implement step for FastAPI profile"'

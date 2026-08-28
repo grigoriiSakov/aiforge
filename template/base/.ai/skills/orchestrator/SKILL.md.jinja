@@ -110,7 +110,7 @@ Pipeline owner for:
    - `implement` -> `openspec-apply-change <change-id>` tasks and code changes aligned with the selected OpenSpec change
    - `test` -> scoped canonical test + lint evidence (п. 20–23)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
-   - **Quality bar (in-scope):** после review нельзя уходить в full verify без scoped green по тестам и линтеру в `Claimed Write Scope`.
+   - **Quality bar (in-scope):** scoped test и lint по `Claimed Write Scope` должны быть green до review handoff; после clean review их fingerprint переиспользуется для единственного full verify.
    - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
    - **«Старые» ошибки внутри скоупа:** не отмазка.
 

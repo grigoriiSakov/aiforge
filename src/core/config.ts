@@ -553,6 +553,7 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
     orchestrator: {
       ...defaults.orchestrator,
       ...config.orchestrator,
+      maxReviewIterations: 1,
       auditGate: normalizeOrchestratorAuditGate(config.orchestrator?.auditGate),
       simplifyGate: normalizeOrchestratorSimplifyGate(config.orchestrator?.simplifyGate)
     },
@@ -601,7 +602,12 @@ function normalizeTaskCommand(taskCommand: string | undefined): string {
 }
 
 function normalizeWorkflowPhases(phases: string[]): string[] {
-  return phases.map((phase) => (phase === "build" ? "implement" : phase));
+  const normalized = phases.map((phase) => (phase === "build" ? "implement" : phase));
+  const canonical = ["issue", "plan", "implement", "review", "test"];
+  const isStandardPipeline =
+    normalized.length === canonical.length &&
+    canonical.every((phase) => normalized.includes(phase));
+  return isStandardPipeline ? canonical : normalized;
 }
 
 function normalizeTaskConfig(

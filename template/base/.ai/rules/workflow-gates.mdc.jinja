@@ -63,7 +63,7 @@ alwaysApply: true
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.
 - A cheap scoped handoff is the first post-implementation gate; review consumes that evidence and must remain read-only.
 - If review reports `high`, `critical`, or `medium` findings, verification is failed and the task must re-enter the implement loop.
-- For **orchestrator-managed** work with a declared `Claimed Write Scope`, repo-wide `lint`/`verify` red caused by **pre-existing or out-of-scope** code does not by itself block the review→scoped-validation loop if: scoped verification for the touched behavior is green, the failure is documented in progress with path-level reasoning, and review explicitly accepts the scope split (residual repo risk called out in the review summary).
+- For **orchestrator-managed** work with a declared `Claimed Write Scope`, repo-wide `lint`/`verify` red caused by **pre-existing or out-of-scope** code does not by itself invalidate a green scoped handoff if the failure is documented in progress with path-level reasoning and review explicitly accepts the scope split (residual repo risk called out in the review summary).
 - The full verify gate runs once per workspace fingerprint and is serialized across generated projects by the host-wide lease. A suspected out-of-scope flaky failure permits one exact-target rerun and, only if it passes, one final full retry; any further failure stops at a human gate.
 
 ## Gate 5: Review
