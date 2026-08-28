@@ -7,7 +7,8 @@ import { spawnSync } from "node:child_process";
 
 const DEFAULT_WORKTREE_ROOT = "{{ orchestrator_worktree_root }}";
 const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
-const MAX_REVIEW_ITERATIONS = {{ orchestrator_max_review_iterations }};
+const MAX_AUTOMATIC_FIX_ITERATIONS = Math.min({{ orchestrator_max_review_iterations }}, 1);
+const MAX_AUTOMATIC_REVIEW_PASSES = MAX_AUTOMATIC_FIX_ITERATIONS + 1;
 
 const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
   "reserved",
@@ -16,6 +17,7 @@ const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
   "reviewing",
   "fix-loop",
   "pre-finalize",
+  "full-failure-triage",
   "awaiting-human-approval",
   "awaiting-finalize"
 ]);
@@ -24,7 +26,8 @@ const FLOW_COMPLETE_STATUSES = new Set(["done"]);
 const HUMAN_GATE_STATUSES = new Set(["awaiting-human-approval"]);
 const REVIEW_RESULTS = new Set(["clean", "low", "medium", "high", "critical"]);
 const BLOCKING_REVIEW_RESULTS = new Set(["medium", "high", "critical"]);
-const TEST_SCOPES = new Set(["scoped", "full"]);
+const TEST_SCOPES = new Set(["scoped", "exact", "full"]);
+const LINT_SCOPES = new Set(["scoped", "full"]);
 const MODEL_HINT_SKIP = new Set(["auto", "default", "none", ""]);
 const AGENT_RUNTIME_IDS = ["cursor", "codex", "claude", "agent", "agents"];
 const CURSOR_ONLY_SLUG = /^(auto|composer[\w.-]*|gpt-5\.5-(medium|fast)|claude-opus-4-8-thinking-high)$/i;
@@ -38,7 +41,8 @@ const ALLOWED_STATUS_TRANSITIONS = {
   testing: new Set(["testing", "reviewing", "fix-loop", "aborted"]),
   reviewing: new Set(["reviewing", "fix-loop", "pre-finalize", "awaiting-human-approval", "aborted"]),
   "fix-loop": new Set(["fix-loop", "building", "testing", "reviewing", "awaiting-human-approval", "aborted"]),
-  "pre-finalize": new Set(["pre-finalize", "testing", "awaiting-finalize", "awaiting-human-approval", "aborted"]),
+  "pre-finalize": new Set(["pre-finalize", "testing", "full-failure-triage", "awaiting-finalize", "awaiting-human-approval", "aborted"]),
+  "full-failure-triage": new Set(["full-failure-triage", "pre-finalize", "awaiting-human-approval", "aborted"]),
   "awaiting-human-approval": new Set([
     "awaiting-human-approval",
     "fix-loop",
@@ -238,6 +242,10 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     currentStep: overrides.currentStep ?? existingRun?.currentStep ?? "awaiting-admission",
     conflictsWith: overrides.conflictsWith ?? existingRun?.conflictsWith ?? [],
     reviewIteration: overrides.reviewIteration ?? existingRun?.reviewIteration ?? 0,
+    handoffFingerprint:
+      overrides.handoffFingerprint ?? existingRun?.handoffFingerprint ?? null,
+    handoffProgressPath:
+      overrides.handoffProgressPath ?? existingRun?.handoffProgressPath ?? null,
     afterFixRereviewHint:
       overrides.afterFixRereviewHint ?? existingRun?.afterFixRereviewHint ?? null,
     lastFixResolution:
@@ -250,6 +258,12 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
     lastLintFingerprint: overrides.lastLintFingerprint ?? existingRun?.lastLintFingerprint ?? null,
     lastReviewResult: overrides.lastReviewResult ?? existingRun?.lastReviewResult ?? null,
     lastReviewFingerprint: overrides.lastReviewFingerprint ?? existingRun?.lastReviewFingerprint ?? null,
+    fullVerifyFingerprint:
+      overrides.fullVerifyFingerprint ?? existingRun?.fullVerifyFingerprint ?? null,
+    fullVerifyAttempts:
+      overrides.fullVerifyAttempts ?? existingRun?.fullVerifyAttempts ?? 0,
+    exactRetryTarget: overrides.exactRetryTarget ?? existingRun?.exactRetryTarget ?? null,
+    exactRetryUsed: overrides.exactRetryUsed ?? existingRun?.exactRetryUsed ?? false,
     submittedAt: existingRun?.submittedAt ?? utcNow(),
     updatedAt: utcNow()
   };
@@ -358,11 +372,21 @@ function currentWorkspaceFingerprint(run) {
 }
 
 function requirePassingTest(run) {
-  if (run.lastTestResult !== "pass") {
-    throw new Error("cannot move to review without passing test evidence");
+  if (run.lastTestResult !== "pass" || run.lastTestScope !== "full") {
+    throw new Error("cannot finalize without passing full verify evidence");
   }
   if (run.lastTestFingerprint !== currentWorkspaceFingerprint(run)) {
     throw new Error("worktree changed after the last passing test; rerun tests first");
+  }
+}
+
+function requireCurrentHandoff(run) {
+  requirePassingScopedValidation(run);
+  const fingerprint = currentWorkspaceFingerprint(run);
+  if (run.handoffFingerprint !== fingerprint || !run.handoffProgressPath) {
+    throw new Error(
+      "cannot move to review without record-handoff evidence for the current workspace fingerprint"
+    );
   }
 }
 
@@ -557,6 +581,9 @@ function commandSetStatus(args) {
   }
 
   requireTransition(run.status, nextStatus);
+  if (nextStatus === "reviewing") {
+    requireCurrentHandoff(run);
+  }
   if (nextStatus === "awaiting-finalize") {
     requirePassingTest(run);
     requireCleanReview(run);
@@ -582,6 +609,44 @@ function commandSetStatus(args) {
   process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
 }
 
+function commandRecordHandoff(args) {
+  const issueId = requireOption(args, "--issue");
+  const progressPath = requireOption(args, "--progress-path");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (!["building", "testing", "fix-loop"].includes(run.status)) {
+    throw new Error(`record-handoff is not allowed in status ${run.status}`);
+  }
+  requirePassingScopedValidation(run);
+  const absoluteProgressPath = path.resolve(run.worktreePath, progressPath);
+  const relativeProgressPath = path.relative(run.worktreePath, absoluteProgressPath);
+  if (
+    !relativeProgressPath ||
+    relativeProgressPath.startsWith("..") ||
+    path.isAbsolute(relativeProgressPath)
+  ) {
+    throw new Error("record-handoff --progress-path must resolve inside the orchestrator worktree");
+  }
+  const progress = fs.existsSync(absoluteProgressPath)
+    ? fs.readFileSync(absoluteProgressPath, "utf8").trim()
+    : "";
+  if (!progress) {
+    throw new Error("record-handoff requires a non-empty progress artifact");
+  }
+
+  run.handoffFingerprint = currentWorkspaceFingerprint(run);
+  run.handoffProgressPath = relativeProgressPath;
+  run.currentStep = "handoff-ready-for-review";
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
 function commandRecordTest(args) {
   const issueId = requireOption(args, "--issue");
   const result = requireOption(args, "--result");
@@ -597,16 +662,56 @@ function commandRecordTest(args) {
     throw new Error("record-test result must be pass or fail");
   }
   if (!TEST_SCOPES.has(scope)) {
-    throw new Error("record-test --scope must be scoped or full");
+    throw new Error("record-test --scope must be scoped, exact, or full");
+  }
+
+  const fingerprint = currentWorkspaceFingerprint(run);
+  if (scope === "full" && run.status !== "pre-finalize") {
+    throw new Error(`full verify evidence requires status pre-finalize (current: ${run.status})`);
+  }
+  if (scope === "exact" && run.status !== "full-failure-triage") {
+    throw new Error(`exact retry evidence requires status full-failure-triage (current: ${run.status})`);
   }
 
   run.lastTestScope = scope;
   run.lastTestResult = result;
-  run.lastTestFingerprint = currentWorkspaceFingerprint(run);
+  run.lastTestFingerprint = fingerprint;
 
-  if (result === "fail" && scope === "full") {
-    run.status = "awaiting-human-approval";
-    run.currentStep = currentStep ?? "full-suite-failed";
+  if (scope === "full") {
+    if (run.fullVerifyFingerprint !== fingerprint) {
+      run.fullVerifyFingerprint = fingerprint;
+      run.fullVerifyAttempts = 0;
+      run.exactRetryTarget = null;
+      run.exactRetryUsed = false;
+    }
+    run.fullVerifyAttempts = Number(run.fullVerifyAttempts ?? 0) + 1;
+    if (result === "pass") {
+      run.status = "awaiting-finalize";
+      run.currentStep = currentStep ?? "awaiting-user-finalize";
+    } else {
+      const exactTarget = getOption(args, "--exact-target", null);
+      if (run.fullVerifyAttempts === 1 && exactTarget) {
+        run.exactRetryTarget = exactTarget;
+        run.status = "full-failure-triage";
+        run.currentStep = currentStep ?? "run-exact-failure-rerun";
+      } else {
+        run.status = "awaiting-human-approval";
+        run.currentStep = currentStep ?? "full-suite-failed-bounded-limit";
+      }
+    }
+  } else if (scope === "exact") {
+    const target = requireOption(args, "--target");
+    if (run.exactRetryUsed || target !== run.exactRetryTarget) {
+      throw new Error("exact retry must match the recorded failed target and may run only once");
+    }
+    run.exactRetryUsed = true;
+    if (result === "pass") {
+      run.status = "pre-finalize";
+      run.currentStep = currentStep ?? "run-final-full-verify-retry";
+    } else {
+      run.status = "awaiting-human-approval";
+      run.currentStep = currentStep ?? "exact-failure-confirmed";
+    }
   } else if (result === "fail") {
     run.status = "fix-loop";
     run.currentStep = currentStep ?? "scoped-tests-failed";
@@ -619,9 +724,6 @@ function commandRecordTest(args) {
     requirePassingScopedValidation(run);
     run.status = "pre-finalize";
     run.currentStep = currentStep ?? "run-full-verify";
-  } else if (scope === "full" && run.status === "pre-finalize") {
-    run.status = "awaiting-finalize";
-    run.currentStep = currentStep ?? "awaiting-user-finalize";
   } else if (currentStep) {
     run.currentStep = currentStep;
   }
@@ -646,7 +748,7 @@ function commandRecordLint(args) {
   if (!["pass", "fail"].includes(result)) {
     throw new Error("record-lint result must be pass or fail");
   }
-  if (!TEST_SCOPES.has(scope)) {
+  if (!LINT_SCOPES.has(scope)) {
     throw new Error("record-lint --scope must be scoped or full");
   }
 
@@ -669,9 +771,6 @@ function commandRecordLint(args) {
     requirePassingScopedValidation(run);
     run.status = "pre-finalize";
     run.currentStep = currentStep ?? "run-full-verify";
-  } else if (scope === "full" && run.status === "pre-finalize") {
-    run.status = "awaiting-finalize";
-    run.currentStep = currentStep ?? "awaiting-user-finalize";
   } else if (currentStep) {
     run.currentStep = currentStep;
   }
@@ -701,6 +800,7 @@ function commandRecordReview(args) {
 
   run.lastReviewResult = result;
   run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
+  run.reviewIteration = Number(run.reviewIteration ?? 0) + 1;
   const hintIdx = args.indexOf("--after-fix-rereview");
   if (hintIdx !== -1) {
     const hint = args[hintIdx + 1];
@@ -711,18 +811,20 @@ function commandRecordReview(args) {
   }
 
   if (["clean", "low"].includes(result)) {
-    run.status = "testing";
-    run.currentStep = currentStep ?? "run-scoped-validation";
+    if (hasCurrentScopedValidation(run) && run.handoffFingerprint === run.lastReviewFingerprint) {
+      run.status = "pre-finalize";
+      run.currentStep = currentStep ?? "run-full-verify";
+    } else {
+      run.status = "testing";
+      run.currentStep = currentStep ?? "run-scoped-validation";
+    }
   } else if (BLOCKING_REVIEW_RESULTS.has(result)) {
-    const nextIteration = Number(run.reviewIteration ?? 0) + 1;
-    if (nextIteration > MAX_REVIEW_ITERATIONS) {
-      run.reviewIteration = nextIteration;
+    if (run.reviewIteration >= MAX_AUTOMATIC_REVIEW_PASSES) {
       run.status = "awaiting-human-approval";
       run.currentStep =
         currentStep ??
-        `fix-loop-limit-${String(MAX_REVIEW_ITERATIONS)}-ask-user`;
+        `review-pass-limit-${String(MAX_AUTOMATIC_REVIEW_PASSES)}-ask-user`;
     } else {
-      run.reviewIteration = nextIteration;
       run.status = "fix-loop";
       run.currentStep = currentStep ?? `review-fix-${String(run.reviewIteration)}`;
     }
@@ -1014,8 +1116,9 @@ function commandRecordFixResolution(args) {
     run.status = "pre-finalize";
     run.currentStep = "fix-resolved-without-rereview";
   } else {
+    run.handoffFingerprint = currentWorkspaceFingerprint(run);
     run.status = "reviewing";
-    run.currentStep = "rereview-after-fix";
+    run.currentStep = "delta-closure-review-after-fix";
   }
 
   saveRun(run);
@@ -1048,11 +1151,12 @@ function commandApproveFixLoop(args) {
 
 function orchestratorLimits(run) {
   return {
-    maxReviewIterations: MAX_REVIEW_ITERATIONS,
+    maxAutomaticFixIterations: MAX_AUTOMATIC_FIX_ITERATIONS,
+    maxAutomaticReviewPasses: MAX_AUTOMATIC_REVIEW_PASSES,
     reviewIteration: Number(run?.reviewIteration ?? 0),
-    reviewIterationsRemaining: Math.max(
+    reviewPassesRemaining: Math.max(
       0,
-      MAX_REVIEW_ITERATIONS - Number(run?.reviewIteration ?? 0)
+      MAX_AUTOMATIC_REVIEW_PASSES - Number(run?.reviewIteration ?? 0)
     )
   };
 }
@@ -1089,8 +1193,21 @@ function commandGraphNext(args) {
       issue: issueId,
       worktreePath: run.worktreePath,
       testScope: "full",
-      message:
-        "Review gate passed. Run full project verify once, then record-test --scope full.",
+      finalRetry: Number(run.fullVerifyAttempts ?? 0) === 1 && run.exactRetryUsed === true,
+      message: Number(run.fullVerifyAttempts ?? 0) === 1 && run.exactRetryUsed === true
+        ? "Exact failed target passed. Run the one permitted final full verify retry."
+        : "Review gate passed. Run full project verify once, then record-test --scope full.",
+      ...limits
+    };
+  } else if (run.status === "full-failure-triage") {
+    payload = {
+      step: "pending",
+      action: "run_exact_failure_rerun",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      testScope: "exact",
+      exactTarget: run.exactRetryTarget,
+      message: "Rerun this exact failed target once. Pass permits one final full retry; failure stops at the human gate.",
       ...limits
     };
   } else if (run.status === "awaiting-finalize") {
@@ -1143,7 +1260,7 @@ function commandGraphNext(args) {
       action: "run_implementation",
       issue: issueId,
       worktreePath: run.worktreePath,
-      message: "Complete implementation, then move directly to reviewing; do not run pre-review tests or lint.",
+      message: "Complete implementation, run explicit scoped test/lint targets, update progress, record-handoff, then enter reviewing.",
       ...limits
     };
   } else if (
@@ -1177,6 +1294,10 @@ function commandGraphNext(args) {
       issue: issueId,
       worktreePath: run.worktreePath,
       testScope: run.lastTestScope ?? "scoped",
+      reviewMode: Number(run.reviewIteration ?? 0) === 0 ? "initial" : "delta-only-closure",
+      message: Number(run.reviewIteration ?? 0) === 0
+        ? "Run the initial findings-first review against the request, plan, diff and handoff evidence."
+        : "Run the only permitted delta-only closure review against unresolved findings and the post-fix diff.",
       ...limits
     };
   } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
@@ -1236,6 +1357,9 @@ function main() {
       return;
     case "record-lint":
       commandRecordLint(args);
+      return;
+    case "record-handoff":
+      commandRecordHandoff(args);
       return;
     case "record-review":
       commandRecordReview(args);

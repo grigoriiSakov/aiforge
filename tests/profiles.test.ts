@@ -1,9 +1,20 @@
 import { describe, expect, test } from "vitest";
 
 import { detectProfile } from "../src/core/profiles/detect.js";
+import { PROFILE_DEFINITIONS } from "../src/core/profiles/definitions.js";
 import { copyFixture } from "./helpers.js";
 
 describe("profile detection", () => {
+  test("every profile has explicit scoped commands and semantic-only review", () => {
+    for (const profile of Object.values(PROFILE_DEFINITIONS)) {
+      expect(profile.taskCommands.testScoped.length).toBeGreaterThan(0);
+      expect(profile.taskCommands.lintScoped.length).toBeGreaterThan(0);
+      expect(profile.taskCommands.testScoped.join(" ")).toContain("{{.CLI_ARGS}}");
+      expect(profile.taskCommands.lintScoped.join(" ")).toContain("{{.CLI_ARGS}}");
+      expect(profile.taskCommands.review.join(" ")).not.toContain("verify");
+    }
+  });
+
   test("detects python-fastapi-docker", () => {
     const repoRoot = copyFixture("python-fastapi-docker");
     const result = detectProfile(repoRoot);

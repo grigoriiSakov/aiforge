@@ -72,6 +72,13 @@ describe("config lifecycle", () => {
     expect(config.execution.worktreeEnvVar).toBe("AIFORGE_WORKTREE_PATH");
     expect(config.execution.worktreeStrategy).toBe("direct");
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.execution.entrypoints.testScoped).toBe(`${DEFAULT_TASK_COMMAND} test-scoped`);
+    expect(config.execution.entrypoints.lintScoped).toBe(`${DEFAULT_TASK_COMMAND} lint-scoped`);
+    expect(config.agents.runtimeModels?.codex).toEqual({
+      quality: "gpt-5.6-sol",
+      balanced: "gpt-5.6-terra",
+      budget: "gpt-5.6-luna"
+    });
     expect(config.managedSurfaces).toContainEqual({ path: "openspec", policy: "semi-managed" });
   });
 
@@ -248,10 +255,14 @@ describe("config lifecycle", () => {
     ]);
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} lint`);
     expect(config.commands.verify).toContain(`${DEFAULT_TASK_COMMAND} test`);
-    expect(config.commands.review).toContain(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.commands.review).not.toContain(`${DEFAULT_TASK_COMMAND} verify`);
+    expect(config.commands.testScoped.join(" ")).toContain("{{.CLI_ARGS}}");
+    expect(config.commands.lintScoped.join(" ")).toContain("{{.CLI_ARGS}}");
     expect(config.execution.entrypoints.implement).toBe(`${DEFAULT_TASK_COMMAND} implement`);
     expect(config.execution.entrypoints.lint).toBe(`${DEFAULT_TASK_COMMAND} lint`);
     expect(config.execution.entrypoints.test).toBe(`${DEFAULT_TASK_COMMAND} test`);
+    expect(config.execution.entrypoints.testScoped).toBe(`${DEFAULT_TASK_COMMAND} test-scoped`);
+    expect(config.execution.entrypoints.lintScoped).toBe(`${DEFAULT_TASK_COMMAND} lint-scoped`);
     expect(config.execution.entrypoints.verify).toBe(`${DEFAULT_TASK_COMMAND} verify`);
   });
 });

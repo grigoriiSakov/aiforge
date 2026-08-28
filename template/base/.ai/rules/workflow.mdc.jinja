@@ -15,7 +15,9 @@ alwaysApply: true
 - Use canonical tasks only:
   - `{{ task_command }} {{ task_implement_name }}`
   - `{{ task_command }} {{ task_test_name }}`
+  - `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>`
   - `{{ task_command }} {{ task_lint_name }}`
+  - `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>`
   - `{{ task_command }} {{ task_verify_name }}`
   - `{{ task_command }} {{ task_review_name }}`
 - Do not hardcode stack-specific commands in generic workflow prompts or status updates.
@@ -48,6 +50,8 @@ alwaysApply: true
   - one native worker owns exactly one issue, one OpenSpec `changeId`, and one repository-local orchestrator worktree;
   - the worker runs `/orchestrator`, and its implementation phase uses `openspec-apply-change <changeId>` plus `openspec instructions apply --change <changeId>`;
   - native host subagent tools are mandatory; recursive agent CLI launches, PTY polling, and a project-owned manager daemon are not fallback mechanisms;
+  - worker context uses no inherited turns or the smallest bounded history plus exact artifact paths; full-history forks are not the default;
+  - wait once on native completion/message events; repeated short status/list polling is forbidden;
   - unavailable model preferences fall back only to a compatible native or inherited model, with the fallback recorded;
   - dependent work waits for accepted review, full verification, terminal OpenSpec sync/archive, and integration into the next base;
   - Goal state is rehydrated from the initiative manifest, OpenSpec, progress, and orchestrator artifacts; do not create a duplicate ledger;
@@ -57,5 +61,7 @@ alwaysApply: true
 {% if minimalism_enabled and minimalism_level != "off" -%}
 - When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. The orchestrator does not run a separate pre-review simplify gate.
 {% endif -%}
-- The default post-implementation order is `implement -> review -> scoped test + lint -> full verify`.
-- If review produces `high`, `critical`, or `medium` findings, fix them and run scoped test + lint. Repeat review only when the fix is non-trivial or the review verdict requires it; do not run a pre-review gate.
+- The default post-implementation order is `implement -> scoped handoff test + lint -> review -> full verify`.
+- The handoff evidence is bound to the current workspace fingerprint and is reused after a clean read-only review.
+- If the initial review produces `high`, `critical`, or `medium` findings, fix them and rerun affected scoped test + lint. Run at most one delta-only closure review when risk requires it; a second blocking verdict is a human gate.
+- `review` is semantic/findings-only and never invokes full `verify`. Full verify runs once per fingerprint under the generated host-wide lease, except one exact flaky rerun followed by at most one final full retry.

@@ -55,3 +55,5 @@ Goal mode owns conversational continuity, not a second durable state machine. Be
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 
 Historical files under `.ai/runtime/supervisor/` may be retained as evidence, but they are not active workflow state.
+
+Native worker prompts carry these exact artifact paths as a bounded evidence package. Use no inherited turns or the smallest bounded history supported by the host; do not fork the full Goal conversation by default. Managers wait on completion/message events with one long native wait and do not run short status/list polling loops.

@@ -152,9 +152,17 @@ task_test_name:
   type: str
   default: test
 
+task_test_scoped_name:
+  type: str
+  default: test-scoped
+
 task_lint_name:
   type: str
   default: lint
+
+task_lint_scoped_name:
+  type: str
+  default: lint-scoped
 
 task_verify_name:
   type: str
@@ -184,9 +192,17 @@ execution_test_entrypoint:
   type: str
   default: .ai/bin/go-task test
 
+execution_test_scoped_entrypoint:
+  type: str
+  default: .ai/bin/go-task test-scoped
+
 execution_lint_entrypoint:
   type: str
   default: .ai/bin/go-task lint
+
+execution_lint_scoped_entrypoint:
+  type: str
+  default: .ai/bin/go-task lint-scoped
 
 execution_verify_entrypoint:
   type: str
@@ -201,7 +217,9 @@ commands:
   default:
     implement: []
     test: []
+    testScoped: []
     lint: []
+    lintScoped: []
     verify: []
     review: []
 

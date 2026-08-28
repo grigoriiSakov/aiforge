@@ -107,24 +107,51 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
   run.worktreePath = repoRoot;
   run.status = "building";
   fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
+  const progressPath = path.join(".ai", "context", "runtime", issueId, "progress.md");
+  fs.mkdirSync(path.dirname(path.join(repoRoot, progressPath)), { recursive: true });
+  fs.writeFileSync(path.join(repoRoot, progressPath), "## Implementation\nDone\n\n## Verification\nScoped\n");
+  runNodeScript(
+    runtimePath,
+    ["record-test", "--issue", issueId, "--result", "pass", "--scope", "scoped"],
+    repoRoot
+  );
+  runNodeScript(
+    runtimePath,
+    ["record-lint", "--issue", issueId, "--result", "pass", "--scope", "scoped"],
+    repoRoot
+  );
+  runNodeScript(
+    runtimePath,
+    ["record-handoff", "--issue", issueId, "--progress-path", progressPath],
+    repoRoot
+  );
   runNodeScript(runtimePath, ["set-status", "--issue", issueId, "--status", "reviewing"], repoRoot);
 }
 
 describe("orchestrator loop guards", () => {
-  test("implementation moves directly to review without pre-review test evidence", () => {
+  test("implementation cannot move to review without fingerprinted handoff evidence", () => {
     const repoRoot = makeTempRepo("aiforge-orch-review-first-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
     runNodeScript(runtimePath, ["init"], repoRoot);
     submitIssue(runtimePath, repoRoot, "APP-8");
 
-    prepareForReview(runtimePath, repoRoot, "APP-8");
+    const runPath = path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-8.json");
+    const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
+    run.worktreePath = repoRoot;
+    run.status = "building";
+    fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
 
-    const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-8"], repoRoot));
-    expect(graph.action).toBe("run_review");
+    const result = spawnSync(
+      "node",
+      [runtimePath, "set-status", "--issue", "APP-8", "--status", "reviewing"],
+      { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("scoped test evidence");
   });
 
-  test("record-review beyond max iterations sets awaiting-human-approval", () => {
+  test("initial plus one closure review is the hard automatic cap", () => {
     const repoRoot = makeTempRepo("aiforge-orch-limit-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "2");
@@ -133,15 +160,29 @@ describe("orchestrator loop guards", () => {
 
     prepareForReview(runtimePath, repoRoot, "APP-9");
     runNodeScript(runtimePath, ["record-review", "--issue", "APP-9", "--result", "high"], repoRoot);
-    prepareForReview(runtimePath, repoRoot, "APP-9");
-    runNodeScript(runtimePath, ["record-review", "--issue", "APP-9", "--result", "high"], repoRoot);
-    prepareForReview(runtimePath, repoRoot, "APP-9");
+    runNodeScript(
+      runtimePath,
+      ["record-test", "--issue", "APP-9", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      ["record-lint", "--issue", "APP-9", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      ["record-fix-resolution", "--issue", "APP-9", "--decision", "require-rereview"],
+      repoRoot
+    );
+    const closureGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-9"], repoRoot));
+    expect(closureGraph.reviewMode).toBe("delta-only-closure");
     const blocked = JSON.parse(
       runNodeScript(runtimePath, ["record-review", "--issue", "APP-9", "--result", "high"], repoRoot)
     );
 
     expect(blocked.status).toBe("awaiting-human-approval");
-    expect(blocked.reviewIteration).toBe(3);
+    expect(blocked.reviewIteration).toBe(2);
 
     const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-9"], repoRoot));
     expect(graph.action).toBe("await_human_decision");
@@ -152,7 +193,7 @@ describe("orchestrator loop guards", () => {
     expect(approved.status).toBe("fix-loop");
   });
 
-  test("clean review requires scoped test and lint before full verification", () => {
+  test("clean review reuses unchanged handoff evidence before full verification", () => {
     const repoRoot = makeTempRepo("aiforge-orch-prefinalize-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "2");
@@ -164,28 +205,7 @@ describe("orchestrator loop guards", () => {
     const afterReview = JSON.parse(
       runNodeScript(runtimePath, ["record-review", "--issue", "APP-10", "--result", "clean"], repoRoot)
     );
-    expect(afterReview.status).toBe("testing");
-
-    const validationGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot));
-    expect(validationGraph.action).toBe("run_scoped_validation");
-
-    const afterTest = JSON.parse(
-      runNodeScript(
-        runtimePath,
-        ["record-test", "--issue", "APP-10", "--result", "pass", "--scope", "scoped"],
-        repoRoot
-      )
-    );
-    expect(afterTest.status).toBe("testing");
-
-    const afterLint = JSON.parse(
-      runNodeScript(
-        runtimePath,
-        ["record-lint", "--issue", "APP-10", "--result", "pass", "--scope", "scoped"],
-        repoRoot
-      )
-    );
-    expect(afterLint.status).toBe("pre-finalize");
+    expect(afterReview.status).toBe("pre-finalize");
 
     const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot));
     expect(graph.action).toBe("run_full_verify");
@@ -217,7 +237,7 @@ describe("orchestrator loop guards", () => {
           roles: { review: { tier: "budget" } },
           runtimeModels: {
             cursor: { budget: "gpt-5-mini" },
-            codex: { budget: "gpt-5.6-terra" }
+            codex: { budget: "gpt-5.6-luna" }
           }
         },
         null,
@@ -241,7 +261,7 @@ describe("orchestrator loop guards", () => {
 
     expect(runtime.detected).toBe("codex");
     expect(hint.activeRuntime).toBe("codex");
-    expect(hint.model).toBe("gpt-5.6-terra");
+    expect(hint.model).toBe("gpt-5.6-luna");
     expect(hint.instruction).toContain("native subagent");
     expect(hint.instruction).toContain("Never run codex exec");
     expect(hint.instruction).not.toContain("codex -m");
@@ -257,7 +277,7 @@ describe("orchestrator loop guards", () => {
           roles: { review: { tier: "budget" } },
           runtimeModels: {
             cursor: { budget: "gpt-5-mini" },
-            codex: { budget: "gpt-5.6-terra" }
+            codex: { budget: "gpt-5.6-luna" }
           }
         },
         null,
@@ -274,7 +294,7 @@ describe("orchestrator loop guards", () => {
       )
     );
     expect(hint.activeRuntime).toBe("codex");
-    expect(hint.model).toBe("gpt-5.6-terra");
+    expect(hint.model).toBe("gpt-5.6-luna");
     expect(hint.warnings.length).toBeGreaterThan(0);
   });
 
@@ -325,6 +345,68 @@ describe("orchestrator loop guards", () => {
     expect(resolved.status).toBe("pre-finalize");
     expect(resolved.reviewIteration).toBe(1);
     expect(resolved.lastFixResolution?.decision).toBe("skip-rereview");
+  });
+
+  test("full verify failure allows one exact rerun and one final full retry", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-full-triage-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-12");
+    prepareForReview(runtimePath, repoRoot, "APP-12");
+    runNodeScript(runtimePath, ["record-review", "--issue", "APP-12", "--result", "clean"], repoRoot);
+
+    const triage = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "record-test",
+          "--issue",
+          "APP-12",
+          "--result",
+          "fail",
+          "--scope",
+          "full",
+          "--exact-target",
+          "tests/flaky.test.ts"
+        ],
+        repoRoot
+      )
+    );
+    expect(triage.status).toBe("full-failure-triage");
+    const exactGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-12"], repoRoot));
+    expect(exactGraph.action).toBe("run_exact_failure_rerun");
+
+    const retryReady = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "record-test",
+          "--issue",
+          "APP-12",
+          "--result",
+          "pass",
+          "--scope",
+          "exact",
+          "--target",
+          "tests/flaky.test.ts"
+        ],
+        repoRoot
+      )
+    );
+    expect(retryReady.status).toBe("pre-finalize");
+    const retryGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-12"], repoRoot));
+    expect(retryGraph.finalRetry).toBe(true);
+
+    const bounded = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        ["record-test", "--issue", "APP-12", "--result", "fail", "--scope", "full"],
+        repoRoot
+      )
+    );
+    expect(bounded.status).toBe("awaiting-human-approval");
+    expect(bounded.fullVerifyAttempts).toBe(2);
   });
 
   test("model-hint skips auto and returns usable slug", () => {

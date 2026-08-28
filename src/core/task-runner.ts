@@ -13,7 +13,9 @@ export function renderTaskCommands(taskCommands: TaskCommands, taskCommand: stri
   return {
     implement: renderCommandList(taskCommands.implement, taskCommand),
     test: renderCommandList(taskCommands.test, taskCommand),
+    testScoped: renderCommandList(taskCommands.testScoped, taskCommand),
     lint: renderCommandList(taskCommands.lint, taskCommand),
+    lintScoped: renderCommandList(taskCommands.lintScoped, taskCommand),
     verify: renderCommandList(taskCommands.verify, taskCommand),
     review: renderCommandList(taskCommands.review, taskCommand)
   };

@@ -79,7 +79,7 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
-   - absence of pre-review test/lint is expected in orchestrator-delegate mode; judge the diff and plan directly
+   - current pre-review scoped test/lint and `record-handoff` evidence for the workspace fingerprint
 5. Testing evidence must match the touched scope:
    - default expectation is scoped tests for the behavior that changed
    - do not require a full project run unless the user explicitly asked for it, repository rules require it, or the change is too broad for scoped evidence
@@ -111,7 +111,7 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
      - `{{ task_command }} {{ task_test_name }}` (scoped as appropriate; refresh OOS note if full verify stays red outside scope)
      - `{{ task_command }} {{ task_lint_name }}` (scoped as appropriate)
      - `/review` only when the fix is non-trivial or `after_fix_re_review: required`
-   - repeat until no `high`, `critical`, or `medium` findings remain
+   - an orchestrated run permits only one delta-only closure review after the initial pass; a second blocking verdict returns a human gate
 10. After producing the review result, record a machine-readable verdict (standalone `/review` only):
    - clean review: `node .ai/runtime/review-state.mjs verdict clean "short summary"`
    - review with findings: `node .ai/runtime/review-state.mjs verdict issues-found "short summary"`
@@ -138,6 +138,7 @@ Use when the parent `/orchestrator` launched this run as a **separate** review s
 - Do **not** run full-project `{{ task_command }} {{ task_verify_name }}` or the full test suite; use scoped evidence from `progress.md` only.
 - Do **not** start another implement loop yourself; return a verdict to the parent orchestrator only.
 - Stay read-only; minimal context — no re-implementation.
+- On the closure pass, inspect only unresolved findings and the post-fix delta from the recorded handoff baseline; do not repeat the broad initial review.
 - **Single gate (default):** when orchestrator `auditGate` is `never`, you also cover the former audit checklist:
   - workflow rule compliance (`.ai/rules/*`, gates, worktree/write path)
   - **project rules compliance** — per-rule `pass|fail|N/A` for every bullet in `## Project-Specific Rules` plus applicable manifesto/gate constraints

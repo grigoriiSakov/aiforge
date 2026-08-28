@@ -21,7 +21,9 @@ export interface LinearScope {
 export interface TaskCommands {
   implement: string[];
   test: string[];
+  testScoped: string[];
   lint: string[];
+  lintScoped: string[];
   verify: string[];
   review: string[];
 }
@@ -48,7 +50,9 @@ export interface MinimalismConfig {
 export interface ExecutionEntrypoints {
   implement: string;
   test: string;
+  testScoped: string;
   lint: string;
+  lintScoped: string;
   verify: string;
   review: string;
 }
@@ -162,7 +166,9 @@ export interface ProjectConfig {
     tasks: {
       implement: string;
       test: string;
+      testScoped: string;
       lint: string;
+      lintScoped: string;
       verify: string;
       review: string;
     };

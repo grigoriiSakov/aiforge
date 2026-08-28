@@ -9,16 +9,15 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["echo \"No dedicated implement step for FastAPI profile\""],
       test: ["cd ../docker && docker compose exec app uv run python scripts/run_pytest_isolated.py -v"],
+      testScoped: ["cd ../docker && docker compose exec app uv run python scripts/run_pytest_isolated.py -v {{.CLI_ARGS}}"],
       lint: ["cd ../docker && docker compose exec app uv run ruff check ."],
+      lintScoped: ["cd ../docker && docker compose exec app uv run ruff check {{.CLI_ARGS}}"],
       verify: [
         "python3 scripts/check_import_boundaries.py",
         `${TASK_COMMAND_PLACEHOLDER} lint`,
         `${TASK_COMMAND_PLACEHOLDER} test`
       ],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "linear",
     languageDefault: "ru",
@@ -53,12 +52,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["python manage.py check"],
       test: ["python manage.py test"],
+      testScoped: ["python manage.py test {{.CLI_ARGS}}"],
       lint: ["python -m ruff check ."],
+      lintScoped: ["python -m ruff check {{.CLI_ARGS}}"],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "github",
     languageDefault: "en",
@@ -94,15 +92,17 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["echo \"No standalone implement step for Laravel profile\""],
       test: ["docker compose exec php php artisan test --compact"],
+      testScoped: ["docker compose exec php php artisan test --compact {{.CLI_ARGS}}"],
       lint: [
         "docker compose exec php vendor/bin/pint --dirty --format=agent",
         "docker compose exec php vendor/bin/phpstan analyse"
       ],
+      lintScoped: [
+        "docker compose exec php vendor/bin/pint --test --format=agent {{.CLI_ARGS}}",
+        "docker compose exec php vendor/bin/phpstan analyse {{.CLI_ARGS}}"
+      ],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "gitlab",
     languageDefault: "ru",
@@ -137,12 +137,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["npm run build --if-present"],
       test: ["npm run test --if-present"],
+      testScoped: ["npm run test --if-present -- {{.CLI_ARGS}}"],
       lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      lintScoped: ["npm run lint --if-present -- {{.CLI_ARGS}}"],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "github",
     languageDefault: "en",
@@ -179,12 +178,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["npm run build --if-present"],
       test: ["npm run test --if-present"],
+      testScoped: ["npm run test --if-present -- {{.CLI_ARGS}}"],
       lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      lintScoped: ["npm run lint --if-present -- {{.CLI_ARGS}}"],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "github",
     languageDefault: "en",
@@ -222,12 +220,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["npm run build --if-present"],
       test: ["npm run test --if-present"],
+      testScoped: ["npm run test --if-present -- {{.CLI_ARGS}}"],
       lint: ["npm run lint --if-present", "npm run typecheck --if-present"],
+      lintScoped: ["npm run lint --if-present -- {{.CLI_ARGS}}"],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "github",
     languageDefault: "en",
@@ -263,12 +260,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["yarn build"],
       test: ["yarn test"],
+      testScoped: ["yarn test {{.CLI_ARGS}}"],
       lint: ["yarn typecheck:ci"],
+      lintScoped: ["yarn lint {{.CLI_ARGS}}"],
       verify: ["yarn gate:prepush"],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "linear",
     languageDefault: "ru",
@@ -303,12 +299,11 @@ export const PROFILE_DEFINITIONS: Record<ProjectProfileId, ProfileDefinition> = 
     taskCommands: {
       implement: ["go test ./..."],
       test: ["go test ./..."],
+      testScoped: ["go test {{.CLI_ARGS}}"],
       lint: ["test -z \"$(gofmt -l .)\"", "go vet ./..."],
+      lintScoped: ["go vet {{.CLI_ARGS}}"],
       verify: [`${TASK_COMMAND_PLACEHOLDER} lint`, `${TASK_COMMAND_PLACEHOLDER} test`],
-      review: [
-        `${TASK_COMMAND_PLACEHOLDER} verify`,
-        'echo "Review evidence collected. Record final verdict via review-state.mjs."'
-      ]
+      review: ['echo "Review evidence collected. Record final verdict via review-state.mjs."']
     },
     trackerDefault: "github",
     languageDefault: "en",

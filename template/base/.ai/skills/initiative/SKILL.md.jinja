@@ -100,6 +100,8 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 10. **Project hygiene** — when PRD + project docs + atomic issue set are complete, set the **project** (and individual issues per tracker rules) to appropriate states; there is no dedicated planning issue to advance.
 
 11. **Verification** — confirm PRD and initiative spec/execution map are visible on the project, atomic issues are implement-ready, blockers and order are unambiguous, and `.ai/context/initiatives/<slug>/issues-manifest.json` matches the final ordering exactly.
+
+12. **Goal handoff package** — for each native worker, pass the exact issue/changeId, repository root, manifest, selected OpenSpec change, `progress.md`, and orchestrator run paths. Use no inherited turns or the smallest bounded history supported by the host. The manager waits once on native completion/message events; it does not poll status/list in a short loop.
 {% else %}
 7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier). Do **not** model a fake “planning issue” that only exists to describe how you will open other issues — keep initiative-level narrative in files you attach to a **project** / wiki / epic, not as a standalone meta-ticket template:
 

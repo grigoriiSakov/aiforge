@@ -29,6 +29,23 @@ tasks:
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_test_name }}
 
+  {{ task_test_scoped_name }}:
+    desc: Scoped test task; requires explicit targets after --
+    preconditions:
+      - sh: test {{ '{{' }} len .CLI_ARGS {{ '}}' }} -gt 0
+        msg: "Scoped test requires explicit targets after --"
+    cmds:
+      - node .ai/runtime/task-state.mjs pre {{ task_test_scoped_name }}
+{% for command in commands.testScoped %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
+      - {{ command }}
+{% endif %}
+{% endfor %}
+      - node .ai/runtime/task-state.mjs post {{ task_test_scoped_name }}
+
   {{ task_lint_name }}:
     desc: Canonical lint task
     cmds:
@@ -43,8 +60,33 @@ tasks:
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_lint_name }}
 
+  {{ task_lint_scoped_name }}:
+    desc: Scoped lint task; requires explicit targets after --
+    preconditions:
+      - sh: test {{ '{{' }} len .CLI_ARGS {{ '}}' }} -gt 0
+        msg: "Scoped lint requires explicit targets after --"
+    cmds:
+      - node .ai/runtime/task-state.mjs pre {{ task_lint_scoped_name }}
+{% for command in commands.lintScoped %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
+      - {{ command }}
+{% endif %}
+{% endfor %}
+      - node .ai/runtime/task-state.mjs post {{ task_lint_scoped_name }}
+
   {{ task_verify_name }}:
     desc: Canonical verify task
+    cmds:
+      - node .ai/runtime/verify-lease.mjs run -- {{ task_command }} aiforge:verify-body
+
+  aiforge:verify-body:
+    desc: Lease-protected full verification body; do not invoke directly
+    preconditions:
+      - sh: test "${AIFORGE_VERIFY_LEASE_HELD:-}" = "1"
+        msg: "Full verify body must run through the host-wide verify lease"
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_verify_name }}
 {% for command in commands.verify %}

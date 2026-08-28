@@ -42,12 +42,38 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/tracker/SKILL.md.jinja",
       ".ai/runtime/task-state.mjs.jinja",
       ".ai/runtime/review-state.mjs.jinja",
-      ".ai/runtime/orchestrator-state.mjs.jinja"
+      ".ai/runtime/orchestrator-state.mjs.jinja",
+      ".ai/runtime/verify-lease.mjs.jinja"
     ];
 
     for (const relativePath of expectedPaths) {
       expect(fs.existsSync(path.join(root, relativePath))).toBe(true);
     }
+  });
+
+  test("generated workflow bounds review, context, polling, and full verification", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const taskfile = fs.readFileSync(path.join(root, "Taskfile.yml.jinja"), "utf8");
+    const agents = fs.readFileSync(path.join(root, "AGENTS.md.jinja"), "utf8");
+    const orchestrator = fs.readFileSync(
+      path.join(root, ".ai", "skills", "orchestrator", "SKILL.md.jinja"),
+      "utf8"
+    );
+    const lease = fs.readFileSync(
+      path.join(root, ".ai", "runtime", "verify-lease.mjs.jinja"),
+      "utf8"
+    );
+
+    expect(taskfile).toContain("len .CLI_ARGS");
+    expect(taskfile).toContain("verify-lease.mjs run --");
+    expect(taskfile).toContain("AIFORGE_VERIFY_LEASE_HELD");
+    expect(orchestrator).toContain("record-handoff");
+    expect(orchestrator).toContain("delta-only closure");
+    expect(orchestrator).toContain("fork_turns: none");
+    expect(orchestrator).toContain("длинный native wait");
+    expect(agents).toContain("Full-history forks are not the default");
+    expect(lease).toContain("aiforge-full-verify.lock");
+    expect(lease).toContain("processIsAlive");
   });
 
   test("all shared skills require reading workflow rules first", () => {

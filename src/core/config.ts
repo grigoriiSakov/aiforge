@@ -44,7 +44,9 @@ export function createConfig(params: {
     tasks: {
       implement: "implement",
       test: "test",
+      testScoped: "test-scoped",
       lint: "lint",
+      lintScoped: "lint-scoped",
       verify: "verify",
       review: "review"
     }
@@ -114,7 +116,14 @@ export function createConfig(params: {
     },
     agents: {
       markdown: "",
-      modelTiers: { ...DEFAULT_AGENT_MODEL_TIERS }
+      modelTiers: { ...DEFAULT_AGENT_MODEL_TIERS },
+      runtimeModels: {
+        codex: {
+          quality: "gpt-5.6-sol",
+          balanced: "gpt-5.6-terra",
+          budget: "gpt-5.6-luna"
+        }
+      }
     },
     llms: {
       rootDir: "llms",
@@ -218,7 +227,9 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     execution_worktree_strategy: config.execution.worktreeStrategy,
     execution_implement_entrypoint: config.execution.entrypoints.implement,
     execution_test_entrypoint: config.execution.entrypoints.test,
+    execution_test_scoped_entrypoint: config.execution.entrypoints.testScoped,
     execution_lint_entrypoint: config.execution.entrypoints.lint,
+    execution_lint_scoped_entrypoint: config.execution.entrypoints.lintScoped,
     execution_verify_entrypoint: config.execution.entrypoints.verify,
     execution_review_entrypoint: config.execution.entrypoints.review,
     plan_progress_runtime_root: config.artifacts.planProgressRoot,
@@ -235,7 +246,9 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     task_command: config.task.command,
     task_implement_name: config.task.tasks.implement,
     task_test_name: config.task.tasks.test,
+    task_test_scoped_name: config.task.tasks.testScoped,
     task_lint_name: config.task.tasks.lint,
+    task_lint_scoped_name: config.task.tasks.lintScoped,
     task_verify_name: config.task.tasks.verify,
     task_review_name: config.task.tasks.review,
     commands: config.commands,
@@ -329,11 +342,13 @@ function validateConfig(config: ProjectConfig): void {
   if (
     !config.execution?.entrypoints?.implement?.trim() ||
     !config.execution?.entrypoints?.test?.trim() ||
+    !config.execution?.entrypoints?.testScoped?.trim() ||
     !config.execution?.entrypoints?.lint?.trim() ||
+    !config.execution?.entrypoints?.lintScoped?.trim() ||
     !config.execution?.entrypoints?.verify?.trim() ||
     !config.execution?.entrypoints?.review?.trim()
   ) {
-    throw new Error("Config execution.entrypoints.{implement,test,lint,verify,review} are required");
+    throw new Error("Config execution.entrypoints.{implement,test,testScoped,lint,lintScoped,verify,review} are required");
   }
 
   if (!config.artifacts?.planProgressRoot?.trim()) {
@@ -603,7 +618,9 @@ function normalizeTaskConfig(
     tasks: {
       implement: currentTasks?.implement ?? normalizeLegacyBuildTaskName(currentTasks?.build, defaultTask.tasks.implement),
       test: currentTasks?.test ?? defaultTask.tasks.test,
+      testScoped: currentTasks?.testScoped ?? defaultTask.tasks.testScoped,
       lint: currentTasks?.lint ?? defaultTask.tasks.lint,
+      lintScoped: currentTasks?.lintScoped ?? defaultTask.tasks.lintScoped,
       verify: currentTasks?.verify ?? defaultTask.tasks.verify,
       review: currentTasks?.review ?? defaultTask.tasks.review
     }
@@ -649,7 +666,9 @@ function normalizeExecutionEntrypoints(
       task.tasks.implement
     ),
     test: normalizeExecutionEntrypoint(currentEntrypoints?.test, task.command, task.tasks.test),
+    testScoped: normalizeExecutionEntrypoint(currentEntrypoints?.testScoped, task.command, task.tasks.testScoped),
     lint: normalizeExecutionEntrypoint(currentEntrypoints?.lint, task.command, task.tasks.lint),
+    lintScoped: normalizeExecutionEntrypoint(currentEntrypoints?.lintScoped, task.command, task.tasks.lintScoped),
     verify: normalizeExecutionEntrypoint(currentEntrypoints?.verify, task.command, task.tasks.verify),
     review: normalizeExecutionEntrypoint(currentEntrypoints?.review, task.command, task.tasks.review)
   };
@@ -677,7 +696,9 @@ function buildDefaultExecutionEntrypoints(
   return {
     implement: buildTaskEntrypoint(taskCommand, taskNames.implement),
     test: buildTaskEntrypoint(taskCommand, taskNames.test),
+    testScoped: buildTaskEntrypoint(taskCommand, taskNames.testScoped),
     lint: buildTaskEntrypoint(taskCommand, taskNames.lint),
+    lintScoped: buildTaskEntrypoint(taskCommand, taskNames.lintScoped),
     verify: buildTaskEntrypoint(taskCommand, taskNames.verify),
     review: buildTaskEntrypoint(taskCommand, taskNames.review)
   };
@@ -701,10 +722,33 @@ function normalizeTaskCommands(
       taskCommand
     ),
     test: normalizeTaskCommandList(currentCommands?.test, profileTaskCommands.test, taskCommand),
+    testScoped: normalizeTaskCommandList(currentCommands?.testScoped, profileTaskCommands.testScoped, taskCommand),
     lint: normalizeTaskCommandList(currentCommands?.lint, profileTaskCommands.lint, taskCommand),
+    lintScoped: normalizeTaskCommandList(currentCommands?.lintScoped, profileTaskCommands.lintScoped, taskCommand),
     verify: normalizeTaskCommandList(currentCommands?.verify, profileTaskCommands.verify, taskCommand),
-    review: normalizeTaskCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
+    review: normalizeReviewCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
   };
+}
+
+function normalizeReviewCommandList(
+  currentCommands: string[] | undefined,
+  profileCommands: string[],
+  taskCommand: string
+): string[] {
+  const retiredNestedVerify = new Set([
+    `${taskCommand} verify`,
+    `${DEFAULT_TASK_COMMAND} verify`,
+    "task verify",
+    "go-task verify"
+  ]);
+  const withoutNestedVerify = currentCommands?.filter(
+    (command) => !retiredNestedVerify.has(command.trim())
+  );
+  return normalizeTaskCommandList(
+    withoutNestedVerify && withoutNestedVerify.length > 0 ? withoutNestedVerify : undefined,
+    profileCommands,
+    taskCommand
+  );
 }
 
 function normalizeLegacyBuildTaskName(taskName: string | undefined, defaultImplementTaskName: string): string {
@@ -743,7 +787,9 @@ function normalizeTaskCommandList(
     {
       implement: profileCommands,
       test: profileCommands,
+      testScoped: profileCommands,
       lint: profileCommands,
+      lintScoped: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },
@@ -753,7 +799,9 @@ function normalizeTaskCommandList(
     {
       implement: profileCommands,
       test: profileCommands,
+      testScoped: profileCommands,
       lint: profileCommands,
+      lintScoped: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },
@@ -763,7 +811,9 @@ function normalizeTaskCommandList(
     {
       implement: profileCommands,
       test: profileCommands,
+      testScoped: profileCommands,
       lint: profileCommands,
+      lintScoped: profileCommands,
       verify: profileCommands,
       review: profileCommands
     },

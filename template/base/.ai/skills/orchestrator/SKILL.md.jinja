@@ -41,6 +41,8 @@ Pipeline owner for:
    - terminal release
 5. Accept exactly one issue ID per orchestrator run.
 6. Do not start implementation until `openspec validate <change-id>` passes and `design.md` contains machine-readable `Claimed Write Scope`.
+   - Before declaring readiness, verify provider/source assumptions and likely cross-module seams.
+   - If implementation discovers missing scope, bundle all related files/seams into one amendment request for that attempt; do not request one path at a time.
 7. Ensure the workflow keeps a single source of truth for:
    - plan memory: `openspec/changes/<change-id>/` (proposal, delta specs, design, and tasks)
    - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments)
@@ -71,7 +73,9 @@ Pipeline owner for:
     - worktree env var: `{{ execution_worktree_env_var }}`
     - worktree strategy: `{{ execution_worktree_strategy }}`
     - lint entrypoint: `{{ execution_lint_entrypoint }}`
+    - scoped lint entrypoint: `{{ execution_lint_scoped_entrypoint }} -- <targets...>`
     - test entrypoint: `{{ execution_test_entrypoint }}`
+    - scoped test entrypoint: `{{ execution_test_scoped_entrypoint }} -- <targets...>`
     - verify entrypoint: `{{ execution_verify_entrypoint }}`
 15. Before orchestrator lint/test/verify, export `{{ execution_worktree_env_var }}` via
     `node .ai/runtime/orchestrator-state.mjs worktree-env --issue ISSUE-ID`
@@ -83,19 +87,21 @@ Pipeline owner for:
 
 ## Test strategy (token guard)
 
-20. **Review first:** после implementation сразу переходи к review. Не запускай pre-review test, lint, simplify-review или другой предварительный review gate.
-21. **После review и в fix-loop — только scoped:** узкий lint/test по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
-22. Запись scoped evidence:
-    - `node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped`
-23. Перед review gate scoped evidence не требуется; после review запиши оба результата:
+20. **Дешёвый handoff перед review:** после implementation запусти только узкие canonical scoped commands с явными targets; оба entrypoint fail-closed без targets. Обнови `progress.md`, затем выполни `record-handoff`. Полный suite и simplify-review здесь запрещены.
+21. **Scoped в handoff и fix-loop:** lint/test только по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
+22. Запись scoped evidence и handoff:
     - `record-test --issue ISSUE-ID --result pass|fail --scope scoped`
     - `record-lint --issue ISSUE-ID --result pass|fail --scope scoped`
+    - `record-handoff --issue ISSUE-ID --progress-path {{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+23. После `record-handoff` выполни `set-status --status reviewing`. Clean/low read-only review на том же fingerprint переиспользует scoped evidence и сразу переводит run в `pre-finalize`.
 24. **Полный suite — один раз в конце:** только после clean/low review gate и зелёного scoped test + lint, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
     - `{{ execution_verify_entrypoint }}` (full)
     - `record-test --issue ISSUE-ID --result pass|fail --scope full`
-    - при **fail** full — **стоп**, статус `awaiting-human-approval`; пользователь решает; **не** начинай новый fix-loop автоматически
+    - первый **fail** с одним предположительно flaky OOS target: `record-test ... --scope full --result fail --exact-target '<target>'`; затем выполни ровно один exact rerun и запиши `--scope exact --target '<target>'`
+    - exact pass разрешает ровно один final full retry; exact fail или второй full fail переводит в `awaiting-human-approval`
+    - full fail без достоверного exact OOS target сразу переводит в human gate
     - при **pass** full — runtime переводит в `awaiting-finalize`
-25. **Лимит доработок:** `orchestrator.maxReviewIterations` = **{{ orchestrator_max_review_iterations }}** — потолок повторных review→fix циклов, не цель. Счётчик растёт только на `record-review` с `medium`/`high`/`critical`, **не** на `skip-rereview`. После потолка — `awaiting-human-approval` + `approve-fix-loop`.
+25. **Лимит review:** один initial review и максимум один delta-only closure review. `orchestrator.maxReviewIterations` принудительно ограничен одной автоматической fix-итерацией; второй blocking verdict переводит в `awaiting-human-approval`.
 
 ## Phase evidence
 
@@ -145,12 +151,14 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
     - следуй полю `instruction` в JSON: передавай model preference только нативному subagent tool текущего host; если он не поддерживает выбор, используй inherited compatible model и зафиксируй fallback.
     - запрещено превращать model hint в shell launch (`codex exec`, `claude`, `cursor-agent`) или PTY polling.
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
-27. После implementation сразу выполни `set-status --status reviewing` — без pre-review test/lint и без simplify-review.
+27. После implementation выполни bounded scoped handoff из п. 20–23 и только затем `set-status --status reviewing`.
     - **review-depth triage (обязательно до делегирования):** модель-оркестратор классифицирует изменение по diff + `Claimed Write Scope` + `Execution Contract`, выбирает ровно один режим и записывает выбор в `progress.md` → `### Review gate`:
       - `simple` — только если все признаки одновременно верны: <=2 claimed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, план без открытых спорных решений.
       - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high|critical`, `after_fix_re_review: required`, или оркестратор сомневается.
       - default при сомнении — `full`; запрещено запускать одновременно `simple` и `full` review для одного gate.
-    - **ровно один subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change / `progress.md`.
+    - **ровно один initial subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change / `progress.md`.
+    - Делегируй с `fork_turns: none` или минимальным bounded history; в prompt передай точные artifact paths и fingerprint. Full-history fork запрещён по умолчанию.
+    - Ожидай один раз через длинный native wait до completion/message/user steering; не делай heartbeat через частые list/status вызовы.
 {% if orchestrator_audit_gate == "always" %}
     - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
 {% elif orchestrator_audit_gate == "process-layer-only" %}
@@ -164,16 +172,16 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
       `--after-fix-rereview required|optional|not_needed` (как в вердикте).
 28. По вердиктам:
     - review `medium`/`high`/`critical`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking`{% endif %} -> `record-review` (+ опционально `--after-fix-rereview required|optional|not_needed` из YAML review) -> `fix-loop` → scoped fix → **оба** `record-test` и `record-lint` с `pass` → **`graph next` → `decide_fix_loop`** (п. 29), **не** автоматический повтор review.
-    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> scoped test + lint -> `pre-finalize` / full suite (п. 24)
+    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> переиспользовать handoff evidence -> `pre-finalize` / full suite (п. 24)
 29. **После фикса — решение оркестратора (обязательно):** см. `.ai/reference/orchestrator-fix-loop-decision.md`. Кратко:
     - прочитай `orchestrator_review_verdict` и diff; сопоставь каждый finding с правкой;
     - **`skip-rereview`** (типичный trivial fix): все findings закрыты, scoped test + lint green, локальный diff →  
       `node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "..."`  
       → `pre-finalize` / full suite (п. 24) **без** нового review subagent;
     - **`require-rereview`**: сомнение, partial fix, `after_fix_re_review: required`, security/architecture →  
-      `record-fix-resolution --decision require-rereview` → затем **один** review subagent (п. 27);
+      `record-fix-resolution --decision require-rereview` → затем **один delta-only closure** review по unresolved findings и post-fix diff (п. 27);
     - зафиксируй выбор в `progress.md` → `### Fix resolution`;
-    - **запрещено** крутить `maxReviewIterations` подряд «по привычке», если findings уже закрыты scoped evidence.
+    - второй blocking verdict — human gate; третий автоматический review запрещён.
 30. Re-check managed runtime state before stopping the turn.
 {% if orchestrator_audit_gate != "never" %}
     - audit `advisory` при чистом review — не блокирует; зафиксируй в summary

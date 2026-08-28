@@ -13,6 +13,7 @@ alwaysApply: true
 - Medium/large work requires a validated OpenSpec change before code changes.
 - The OpenSpec change must map source requirements, explicit non-goals, and follow-ups without silent omissions.
 - Risky assumptions must be stated and validated before implementation starts.
+- Validate provider/source assumptions and likely cross-module seams before declaring implementation-ready.
 - The OpenSpec change must contain complete proposal, delta specs, design, and tasks.
 - Design must record important invariants, `Claimed Write Scope`, migration/rollback, and unresolved decisions.
 - Tasks must map requirements to canonical verification evidence.
@@ -37,6 +38,8 @@ alwaysApply: true
 - Cross-module or cross-package shortcuts that bypass declared boundaries are architecture defects.
 - Project-specific architecture laws belong in profile-specific rules on top of this generic gate file.
 - If an issue is orchestrator-managed, implementation must happen only inside the assigned worktree, never in the main checkout.
+- If claimed write scope is incomplete, aggregate all related missing paths/seams into one amendment request per implementation attempt; do not churn one approval per file.
+- Before review handoff, run canonical scoped test and lint with explicit targets, update the progress artifact, and record the handoff against the current workspace fingerprint.
 
 ## Gate 3: Data / Computation
 
@@ -58,9 +61,10 @@ alwaysApply: true
 - Automated tests must not call real third-party services by default; use mocks/stubs/fakes at the boundary.
 - Verify through canonical tasks from `ai.config.yaml`, not ad-hoc stack guesses.
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.
-- Review is the first post-implementation gate; scoped test and lint evidence follow review before final verification.
+- A cheap scoped handoff is the first post-implementation gate; review consumes that evidence and must remain read-only.
 - If review reports `high`, `critical`, or `medium` findings, verification is failed and the task must re-enter the implement loop.
 - For **orchestrator-managed** work with a declared `Claimed Write Scope`, repo-wide `lint`/`verify` red caused by **pre-existing or out-of-scope** code does not by itself block the review→scoped-validation loop if: scoped verification for the touched behavior is green, the failure is documented in progress with path-level reasoning, and review explicitly accepts the scope split (residual repo risk called out in the review summary).
+- The full verify gate runs once per workspace fingerprint and is serialized across generated projects by the host-wide lease. A suspected out-of-scope flaky failure permits one exact-target rerun and, only if it passes, one final full retry; any further failure stops at a human gate.
 
 ## Gate 5: Review
 
@@ -73,7 +77,7 @@ alwaysApply: true
 - Review must verify implementation-vs-spec conformance, design invariants, tasks-to-requirements traceability, reuse vs duplicate implementation, and test adequacy.
 - Review must confirm 100% completion against the source request and validated OpenSpec change.
 - The task is not complete while any required acceptance point, plan step, or mandatory follow-through item is still open.
-- `high`, `critical`, or `medium` findings force a bounded loop: `implement -> review -> scoped test + lint`; repeat review only when the fix is non-trivial or the reviewer requires it.
+- `high`, `critical`, or `medium` findings force a bounded loop: `implement fix -> affected scoped test + lint -> optional delta-only closure review`. Initial plus one closure is the hard automatic cap.
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.
 - For orchestrated work, review must confirm the run is still aligned with the current worktree fingerprint before marking it review-ready.
 - When progress documents full-pipeline `lint`/`verify` failure outside `Claimed Write Scope`, review must either validate that justification or return findings — not stall indefinitely on global red alone.
