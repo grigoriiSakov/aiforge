@@ -10,6 +10,20 @@ describe("generic reusable surfaces", () => {
     expect(fs.existsSync(resolveTemplatePath())).toBe(true);
   });
 
+  test("template path override accepts the aiforge repository root", () => {
+    const previousOverride = process.env.AI_SIMPLE_TEMPLATE_PATH;
+    process.env.AI_SIMPLE_TEMPLATE_PATH = process.cwd();
+    try {
+      expect(resolveTemplatePath()).toBe(path.join(process.cwd(), "template", "base"));
+    } finally {
+      if (previousOverride === undefined) {
+        delete process.env.AI_SIMPLE_TEMPLATE_PATH;
+      } else {
+        process.env.AI_SIMPLE_TEMPLATE_PATH = previousOverride;
+      }
+    }
+  });
+
   test("template includes shared rules, shared skills, and runtime references", () => {
     const root = path.join(process.cwd(), "template", "base");
 

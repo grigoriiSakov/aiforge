@@ -9,11 +9,18 @@ export function resolveTemplatePath(): string {
   const override = process.env.AI_SIMPLE_TEMPLATE_PATH;
   if (override) {
     const resolvedOverride = path.resolve(override);
-    if (isDirectory(resolvedOverride)) {
+    if (isCopierTemplate(resolvedOverride)) {
       return resolvedOverride;
     }
 
-    throw new Error(`Configured template path is not a directory: \`${resolvedOverride}\`.`);
+    const nestedTemplate = path.join(resolvedOverride, "template", "base");
+    if (isCopierTemplate(nestedTemplate)) {
+      return nestedTemplate;
+    }
+
+    throw new Error(
+      `Configured template path does not contain copier.yml: \`${resolvedOverride}\`.`
+    );
   }
 
   const candidates = [
@@ -42,4 +49,8 @@ function isDirectory(targetPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isCopierTemplate(targetPath: string): boolean {
+  return isDirectory(targetPath) && fs.existsSync(path.join(targetPath, "copier.yml"));
 }
