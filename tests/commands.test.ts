@@ -1238,6 +1238,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     const staleReviewGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(staleReviewGuard.stopReason).toBe("review_stale");
 
+    fs.rmSync(path.join(repoRoot, "MANIFESTO.md"));
     runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["start"], repoRoot);
     runNodeScript(
       path.join(repoRoot, ".ai", "runtime", "review-state.mjs"),

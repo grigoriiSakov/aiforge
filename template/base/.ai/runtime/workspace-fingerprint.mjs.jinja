@@ -35,7 +35,7 @@ function hashWorkspaceEntry(repoRoot, relativePath) {
     stat = fs.lstatSync(absolutePath);
   } catch (error) {
     if (error?.code === "ENOENT") {
-      return crypto.createHash("sha256").update("deleted").digest("hex");
+      return null;
     }
     throw error;
   }
@@ -80,9 +80,13 @@ function filesystemFingerprint(repoRoot) {
   visit("");
   const contentHash = crypto.createHash("sha256");
   for (const relativePath of entries) {
+    const entryHash = hashWorkspaceEntry(repoRoot, relativePath);
+    if (entryHash === null) {
+      continue;
+    }
     contentHash.update(relativePath);
     contentHash.update("\0");
-    contentHash.update(hashWorkspaceEntry(repoRoot, relativePath));
+    contentHash.update(entryHash);
     contentHash.update("\0");
   }
   return JSON.stringify({ contentHash: contentHash.digest("hex") });
@@ -106,9 +110,13 @@ export function workspaceFingerprint(repoRoot = process.cwd()) {
     .sort();
   const contentHash = crypto.createHash("sha256");
   for (const relativePath of workspacePaths) {
+    const entryHash = hashWorkspaceEntry(repoRoot, relativePath);
+    if (entryHash === null) {
+      continue;
+    }
     contentHash.update(relativePath);
     contentHash.update("\0");
-    contentHash.update(hashWorkspaceEntry(repoRoot, relativePath));
+    contentHash.update(entryHash);
     contentHash.update("\0");
   }
 
