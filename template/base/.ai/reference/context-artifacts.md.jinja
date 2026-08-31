@@ -36,7 +36,7 @@ OpenSpec owns planning. Keep execution evidence under the configured root, one d
 
 - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 
-Use the `PROGRESS::ISSUE-ID` marker and the required sections from `.ai/rules/workflow.mdc`. The tracker carries workflow state only.
+Use the `PROGRESS::ISSUE-ID` marker, an exact `Change: \`<change-id>\`` binding, and the required sections from `.ai/rules/workflow.mdc`. The tracker carries workflow state only. Orchestrator handoff rejects a merely non-empty artifact when this structure is missing.
 
 ## Orchestrator runtime
 

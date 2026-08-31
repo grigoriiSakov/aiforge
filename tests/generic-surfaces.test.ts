@@ -42,6 +42,7 @@ describe("generic reusable surfaces", () => {
       ".ai/skills/tracker/SKILL.md.jinja",
       ".ai/runtime/task-state.mjs.jinja",
       ".ai/runtime/review-state.mjs.jinja",
+      ".ai/runtime/workspace-fingerprint.mjs.jinja",
       ".ai/runtime/orchestrator-state.mjs.jinja",
       ".ai/runtime/verify-lease.mjs.jinja"
     ];
@@ -68,12 +69,30 @@ describe("generic reusable surfaces", () => {
     expect(taskfile).toContain("verify-lease.mjs run --");
     expect(taskfile).toContain("AIFORGE_VERIFY_LEASE_HELD");
     expect(orchestrator).toContain("record-handoff");
+    expect(orchestrator).toContain("--change-id");
+    expect(orchestrator).toContain("--review-depth");
     expect(orchestrator).toContain("delta-only closure");
     expect(orchestrator).toContain("fork_turns: none");
     expect(orchestrator).toContain("длинный native wait");
     expect(agents).toContain("Full-history forks are not the default");
     expect(lease).toContain("aiforge-full-verify.lock");
     expect(lease).toContain("processIsAlive");
+  });
+
+  test("workflow sources agree on scoped review then full verification", () => {
+    const root = path.join(process.cwd(), "template", "base");
+    const agents = fs.readFileSync(path.join(root, "AGENTS.md.jinja"), "utf8");
+    const manifesto = fs.readFileSync(path.join(root, "{{ manifesto_path }}.jinja"), "utf8");
+    const workflow = fs.readFileSync(
+      path.join(root, ".ai", "rules", "workflow.mdc.jinja"),
+      "utf8"
+    );
+
+    for (const content of [agents, manifesto, workflow]) {
+      expect(content).toContain("scoped test/lint");
+      expect(content).toContain("review");
+      expect(content).toContain("full verify");
+    }
   });
 
   test("all shared skills require reading workflow rules first", () => {

@@ -156,45 +156,14 @@ export function createFakeExecutable(directory: string, name: string, content: s
 export function installReviewRuntime(repoRoot: string): void {
   const runtimeDir = path.join(repoRoot, ".ai", "runtime");
   fs.mkdirSync(runtimeDir, { recursive: true });
-
-  fs.writeFileSync(
-    path.join(runtimeDir, "review-state.mjs"),
-    `#!/usr/bin/env node
-import fs from "node:fs";
-import path from "node:path";
-const [, , command = "show", arg1 = "", ...rest] = process.argv;
-const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
-function readState() {
-  if (!fs.existsSync(reviewStatePath)) return { status: "missing", history: [] };
-  return JSON.parse(fs.readFileSync(reviewStatePath, "utf8"));
-}
-function writeState(nextState) {
-  fs.mkdirSync(path.dirname(reviewStatePath), { recursive: true });
-  fs.writeFileSync(reviewStatePath, JSON.stringify(nextState, null, 2) + "\\n");
-}
-function appendHistory(state, event) {
-  const history = Array.isArray(state.history) ? state.history : [];
-  history.push({ ...event, timestamp: new Date().toISOString() });
-  return { ...state, history };
-}
-if (command === "start") {
-  const current = readState();
-  const next = appendHistory({ status: "pending", startedAt: new Date().toISOString() }, { type: "start" });
-  writeState({ ...current, ...next });
-  process.exit(0);
-}
-if (command === "verdict") {
-  const verdict = arg1;
-  const summary = rest.join(" ").trim();
-  const current = readState();
-  const next = appendHistory({ ...current, status: verdict, summary, decidedAt: new Date().toISOString() }, { type: "verdict", verdict, summary });
-  writeState(next);
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify(readState(), null, 2) + "\\n");
-`,
-    { mode: 0o755 }
-  );
+  const templateRoot = path.join(process.cwd(), "template", "base", ".ai", "runtime");
+  for (const fileName of ["workspace-fingerprint.mjs", "task-state.mjs", "review-state.mjs"]) {
+    fs.copyFileSync(
+      path.join(templateRoot, `${fileName}.jinja`),
+      path.join(runtimeDir, fileName)
+    );
+    fs.chmodSync(path.join(runtimeDir, fileName), 0o755);
+  }
 
   fs.writeFileSync(
     path.join(runtimeDir, "task-state.json"),
@@ -203,51 +172,8 @@ process.stdout.write(JSON.stringify(readState(), null, 2) + "\\n");
 }
 
 export function installStopGuard(repoRoot: string): string {
-  const codexDir = path.join(repoRoot, ".codex", "hooks");
-  fs.mkdirSync(codexDir, { recursive: true });
-  const scriptPath = path.join(codexDir, "stop-delivery-guard.mjs");
-  fs.writeFileSync(
-    scriptPath,
-    `#!/usr/bin/env node
-import fs from "node:fs";
-import path from "node:path";
-const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
-const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
-const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
-function readJson(filePath) {
-  if (!fs.existsSync(filePath)) return null;
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-const manifest = readJson(manifestPath);
-const state = readJson(taskStatePath);
-const reviewState = readJson(reviewStatePath);
-if (!manifest || !state) {
-  process.stdout.write(JSON.stringify({ continue: true }, null, 2) + "\\n");
-  process.exit(0);
-}
-const verifyTask = manifest.task.tasks.verify;
-const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
-if (!successfulVerify) {
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: "verify_missing" }, null, 2) + "\\n");
-  process.exit(0);
-}
-if (!reviewState) {
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_missing" }, null, 2) + "\\n");
-  process.exit(0);
-}
-if (reviewState.status === "pending" || reviewState.status === "missing") {
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_pending" }, null, 2) + "\\n");
-  process.exit(0);
-}
-if (reviewState.status === "issues-found") {
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: "review_failed" }, null, 2) + "\\n");
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ continue: true }, null, 2) + "\\n");
-`,
-    { mode: 0o755 }
-  );
-  return scriptPath;
+  installCodexHookTemplates(repoRoot);
+  return path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
 }
 
 export function runNodeScript(scriptPath: string, args: string[], cwd: string): string {
@@ -315,6 +241,8 @@ export function installCodexHookTemplates(repoRoot: string): void {
     fs.copyFileSync(sourcePath, targetPath);
     fs.chmodSync(targetPath, 0o755);
   }
+
+  installWorkspaceFingerprintTemplate(repoRoot);
 }
 
 export function installClaudeHookTemplates(repoRoot: string): void {
@@ -334,4 +262,22 @@ export function installClaudeHookTemplates(repoRoot: string): void {
     fs.copyFileSync(sourcePath, targetPath);
     fs.chmodSync(targetPath, 0o755);
   }
+
+
+  installWorkspaceFingerprintTemplate(repoRoot);
+}
+
+export function installWorkspaceFingerprintTemplate(repoRoot: string): void {
+  const sourcePath = path.join(
+    process.cwd(),
+    "template",
+    "base",
+    ".ai",
+    "runtime",
+    "workspace-fingerprint.mjs.jinja"
+  );
+  const targetPath = path.join(repoRoot, ".ai", "runtime", "workspace-fingerprint.mjs");
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+  fs.chmodSync(targetPath, 0o755);
 }

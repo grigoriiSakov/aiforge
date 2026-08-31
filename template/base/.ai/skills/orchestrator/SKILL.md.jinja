@@ -1,13 +1,13 @@
 ---
 name: orchestrator
-description: Own the issue -> plan -> implement -> review -> test pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
+description: Own the issue -> plan -> implement -> scoped test/lint -> review -> full verify pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
 ---
 
 # Orchestrator
 
 Pipeline owner for:
 
-`issue -> plan -> implement -> review -> test`
+`issue -> plan -> implement -> scoped test/lint -> review -> full verify`
 
 ## Rule preflight
 
@@ -52,7 +52,7 @@ Pipeline owner for:
 {% endif %}
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
-   - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
+   - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --change-id <change-id> --scope-json '<json>'`
      По умолчанию ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`.
      Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/OpenSpec design не требует pinned base branch.
 9. Interpret submit result strictly:
@@ -108,8 +108,9 @@ Pipeline owner for:
 25. A phase is not complete without evidence:
    - `plan` -> complete and validated OpenSpec change
    - `implement` -> `openspec-apply-change <change-id>` tasks and code changes aligned with the selected OpenSpec change
-   - `test` -> scoped canonical test + lint evidence (п. 20–23)
+   - `scoped test/lint` -> canonical scoped test + lint evidence (п. 20–23)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
+   - `full verify` -> canonical full verification after a clean/low review (п. 24)
    - **Quality bar (in-scope):** scoped test и lint по `Claimed Write Scope` должны быть green до review handoff; после clean review их fingerprint переиспользуется для единственного full verify.
    - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
    - **«Старые» ошибки внутри скоупа:** не отмазка.
@@ -144,10 +145,10 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
 26. **Subagent model (review, обязательно):** определи **текущий** runtime (Codex ≠ Cursor ≠ Claude):
     ```bash
     node .ai/runtime/orchestrator-state.mjs active-runtime
-    node .ai/runtime/orchestrator-state.mjs model-hint --role review
+    node .ai/runtime/orchestrator-state.mjs model-hint --role review --review-depth <simple|full>
     ```
     - **Никогда** не передавай `--runtime cursor` из Codex-сессии и наоборот.
-    - `model-hint` читает **только** `agents.runtimeModels.<activeRuntime>` из `ai.config.yaml` / `.ai/project.model-profiles.json`.
+    - `model-hint` читает **только** `agents.runtimeModels.<activeRuntime>` из `ai.config.yaml` / `.ai/project.model-profiles.json`; для `--review-depth full` runtime принудительно поднимает tier до `quality`.
     - следуй полю `instruction` в JSON: передавай model preference только нативному subagent tool текущего host; если он не поддерживает выбор, используй inherited compatible model и зафиксируй fallback.
     - запрещено превращать model hint в shell launch (`codex exec`, `claude`, `cursor-agent`) или PTY polling.
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.

@@ -71,7 +71,51 @@ fs.writeFileSync(path.join(repoRoot, "openspec", "config.yaml"), "schema: spec-d
     expect(openSpecConfig.rules?.tasks).toContain(
       "Map every task to a requirement and a canonical aiforge verification command."
     );
+    expect(openSpecConfig.rules?.tasks).toContain(
+      "Require scoped tests and lint before review, then full verification after a clean review."
+    );
     delete process.env.AIFORGE_OPENSPEC_INVOCATION;
+  });
+
+  test("replaces the obsolete full-verify-before-review rule", () => {
+    const repoRoot = makeTempRepo("aiforge-openspec-rule-migration-");
+    const binDir = makeTempRepo("aiforge-openspec-rule-bin-");
+    const openSpecBin = createFakeExecutable(
+      binDir,
+      "fake-openspec",
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const repoRoot = process.argv[3];
+fs.mkdirSync(path.join(repoRoot, "openspec"), { recursive: true });
+`
+    );
+    fs.mkdirSync(path.join(repoRoot, "openspec"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, "openspec", "config.yaml"),
+      [
+        "schema: spec-driven",
+        "rules:",
+        "  tasks:",
+        "    - Include focused tests and the full verification gate required before review.",
+        ""
+      ].join("\n")
+    );
+    const config = createConfig({
+      repoRoot,
+      projectSlug: "demo",
+      projectName: "Demo",
+      profileId: "react-vite"
+    });
+
+    ensureOpenSpecProject(repoRoot, config, { bin: openSpecBin });
+
+    const content = fs.readFileSync(path.join(repoRoot, "openspec", "config.yaml"), "utf8");
+    const parsed = YAML.parse(content) as { rules?: Record<string, string[]> };
+    expect(content).not.toContain("full verification gate required before review");
+    expect(parsed.rules?.tasks).toContain(
+      "Require scoped tests and lint before review, then full verification after a clean review."
+    );
   });
 
   test("ships the OpenSpec CLI as a runtime dependency", () => {

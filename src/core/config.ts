@@ -67,7 +67,7 @@ export function createConfig(params: {
     },
     workflow: {
       tracker: profile.trackerDefault,
-      phases: ["issue", "plan", "implement", "review", "test"],
+      phases: ["issue", "plan", "implement", "scoped-test-lint", "review", "full-verify"],
       language: profile.languageDefault,
       trackerStates: {
         planReady: "Todo",
@@ -603,10 +603,23 @@ function normalizeTaskCommand(taskCommand: string | undefined): string {
 
 function normalizeWorkflowPhases(phases: string[]): string[] {
   const normalized = phases.map((phase) => (phase === "build" ? "implement" : phase));
-  const canonical = ["issue", "plan", "implement", "review", "test"];
+  const canonical = [
+    "issue",
+    "plan",
+    "implement",
+    "scoped-test-lint",
+    "review",
+    "full-verify"
+  ];
+  const legacyStandardPhases = ["issue", "plan", "implement", "test", "review"];
   const isStandardPipeline =
-    normalized.length === canonical.length &&
-    canonical.every((phase) => normalized.includes(phase));
+    (normalized.length === canonical.length && canonical.every((phase) => normalized.includes(phase))) ||
+    (normalized.length === 6 &&
+      ["issue", "plan", "implement", "test", "review", "verify"].every((phase) =>
+        normalized.includes(phase)
+      )) ||
+    (normalized.length === legacyStandardPhases.length &&
+      legacyStandardPhases.every((phase) => normalized.includes(phase)));
   return isStandardPipeline ? canonical : normalized;
 }
 

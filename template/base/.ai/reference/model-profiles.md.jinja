@@ -16,7 +16,7 @@ title: "Model Profiles"
 |------|-------------|
 | `quality` | Architecture, risky refactors, wide blast radius |
 | `balanced` | Planning, orchestration main session, tracker, clarify |
-| `budget` | Orchestrator review/simplify-review subagents, lint-only passes, narrow checklists, reruns |
+| `budget` | Simple orchestrator reviews, simplify-review subagents, lint-only passes, narrow checklists, reruns |
 
 ## Role → tier (from `ai.config.yaml`)
 
@@ -50,10 +50,11 @@ Reserved in any block: `auto` (UI-only, not passed to tools).
 
 ```bash
 node .ai/runtime/orchestrator-state.mjs active-runtime
-node .ai/runtime/orchestrator-state.mjs model-hint --role review
+node .ai/runtime/orchestrator-state.mjs model-hint --role review --review-depth <simple|full>
 ```
 
 - **Do not** pass `--runtime cursor` when you are in Codex (or the reverse).
+- `--review-depth full` promotes the review to the `quality` tier even when the configured default role tier is `budget`; `simple` keeps the configured tier.
 - Override detection: `AIFORGE_ACTIVE_RUNTIME=codex` (or `cursor`, `claude`).
 - Follow JSON `instruction` and pass the preference only to the active host's native subagent tool. If explicit model selection is unavailable, inherit a compatible native model and record the fallback.
 - Never turn a model hint into a shell-launched agent CLI or PTY polling loop.

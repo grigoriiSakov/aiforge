@@ -269,7 +269,14 @@ describe("config lifecycle", () => {
     const config = loadConfig(repoRoot);
 
     expect(config.task.command).toBe(DEFAULT_TASK_COMMAND);
-    expect(config.workflow.phases).toEqual(["issue", "plan", "implement", "review", "test"]);
+    expect(config.workflow.phases).toEqual([
+      "issue",
+      "plan",
+      "implement",
+      "scoped-test-lint",
+      "review",
+      "full-verify"
+    ]);
     expect(config.orchestrator.maxReviewIterations).toBe(1);
     expect(config.task.tasks.implement).toBe("implement");
     expect(config.commands.implement).toEqual([

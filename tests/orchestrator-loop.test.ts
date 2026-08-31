@@ -18,6 +18,10 @@ function initGitRepo(repoRoot: string): void {
   git(["config", "user.email", "test@example.com"]);
   git(["config", "user.name", "Test"]);
   fs.writeFileSync(path.join(repoRoot, "README.md"), "# test\n");
+  fs.writeFileSync(
+    path.join(repoRoot, ".gitignore"),
+    ".ai/runtime/orchestrator/\n.ai/context/runtime/\n"
+  );
   git(["add", "."]);
   git(["commit", "-m", "init"]);
 }
@@ -25,6 +29,17 @@ function initGitRepo(repoRoot: string): void {
 function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2"): string {
   const runtimeDir = path.join(repoRoot, ".ai", "runtime");
   fs.mkdirSync(runtimeDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "workspace-fingerprint.mjs.jinja"
+    ),
+    path.join(runtimeDir, "workspace-fingerprint.mjs")
+  );
   const templatePath = path.join(
     process.cwd(),
     "template",
@@ -41,6 +56,18 @@ function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2"): strin
   const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
   fs.writeFileSync(runtimePath, rendered, { mode: 0o755 });
   return runtimePath;
+}
+
+function createOpenSpecChange(repoRoot: string, changeId: string): void {
+  const changeRoot = path.join(repoRoot, "openspec", "changes", changeId);
+  fs.mkdirSync(path.join(changeRoot, "specs", "example"), { recursive: true });
+  fs.writeFileSync(path.join(changeRoot, "proposal.md"), "# Proposal\n");
+  fs.writeFileSync(path.join(changeRoot, "design.md"), "# Design\n");
+  fs.writeFileSync(path.join(changeRoot, "tasks.md"), "- [x] 1.1 Implement the change\n");
+  fs.writeFileSync(
+    path.join(changeRoot, "specs", "example", "spec.md"),
+    "## ADDED Requirements\n\n### Requirement: Example\nThe system SHALL work.\n"
+  );
 }
 
 function isolatedAgentEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -81,13 +108,21 @@ function runNodeScript(
   return result.stdout.trim();
 }
 
-function submitIssue(runtimePath: string, repoRoot: string, issueId: string): void {
+function submitIssue(
+  runtimePath: string,
+  repoRoot: string,
+  issueId: string,
+  changeId = `${issueId.toLowerCase()}-change`
+): void {
+  createOpenSpecChange(repoRoot, changeId);
   runNodeScript(
     runtimePath,
     [
       "submit",
       "--issue",
       issueId,
+      "--change-id",
+      changeId,
       "--scope-json",
       JSON.stringify({
         areas: ["api"],
@@ -109,7 +144,39 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
   fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
   const progressPath = path.join(".ai", "context", "runtime", issueId, "progress.md");
   fs.mkdirSync(path.dirname(path.join(repoRoot, progressPath)), { recursive: true });
-  fs.writeFileSync(path.join(repoRoot, progressPath), "## Implementation\nDone\n\n## Verification\nScoped\n");
+  fs.writeFileSync(
+    path.join(repoRoot, progressPath),
+    [
+      `# PROGRESS::${issueId}`,
+      "",
+      `Change: \`${run.changeId}\``,
+      "",
+      "## Выполнено",
+      "",
+      "- Реализация завершена.",
+      "",
+      "## Текущий шаг",
+      "",
+      "- Handoff.",
+      "",
+      "## Дальше",
+      "",
+      "- Review.",
+      "",
+      "## Spec Conformance",
+      "",
+      "- [x] Requirement Example — evidence: focused test.",
+      "",
+      "## Project Rules Compliance",
+      "",
+      "- [x] Project rules — evidence: scoped lint.",
+      "",
+      "## Решения по ходу",
+      "",
+      "- Использован минимальный путь.",
+      ""
+    ].join("\n")
+  );
   runNodeScript(
     runtimePath,
     ["record-test", "--issue", issueId, "--result", "pass", "--scope", "scoped"],
@@ -129,6 +196,81 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
 }
 
 describe("orchestrator loop guards", () => {
+  test("submission requires and persists an existing explicit OpenSpec change id", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-change-binding-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+
+    const missing = spawnSync(
+      "node",
+      [
+        runtimePath,
+        "submit",
+        "--issue",
+        "APP-7",
+        "--scope-json",
+        JSON.stringify({ paths: ["src/handler.ts"] })
+      ],
+      { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
+    );
+    expect(missing.status).toBe(2);
+    expect(missing.stderr).toContain("--change-id");
+
+    createOpenSpecChange(repoRoot, "browser-tenant-repair");
+    const run = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "submit",
+          "--issue",
+          "APP-7",
+          "--change-id",
+          "browser-tenant-repair",
+          "--scope-json",
+          JSON.stringify({ paths: ["src/handler.ts"] })
+        ],
+        repoRoot
+      )
+    );
+    expect(run.changeId).toBe("browser-tenant-repair");
+  });
+
+  test("handoff rejects a non-empty progress file without mandatory conformance sections", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-progress-contract-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-7B");
+
+    const runPath = path.join(repoRoot, ".ai", "runtime", "orchestrator", "runs", "APP-7B.json");
+    const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
+    run.worktreePath = repoRoot;
+    run.status = "building";
+    fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
+    const progressPath = path.join(".ai", "context", "runtime", "APP-7B", "progress.md");
+    fs.mkdirSync(path.dirname(path.join(repoRoot, progressPath)), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, progressPath), "non-empty but incomplete\n");
+    runNodeScript(
+      runtimePath,
+      ["record-test", "--issue", "APP-7B", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
+    runNodeScript(
+      runtimePath,
+      ["record-lint", "--issue", "APP-7B", "--result", "pass", "--scope", "scoped"],
+      repoRoot
+    );
+
+    const handoff = spawnSync(
+      "node",
+      [runtimePath, "record-handoff", "--issue", "APP-7B", "--progress-path", progressPath],
+      { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
+    );
+    expect(handoff.status).toBe(2);
+    expect(handoff.stderr).toContain("missing required sections");
+  });
+
   test("implementation cannot move to review without fingerprinted handoff evidence", () => {
     const repoRoot = makeTempRepo("aiforge-orch-review-first-");
     initGitRepo(repoRoot);
@@ -224,7 +366,46 @@ describe("orchestrator loop guards", () => {
       runNodeScript(runtimePath, ["graph", "next", "APP-10"], repoRoot)
     );
     expect(finalizeGraph.action).toBe("finalize_openspec");
-    expect(finalizeGraph.changeId).toBe("app-10");
+    expect(finalizeGraph.changeId).toBe("app-10-change");
+  });
+
+  test("terminal release requires the exact bound OpenSpec change to be archived", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-terminal-change-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-10B", "browser-context-repair");
+    prepareForReview(runtimePath, repoRoot, "APP-10B");
+    runNodeScript(runtimePath, ["record-review", "--issue", "APP-10B", "--result", "clean"], repoRoot);
+    runNodeScript(
+      runtimePath,
+      ["record-test", "--issue", "APP-10B", "--result", "pass", "--scope", "full"],
+      repoRoot
+    );
+
+    const premature = spawnSync(
+      "node",
+      [runtimePath, "release", "--issue", "APP-10B", "--status", "done"],
+      { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
+    );
+    expect(premature.status).toBe(2);
+    expect(premature.stderr).toContain("still active");
+
+    const activeChange = path.join(repoRoot, "openspec", "changes", "browser-context-repair");
+    const archivedChange = path.join(
+      repoRoot,
+      "openspec",
+      "changes",
+      "archive",
+      "2026-08-31-browser-context-repair"
+    );
+    fs.mkdirSync(path.dirname(archivedChange), { recursive: true });
+    fs.renameSync(activeChange, archivedChange);
+    const released = JSON.parse(
+      runNodeScript(runtimePath, ["release", "--issue", "APP-10B", "--status", "done"], repoRoot)
+    );
+    expect(released.released).toBe("APP-10B");
+    expect(JSON.parse(runNodeScript(runtimePath, ["status", "--issue", "APP-10B"], repoRoot)).status).toBe("done");
   });
 
   test("Codex Goal thread markers select only the Codex model namespace", () => {
@@ -448,5 +629,37 @@ describe("orchestrator loop guards", () => {
     );
     expect(autoHint.model).toBeNull();
     expect(autoHint.skipReason).toBe("reserved-ui-mode");
+  });
+
+  test("full review promotes a budget review role to the quality tier", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-full-review-model-");
+    fs.mkdirSync(path.join(repoRoot, ".ai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, ".ai", "project.model-profiles.json"),
+      `${JSON.stringify(
+        {
+          roles: { review: { tier: "budget" } },
+          runtimeModels: {
+            codex: { budget: "gpt-5.6-luna", quality: "gpt-5.6-sol" }
+          }
+        },
+        null,
+        2
+      )}\n`
+    );
+    const runtimePath = renderOrchestratorRuntime(repoRoot);
+
+    const hint = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        ["model-hint", "--role", "review", "--review-depth", "full"],
+        repoRoot,
+        { CODEX_CI: "1" }
+      )
+    );
+    expect(hint.configuredTier).toBe("budget");
+    expect(hint.tier).toBe("quality");
+    expect(hint.model).toBe("gpt-5.6-sol");
+    expect(hint.promotionReason).toContain("full review");
   });
 });

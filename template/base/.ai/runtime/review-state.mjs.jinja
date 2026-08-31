@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { workspaceFingerprint } from "./workspace-fingerprint.mjs";
+
 const [, , command = "show", arg1 = "", ...rest] = process.argv;
 const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
 
@@ -36,9 +38,11 @@ function appendHistory(state, event) {
 
 if (command === "start") {
   const current = readState();
+  const fingerprint = workspaceFingerprint();
   const next = appendHistory(
     {
       status: "pending",
+      fingerprint,
       startedAt: new Date().toISOString()
     },
     {
@@ -60,10 +64,20 @@ if (command === "verdict") {
 
   const summary = rest.join(" ").trim();
   const current = readState();
+  const fingerprint = workspaceFingerprint();
+  if (current.status !== "pending" || !current.fingerprint) {
+    process.stderr.write("Start review with `review-state.mjs start` before recording a verdict.\n");
+    process.exit(2);
+  }
+  if (current.fingerprint !== fingerprint) {
+    process.stderr.write("Workspace changed after review start. Restart review for the current fingerprint.\n");
+    process.exit(2);
+  }
   const next = appendHistory(
     {
       ...current,
       status: verdict,
+      fingerprint,
       summary,
       decidedAt: new Date().toISOString()
     },

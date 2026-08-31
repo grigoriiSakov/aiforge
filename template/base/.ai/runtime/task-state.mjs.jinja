@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { workspaceFingerprint } from "./workspace-fingerprint.mjs";
+
 const [, , stage = "pre", taskName = "unknown"] = process.argv;
 const statePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
 
@@ -23,6 +25,7 @@ const state = readState();
 state.history.push({
   stage,
   taskName,
+  fingerprint: workspaceFingerprint(),
   timestamp: new Date().toISOString()
 });
 writeState(state);

@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { workspaceFingerprint } from "./workspace-fingerprint.mjs";
+
 const DEFAULT_WORKTREE_ROOT = "{{ orchestrator_worktree_root }}";
 const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
 const MAX_AUTOMATIC_FIX_ITERATIONS = Math.min({{ orchestrator_max_review_iterations }}, 1);
@@ -160,10 +162,6 @@ function normalizePath(rawValue) {
   return String(rawValue).replaceAll("\\", "/").replace(/\/+/g, "/").replace(/\/$/, "").trim();
 }
 
-function openSpecChangeId(issueId) {
-  return String(issueId).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
 function dedupe(values) {
   return [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
 }
@@ -230,9 +228,10 @@ function scopeToJson(scope) {
   };
 }
 
-function buildRun(issueId, scope, existingRun = null, overrides = {}) {
+function buildRun(issueId, changeId, scope, existingRun = null, overrides = {}) {
   return {
     issueId,
+    changeId,
     status: overrides.status ?? existingRun?.status ?? "submitted",
     branch: overrides.branch ?? existingRun?.branch ?? `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`,
     baseBranch:
@@ -272,6 +271,7 @@ function buildRun(issueId, scope, existingRun = null, overrides = {}) {
 function updateRegistryForRun(registry, run) {
   registry.runs[run.issueId] = {
     status: run.status,
+    changeId: run.changeId ?? null,
     branch: run.branch,
     worktreePath: run.worktreePath,
     currentStep: run.currentStep,
@@ -365,10 +365,85 @@ function currentWorkspaceFingerprint(run) {
     throw new Error(`worktree not found: ${run.worktreePath}`);
   }
 
-  const head = gitOutput(["rev-parse", "HEAD"], run.worktreePath);
-  const status = gitOutput(["status", "--short"], run.worktreePath, true);
-  const diff = gitOutput(["diff", "--binary", "HEAD", "--"], run.worktreePath, true);
-  return JSON.stringify({ head, status, diff });
+  return workspaceFingerprint(run.worktreePath);
+}
+
+function validateChangeId(changeId, root = repoRoot()) {
+  const normalized = String(changeId ?? "").trim();
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(normalized)) {
+    throw new Error("--change-id must use lowercase letters, digits, and hyphens");
+  }
+  const changeRoot = path.join(root, "openspec", "changes", normalized);
+  if (!fs.existsSync(changeRoot) || !fs.statSync(changeRoot).isDirectory()) {
+    throw new Error(`selected OpenSpec change does not exist: openspec/changes/${normalized}`);
+  }
+  for (const artifact of ["proposal.md", "design.md", "tasks.md"]) {
+    if (!fs.existsSync(path.join(changeRoot, artifact))) {
+      throw new Error(`selected OpenSpec change is missing ${artifact}: ${normalized}`);
+    }
+  }
+  return normalized;
+}
+
+function requireBoundChange(run, root = repoRoot()) {
+  if (!run?.changeId) {
+    throw new Error(`orchestrator run ${run?.issueId ?? "unknown"} has no bound OpenSpec changeId`);
+  }
+  return validateChangeId(run.changeId, root);
+}
+
+function materializeBoundChange(run, worktreePath) {
+  const changeId = requireBoundChange(run);
+  const sourcePath = path.join(repoRoot(), "openspec", "changes", changeId);
+  const targetPath = path.join(worktreePath, "openspec", "changes", changeId);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.cpSync(sourcePath, targetPath, { recursive: true, force: true });
+  validateChangeId(changeId, worktreePath);
+}
+
+function sectionBody(markdown, heading) {
+  const start = markdown.indexOf(`${heading}\n`);
+  if (start === -1) {
+    return null;
+  }
+  const bodyStart = start + heading.length + 1;
+  const nextHeading = markdown.slice(bodyStart).search(/^##\s+/m);
+  return (nextHeading === -1
+    ? markdown.slice(bodyStart)
+    : markdown.slice(bodyStart, bodyStart + nextHeading)
+  ).trim();
+}
+
+function validateProgressArtifact(progress, issueId, changeId) {
+  const manifest = readJson(machineManifestPath(), null);
+  const requiredSections = [
+    "## Выполнено",
+    "## Текущий шаг",
+    "## Дальше",
+    "## Spec Conformance",
+    "## Project Rules Compliance",
+    "## Решения по ходу"
+  ];
+  if (manifest?.minimalism?.enabled && manifest?.minimalism?.level !== "off") {
+    requiredSections.push("## Minimal Solution Conformance");
+  }
+  const missing = requiredSections.filter((heading) => sectionBody(progress, heading) == null);
+  if (!progress.includes(`# PROGRESS::${issueId}`)) {
+    missing.unshift(`# PROGRESS::${issueId}`);
+  }
+  if (missing.length > 0) {
+    throw new Error(`progress artifact missing required sections: ${missing.join(", ")}`);
+  }
+  const changeLine = `Change: \`${changeId}\``;
+  if (!progress.split(/\r?\n/).some((line) => line.trim() === changeLine)) {
+    throw new Error(`progress artifact must bind Change: \`${changeId}\``);
+  }
+  for (const heading of ["## Spec Conformance", "## Project Rules Compliance"]) {
+    const body = sectionBody(progress, heading) ?? "";
+    if (!body || /- \[ \]/.test(body)) {
+      throw new Error(`${heading} must be non-empty and contain no unchecked items`);
+    }
+  }
 }
 
 function requirePassingTest(run) {
@@ -427,6 +502,33 @@ function requireCleanReview(run) {
   }
   if (run.lastReviewFingerprint !== currentWorkspaceFingerprint(run)) {
     throw new Error("worktree changed after the last clean review; rerun review first");
+  }
+}
+
+function requireArchivedTerminalChange(run) {
+  if (run.status !== "awaiting-finalize") {
+    throw new Error(`terminal release requires status awaiting-finalize (current: ${run.status})`);
+  }
+  if (run.lastTestResult !== "pass" || run.lastTestScope !== "full") {
+    throw new Error("terminal release requires recorded passing full verify evidence");
+  }
+  if (!["clean", "low"].includes(run.lastReviewResult)) {
+    throw new Error("terminal release requires recorded clean or low review evidence");
+  }
+  if (!run.changeId) {
+    throw new Error(`orchestrator run ${run.issueId} has no bound OpenSpec changeId`);
+  }
+  const changeWorkspace = run.worktreePath || repoRoot();
+  const activeChangePath = path.join(changeWorkspace, "openspec", "changes", run.changeId);
+  if (fs.existsSync(activeChangePath)) {
+    throw new Error(`OpenSpec change ${run.changeId} is still active; sync and archive it before terminal release`);
+  }
+  const archiveRoot = path.join(changeWorkspace, "openspec", "changes", "archive");
+  const archived = fs.existsSync(archiveRoot)
+    ? fs.readdirSync(archiveRoot).some((entry) => entry.endsWith(`-${run.changeId}`))
+    : false;
+  if (!archived) {
+    throw new Error(`archived OpenSpec change not found for ${run.changeId}`);
   }
 }
 
@@ -495,6 +597,7 @@ function commandInit() {
 
 function commandSubmit(args) {
   const issueId = requireOption(args, "--issue");
+  const changeId = validateChangeId(requireOption(args, "--change-id"));
   const scope = parseScope(JSON.parse(requireOption(args, "--scope-json")));
   const baseBranchIdx = args.indexOf("--base-branch");
   let baseBranchPatch = {};
@@ -507,13 +610,19 @@ function commandSubmit(args) {
   }
   const branch = getOption(args, "--branch", `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`);
   const registry = loadRegistry();
+  const existingRun = loadRun(issueId);
+  if (existingRun?.changeId && existingRun.changeId !== changeId) {
+    throw new Error(
+      `issue ${issueId} is already bound to OpenSpec change ${existingRun.changeId}; refusing to switch to ${changeId}`
+    );
+  }
 
   delete registry.activeReservations[issueId];
   registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
   delete registry.blocked[issueId];
 
   const conflicts = collectConflicts(issueId, scope, registry);
-  const run = buildRun(issueId, scope, loadRun(issueId), {
+  const run = buildRun(issueId, changeId, scope, existingRun, {
     status: "submitted",
     branch,
     ...baseBranchPatch,
@@ -538,6 +647,28 @@ function commandSubmit(args) {
   process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
 }
 
+function commandBindChange(args) {
+  const issueId = requireOption(args, "--issue");
+  const changeId = validateChangeId(requireOption(args, "--change-id"));
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+
+  if (!run) {
+    throw new Error(`unknown issue: ${issueId}`);
+  }
+  if (run.changeId && run.changeId !== changeId) {
+    throw new Error(
+      `issue ${issueId} is already bound to OpenSpec change ${run.changeId}; refusing to switch to ${changeId}`
+    );
+  }
+
+  run.changeId = changeId;
+  saveRun(run);
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
 function commandRelease(args) {
   const issueId = requireOption(args, "--issue");
   const nextStatus = getOption(args, "--status", "aborted");
@@ -548,6 +679,10 @@ function commandRelease(args) {
 
   if (!run) {
     throw new Error(`unknown issue: ${issueId}`);
+  }
+
+  if (nextStatus === "done") {
+    requireArchivedTerminalChange(run);
   }
 
   delete registry.activeReservations[issueId];
@@ -621,6 +756,7 @@ function commandRecordHandoff(args) {
   if (!["building", "testing", "fix-loop"].includes(run.status)) {
     throw new Error(`record-handoff is not allowed in status ${run.status}`);
   }
+  const changeId = requireBoundChange(run, run.worktreePath);
   requirePassingScopedValidation(run);
   const absoluteProgressPath = path.resolve(run.worktreePath, progressPath);
   const relativeProgressPath = path.relative(run.worktreePath, absoluteProgressPath);
@@ -637,6 +773,7 @@ function commandRecordHandoff(args) {
   if (!progress) {
     throw new Error("record-handoff requires a non-empty progress artifact");
   }
+  validateProgressArtifact(progress, issueId, changeId);
 
   run.handoffFingerprint = currentWorkspaceFingerprint(run);
   run.handoffProgressPath = relativeProgressPath;
@@ -854,6 +991,7 @@ function commandStartWorktree(args) {
   if (run.worktreePath) {
     throw new Error(`worktree already exists for ${issueId}: ${run.worktreePath}`);
   }
+  requireBoundChange(run);
 
   const worktreeRoot = registry.worktreeRoot || configuredWorktreeRoot();
   const worktreePath = path.join(worktreeRoot, issueId);
@@ -874,6 +1012,12 @@ function commandStartWorktree(args) {
     runGit(["worktree", "add", worktreePath, branch], repoRoot());
   } else {
     runGit(["worktree", "add", "-b", branch, worktreePath, startPoint], repoRoot());
+  }
+  try {
+    materializeBoundChange(run, worktreePath);
+  } catch (error) {
+    runGit(["worktree", "remove", "--force", worktreePath], repoRoot(), true);
+    throw error;
   }
 
   run.worktreePath = worktreePath;
@@ -1012,9 +1156,16 @@ function resolveActiveRuntime(requestedRuntime) {
   return { runtime, detected, warnings };
 }
 
-function resolveModelHint(role, runtime) {
+function resolveModelHint(role, runtime, reviewDepth = null) {
   const manifest = readJson(modelProfilesPath(), null);
-  const tier = manifest?.roles?.[role]?.tier ?? null;
+  if (reviewDepth && !["simple", "full"].includes(reviewDepth)) {
+    throw new Error("--review-depth must be simple or full");
+  }
+  if (reviewDepth && role !== "review") {
+    throw new Error("--review-depth is valid only for --role review");
+  }
+  const configuredTier = manifest?.roles?.[role]?.tier ?? null;
+  const tier = role === "review" && reviewDepth === "full" ? "quality" : configuredTier;
   const block = manifest?.runtimeModels?.[runtime] ?? {};
   const slug = tier ? block[tier] : null;
   const validated = validateModelSlugForRuntime(runtime, slug);
@@ -1022,6 +1173,12 @@ function resolveModelHint(role, runtime) {
     role,
     runtime,
     tier,
+    configuredTier,
+    reviewDepth,
+    promotionReason:
+      role === "review" && reviewDepth === "full" && configuredTier !== "quality"
+        ? "full review requires the quality tier"
+        : null,
     model: validated.model,
     configuredSlug: slug ?? null,
     skipReason: validated.rejectedReason,
@@ -1055,7 +1212,8 @@ function commandModelHint(args) {
   const requestedRuntime =
     requestedIdx !== -1 ? args[requestedIdx + 1] : null;
   const { runtime, detected, warnings } = resolveActiveRuntime(requestedRuntime);
-  const hint = resolveModelHint(role, runtime);
+  const reviewDepth = getOption(args, "--review-depth", null);
+  const hint = resolveModelHint(role, runtime, reviewDepth);
   const payload = {
     ...hint,
     activeRuntime: runtime,
@@ -1178,6 +1336,14 @@ function commandGraphNext(args) {
       issue: issueId,
       message: "No orchestrator run exists yet. Create a plan with Claimed Write Scope first."
     };
+  } else if (!run.changeId) {
+    payload = {
+      step: "human_gate",
+      action: "bind_openspec_change",
+      issue: issueId,
+      message: `Legacy run has no OpenSpec change binding. Run bind-change --issue ${issueId} --change-id <change-id> before continuing.`,
+      ...limits
+    };
   } else if (run.status === "reserved" && !run.worktreePath) {
     payload = {
       step: "pending",
@@ -1191,6 +1357,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_full_verify",
       issue: issueId,
+      changeId: run.changeId,
       worktreePath: run.worktreePath,
       testScope: "full",
       finalRetry: Number(run.fullVerifyAttempts ?? 0) === 1 && run.exactRetryUsed === true,
@@ -1204,6 +1371,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_exact_failure_rerun",
       issue: issueId,
+      changeId: run.changeId,
       worktreePath: run.worktreePath,
       testScope: "exact",
       exactTarget: run.exactRetryTarget,
@@ -1215,7 +1383,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "finalize_openspec",
       issue: issueId,
-      changeId: openSpecChangeId(issueId),
+      changeId: run.changeId,
       worktreePath: run.worktreePath,
       message: "Sync and archive the validated OpenSpec change, then release the run as done.",
       ...limits
@@ -1259,6 +1427,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_implementation",
       issue: issueId,
+      changeId: run.changeId,
       worktreePath: run.worktreePath,
       message: "Complete implementation, run explicit scoped test/lint targets, update progress, record-handoff, then enter reviewing.",
       ...limits
@@ -1292,6 +1461,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_review",
       issue: issueId,
+      changeId: run.changeId,
       worktreePath: run.worktreePath,
       testScope: run.lastTestScope ?? "scoped",
       reviewMode: Number(run.reviewIteration ?? 0) === 0 ? "initial" : "delta-only-closure",
@@ -1323,6 +1493,9 @@ function commandGraphNext(args) {
     };
   }
 
+  if (run?.changeId && !payload.changeId) {
+    payload.changeId = run.changeId;
+  }
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
@@ -1345,6 +1518,9 @@ function main() {
       return;
     case "submit":
       commandSubmit(args);
+      return;
+    case "bind-change":
+      commandBindChange(args);
       return;
     case "release":
       commandRelease(args);

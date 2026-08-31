@@ -8,6 +8,10 @@ import YAML from "yaml";
 import { writeTextFile } from "./filesystem.js";
 import type { ProjectConfig, RuntimeFlags } from "./types.js";
 
+const OBSOLETE_MANAGED_RULES = new Set([
+  "Include focused tests and the full verification gate required before review."
+]);
+
 export type OpenSpecToolId = "codex" | "cursor" | "claude" | "antigravity";
 
 export function resolveOpenSpecTools(runtimes: RuntimeFlags): OpenSpecToolId[] {
@@ -83,7 +87,10 @@ function configureOpenSpecProject(repoRoot: string, config: ProjectConfig): void
     proposal: ["State explicit non-goals.", "Identify affected behavior and specification domains."],
     specs: ["Use testable scenarios and SHALL or MUST for normative requirements."],
     design: ["Reuse existing architecture and document migration or rollback for risky changes."],
-    tasks: ["Map every task to a requirement and a canonical aiforge verification command."]
+    tasks: [
+      "Map every task to a requirement and a canonical aiforge verification command.",
+      "Require scoped tests and lint before review, then full verification after a clean review."
+    ]
   });
   writeTextFile(configPath, YAML.stringify(next));
 }
@@ -116,7 +123,10 @@ function mergeRules(
   const merged: Record<string, unknown> = { ...current };
   for (const [artifact, additions] of Object.entries(defaults)) {
     const existing = Array.isArray(current[artifact])
-      ? current[artifact].filter((value): value is string => typeof value === "string")
+      ? current[artifact].filter(
+          (value): value is string =>
+            typeof value === "string" && !OBSOLETE_MANAGED_RULES.has(value)
+        )
       : [];
     merged[artifact] = [...new Set([...existing, ...additions])];
   }

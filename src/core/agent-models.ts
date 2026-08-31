@@ -44,7 +44,7 @@ export const MODEL_TIER_SEMANTICS: Record<
 > = {
   quality: {
     label: "Quality",
-    useWhen: "architecture, tricky refactors, orchestration with wide blast radius"
+    useWhen: "architecture, full reviews, tricky refactors, orchestration with wide blast radius"
   },
   balanced: {
     label: "Balanced",
@@ -52,7 +52,7 @@ export const MODEL_TIER_SEMANTICS: Record<
   },
   budget: {
     label: "Budget",
-    useWhen: "parallel review/audit, lint-only passes, narrow checklist work"
+    useWhen: "simple reviews, lint-only passes, narrow checklist work"
   }
 };
 

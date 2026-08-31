@@ -22,8 +22,9 @@ Canonical phases:
 - `issue`
 - `plan`
 - `implement`
+- `scoped test/lint`
 - `review`
-- `test`
+- `full verify`
 
 ## Runtime Surfaces
 
@@ -80,4 +81,4 @@ Canonical phases:
 - Do not launch dependent work until the prior change has clean/accepted review evidence, full verification, terminal OpenSpec sync/archive, and its accepted commit is integrated into the next worker's base.
 - Rehydrate initiative state from `.ai/context/initiatives/<slug>/issues-manifest.json`, the selected OpenSpec change, `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`, and orchestrator JSON. Do not create a second Goal ledger.
 - Pause at repository, conflict, approval, live MR, deployment, failed full-suite, and explicit human-decision boundaries.
-- Before review, record passing scoped test/lint and a non-empty progress artifact for the current fingerprint. Automatic review is capped at initial review plus one delta-only closure review.
+- Before review, record passing scoped test/lint and a structurally validated progress artifact for the current fingerprint. Run full verify only after a clean/low review. Automatic review is capped at initial review plus one delta-only closure review.

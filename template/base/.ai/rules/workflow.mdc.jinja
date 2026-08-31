@@ -61,7 +61,7 @@ alwaysApply: true
 {% if minimalism_enabled and minimalism_level != "off" -%}
 - When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. The orchestrator does not run a separate pre-review simplify gate.
 {% endif -%}
-- The default post-implementation order is `implement -> scoped handoff test + lint -> review -> full verify`.
+- The default post-implementation order is `implement -> scoped test/lint -> review -> full verify`.
 - The handoff evidence is bound to the current workspace fingerprint and is reused after a clean read-only review.
 - If the initial review produces `high`, `critical`, or `medium` findings, fix them and rerun affected scoped test + lint. Run at most one delta-only closure review when risk requires it; a second blocking verdict is a human gate.
 - `review` is semantic/findings-only and never invokes full `verify`. Full verify runs once per fingerprint under the generated host-wide lease, except one exact flaky rerun followed by at most one final full retry.

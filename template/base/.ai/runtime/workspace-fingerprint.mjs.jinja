@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const CONTENT_PATHSPECS = [
+  ".",
+  ":(exclude).ai/runtime/**/*.json",
+  ":(exclude).ai/context/runtime/**",
+  ":(exclude).ai/context/current.md",
+  ":(exclude).cursor/hooks/audit.log"
+];
+
+function git(args, cwd, encoding = "utf8") {
+  const result = spawnSync("git", args, { cwd, encoding });
+  if (result.status !== 0) {
+    const stderr = Buffer.isBuffer(result.stderr)
+      ? result.stderr.toString("utf8")
+      : String(result.stderr ?? "");
+    const stdout = Buffer.isBuffer(result.stdout)
+      ? result.stdout.toString("utf8")
+      : String(result.stdout ?? "");
+    throw new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`);
+  }
+  return result.stdout;
+}
+
+function hashUntrackedFile(repoRoot, relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  const stat = fs.lstatSync(absolutePath);
+  if (stat.isSymbolicLink()) {
+    return crypto.createHash("sha256").update(`symlink:${fs.readlinkSync(absolutePath)}`).digest("hex");
+  }
+  if (!stat.isFile()) {
+    return crypto.createHash("sha256").update(`special:${stat.mode}`).digest("hex");
+  }
+  return crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+}
+
+function isEvidencePath(relativePath) {
+  const normalized = relativePath.replaceAll("\\", "/");
+  return (
+    normalized === ".ai/context/current.md" ||
+    normalized === ".cursor/hooks/audit.log" ||
+    normalized.startsWith(".ai/context/runtime/") ||
+    (normalized.startsWith(".ai/runtime/") && normalized.endsWith(".json"))
+  );
+}
+
+function filesystemFingerprint(repoRoot) {
+  const entries = [];
+  const visit = (relativeDir) => {
+    const absoluteDir = path.join(repoRoot, relativeDir);
+    for (const dirent of fs.readdirSync(absoluteDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const relativePath = path.posix.join(relativeDir.replaceAll("\\", "/"), dirent.name);
+      if (relativePath === ".git" || relativePath.startsWith(".git/") || isEvidencePath(relativePath)) {
+        continue;
+      }
+      if (dirent.isDirectory()) {
+        visit(relativePath);
+      } else {
+        entries.push(relativePath);
+      }
+    }
+  };
+  visit("");
+  const contentHash = crypto.createHash("sha256");
+  for (const relativePath of entries) {
+    contentHash.update(relativePath);
+    contentHash.update("\0");
+    contentHash.update(hashUntrackedFile(repoRoot, relativePath));
+    contentHash.update("\0");
+  }
+  return JSON.stringify({
+    head: null,
+    status: "non-git-workspace",
+    contentHash: contentHash.digest("hex")
+  });
+}
+
+export function workspaceFingerprint(repoRoot = process.cwd()) {
+  let head;
+  try {
+    head = String(git(["rev-parse", "HEAD"], repoRoot)).trim();
+  } catch {
+    return filesystemFingerprint(repoRoot);
+  }
+  const status = String(
+    git(["status", "--porcelain=v1", "--untracked-files=all", "--", ...CONTENT_PATHSPECS], repoRoot)
+  ).trim();
+  const trackedDiff = git(
+    ["diff", "--binary", "HEAD", "--", ...CONTENT_PATHSPECS],
+    repoRoot,
+    "buffer"
+  );
+  const untrackedOutput = git(
+    ["ls-files", "--others", "--exclude-standard", "-z", "--", ...CONTENT_PATHSPECS],
+    repoRoot,
+    "buffer"
+  );
+  const untrackedPaths = untrackedOutput
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  const contentHash = crypto.createHash("sha256");
+  contentHash.update(trackedDiff);
+  for (const relativePath of untrackedPaths) {
+    contentHash.update("\0");
+    contentHash.update(relativePath);
+    contentHash.update("\0");
+    contentHash.update(hashUntrackedFile(repoRoot, relativePath));
+  }
+
+  return JSON.stringify({
+    head,
+    status,
+    contentHash: contentHash.digest("hex")
+  });
+}

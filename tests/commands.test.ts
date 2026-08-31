@@ -27,10 +27,19 @@ import {
   installCursorHookTemplates,
   installReviewRuntime,
   installStopGuard,
+  installWorkspaceFingerprintTemplate,
   makeTempRepo,
   runNodeScript,
   runNodeScriptWithInput
 } from "./helpers.js";
+
+function createOpenSpecChange(repoRoot: string, changeId: string): void {
+  const changeRoot = path.join(repoRoot, "openspec", "changes", changeId);
+  fs.mkdirSync(changeRoot, { recursive: true });
+  for (const artifact of ["proposal.md", "design.md", "tasks.md"]) {
+    fs.writeFileSync(path.join(changeRoot, artifact), `# ${artifact}\n`);
+  }
+}
 
 describe("command flow", () => {
   const originalPath = process.env.PATH ?? "";
@@ -205,9 +214,13 @@ process.exit(0);
       .replaceAll("{{ orchestrator_max_review_iterations }}", "3");
     const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
     fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+    installWorkspaceFingerprintTemplate(repoRoot);
 
     const registry = JSON.parse(runNodeScript(runtimePath, ["init"], repoRoot));
     expect(registry.activeReservations).toEqual({});
+    createOpenSpecChange(repoRoot, "app-1-change");
+    createOpenSpecChange(repoRoot, "app-2-change");
+    createOpenSpecChange(repoRoot, "app-3-change");
 
     const firstRun = JSON.parse(
       runNodeScript(
@@ -216,6 +229,8 @@ process.exit(0);
           "submit",
           "--issue",
           "APP-1",
+          "--change-id",
+          "app-1-change",
           "--scope-json",
           JSON.stringify({
             areas: ["api"],
@@ -237,6 +252,8 @@ process.exit(0);
           "submit",
           "--issue",
           "APP-2",
+          "--change-id",
+          "app-2-change",
           "--scope-json",
           JSON.stringify({
             areas: ["worker"],
@@ -258,6 +275,8 @@ process.exit(0);
           "submit",
           "--issue",
           "APP-3",
+          "--change-id",
+          "app-3-change",
           "--scope-json",
           JSON.stringify({
             areas: ["api"],
@@ -273,7 +292,7 @@ process.exit(0);
     expect(conflictingRun.status).toBe("blocked-by-conflict");
 
     const releaseResult = JSON.parse(
-      runNodeScript(runtimePath, ["release", "--issue", "APP-1", "--status", "done"], repoRoot)
+      runNodeScript(runtimePath, ["release", "--issue", "APP-1", "--status", "aborted"], repoRoot)
     );
     expect(releaseResult.promoted).toContain("APP-2");
 
@@ -321,14 +340,19 @@ process.exit(0);
       .replaceAll("{{ orchestrator_max_review_iterations }}", "3");
     const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
     fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+    installWorkspaceFingerprintTemplate(repoRoot);
 
     runNodeScript(runtimePath, ["init"], repoRoot);
+    createOpenSpecChange(repoRoot, "wt-1-change");
+    createOpenSpecChange(repoRoot, "wt-2-change");
     runNodeScript(
       runtimePath,
       [
         "submit",
         "--issue",
         "WT-1",
+        "--change-id",
+        "wt-1-change",
         "--scope-json",
         JSON.stringify({
           areas: ["api"],
@@ -343,6 +367,7 @@ process.exit(0);
 
     const started = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-1"], repoRoot));
     const worktreePath = started.worktreePath as string;
+    expect(fs.existsSync(path.join(worktreePath, "openspec", "changes", "wt-1-change", "tasks.md"))).toBe(true);
     const mainCheckoutHead = git(["rev-parse", "HEAD"]);
     const worktreeHead = spawnSync("git", ["rev-parse", "HEAD"], {
       cwd: worktreePath,
@@ -350,7 +375,7 @@ process.exit(0);
     }).stdout.trim();
     expect(worktreeHead).toBe(mainCheckoutHead);
 
-    runNodeScript(runtimePath, ["release", "--issue", "WT-1", "--remove-worktree", "--status", "done"], repoRoot);
+    runNodeScript(runtimePath, ["release", "--issue", "WT-1", "--remove-worktree", "--status", "aborted"], repoRoot);
 
     runNodeScript(
       runtimePath,
@@ -358,6 +383,8 @@ process.exit(0);
         "submit",
         "--issue",
         "WT-2",
+        "--change-id",
+        "wt-2-change",
         "--base-branch",
         "main",
         "--scope-json",
@@ -374,6 +401,7 @@ process.exit(0);
 
     const started2 = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-2"], repoRoot));
     const worktreePath2 = started2.worktreePath as string;
+    expect(fs.existsSync(path.join(worktreePath2, "openspec", "changes", "wt-2-change", "tasks.md"))).toBe(true);
     const mainTip = git(["rev-parse", "main"]);
     const worktreeHead2 = spawnSync("git", ["rev-parse", "HEAD"], {
       cwd: worktreePath2,
@@ -1146,6 +1174,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       JSON.stringify(
         {
           task: {
+            command: "task",
             tasks: {
               verify: "verify",
               review: "review"
@@ -1157,16 +1186,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       ) + "\n"
     );
 
-    fs.writeFileSync(
-      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
-      JSON.stringify(
-        {
-          history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
-        },
-        null,
-        2
-      ) + "\n"
-    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
 
     const initialGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(initialGuard.stopReason).toBe("review_missing");
@@ -1180,8 +1200,29 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       ["verdict", "clean", "review passed"],
       repoRoot
     );
+    expect(JSON.parse(runNodeScript(stopGuardPath, [], repoRoot)).stopReason).toBe(
+      "verify_before_review"
+    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
     const cleanGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
     expect(cleanGuard.continue).toBe(true);
+
+    fs.writeFileSync(path.join(repoRoot, "changed-after-review.txt"), "changed\n");
+    const staleVerifyGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(staleVerifyGuard.stopReason).toBe("verify_stale");
+
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
+    const staleReviewGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(staleReviewGuard.stopReason).toBe("review_stale");
+
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["start"], repoRoot);
+    runNodeScript(
+      path.join(repoRoot, ".ai", "runtime", "review-state.mjs"),
+      ["verdict", "clean", "fresh review passed"],
+      repoRoot
+    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
+    expect(JSON.parse(runNodeScript(stopGuardPath, [], repoRoot)).continue).toBe(true);
   });
 
   test("codex hooks derive workflow commands from manifest task runner", async () => {
@@ -1216,16 +1257,7 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       ) + "\n"
     );
 
-    fs.writeFileSync(
-      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
-      JSON.stringify(
-        {
-          history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
-        },
-        null,
-        2
-      ) + "\n"
-    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
 
     const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
     const postToolUseGuardPath = path.join(repoRoot, ".codex", "hooks", "post-tool-use-guard.mjs");
@@ -1411,17 +1443,10 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
         2
       ) + "\n"
     );
-    fs.writeFileSync(
-      path.join(repoRoot, ".ai", "runtime", "task-state.json"),
-      JSON.stringify(
-        {
-          history: [{ stage: "post", taskName: "verify", timestamp: new Date().toISOString() }]
-        },
-        null,
-        2
-      ) + "\n"
-    );
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["start"], repoRoot);
     runNodeScript(path.join(repoRoot, ".ai", "runtime", "review-state.mjs"), ["verdict", "clean"], repoRoot);
+    runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
 
     const stopGuardPath = path.join(repoRoot, ".codex", "hooks", "stop-delivery-guard.mjs");
     const stopGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));

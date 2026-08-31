@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { workspaceFingerprint } from "../../.ai/runtime/workspace-fingerprint.mjs";
+
 const taskStatePath = path.join(process.cwd(), ".ai", "runtime", "task-state.json");
 const reviewStatePath = path.join(process.cwd(), ".ai", "runtime", "review-verdict.json");
 const manifestPath = path.join(process.cwd(), ".ai", "project.manifest.json");
@@ -119,15 +121,27 @@ if (!manifest || !state) {
 const verifyTask = manifest.task.tasks.verify;
 const reviewTask = manifest.task.tasks.review;
 const taskCommand = manifest.task.command;
-const successfulVerify = state.history.some((entry) => entry.stage === "post" && entry.taskName === verifyTask);
+const currentFingerprint = workspaceFingerprint();
+const anySuccessfulVerify = state.history.some(
+  (entry) => entry.stage === "post" && entry.taskName === verifyTask
+);
+const successfulVerifyEntry = [...state.history].reverse().find(
+  (entry) =>
+    entry.stage === "post" &&
+    entry.taskName === verifyTask &&
+    entry.fingerprint === currentFingerprint
+);
+const successfulVerify = Boolean(successfulVerifyEntry);
 
 if (!successfulVerify) {
   process.stdout.write(
     `${JSON.stringify(
       {
         continue: false,
-        stopReason: "verify_missing",
-        systemMessage: `Run ${manifest.task.command} ${verifyTask} before stopping.`
+        stopReason: anySuccessfulVerify ? "verify_stale" : "verify_missing",
+        systemMessage: anySuccessfulVerify
+          ? `Workspace changed after ${manifest.task.command} ${verifyTask}. Rerun it for the current fingerprint.`
+          : `Run ${manifest.task.command} ${verifyTask} before stopping.`
       },
       null,
       2
@@ -175,6 +189,41 @@ if (reviewState.status === "issues-found") {
         continue: false,
         stopReason: "review_failed",
         systemMessage: "Review found issues. Fix them before closing or rerun review and record a clean verdict."
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (reviewState.status !== "clean" || reviewState.fingerprint !== currentFingerprint) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "review_stale",
+        systemMessage:
+          `Workspace changed after the clean review. Run ${taskCommand} ${reviewTask} and record a fresh clean verdict for the current fingerprint.`
+      },
+      null,
+      2
+    )}\n`
+  );
+  process.exit(0);
+}
+
+if (
+  !reviewState.decidedAt ||
+  !successfulVerifyEntry?.timestamp ||
+  new Date(successfulVerifyEntry.timestamp).getTime() < new Date(reviewState.decidedAt).getTime()
+) {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        continue: false,
+        stopReason: "verify_before_review",
+        systemMessage: `The current full verify predates the clean review. Run ${taskCommand} ${verifyTask} after review before stopping.`
       },
       null,
       2
