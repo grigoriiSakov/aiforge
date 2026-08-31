@@ -392,6 +392,23 @@ describe("orchestrator loop guards", () => {
     expect(premature.stderr).toContain("still active");
 
     const activeChange = path.join(repoRoot, "openspec", "changes", "browser-context-repair");
+    const suffixCollision = path.join(
+      repoRoot,
+      "openspec",
+      "changes",
+      "archive",
+      "2026-08-30-other-browser-context-repair"
+    );
+    fs.mkdirSync(suffixCollision, { recursive: true });
+    fs.rmSync(activeChange, { recursive: true });
+    const collisionOnly = spawnSync(
+      "node",
+      [runtimePath, "release", "--issue", "APP-10B", "--status", "done"],
+      { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
+    );
+    expect(collisionOnly.status).toBe(2);
+    expect(collisionOnly.stderr).toContain("archived OpenSpec change not found");
+
     const archivedChange = path.join(
       repoRoot,
       "openspec",
@@ -400,7 +417,7 @@ describe("orchestrator loop guards", () => {
       "2026-08-31-browser-context-repair"
     );
     fs.mkdirSync(path.dirname(archivedChange), { recursive: true });
-    fs.renameSync(activeChange, archivedChange);
+    fs.mkdirSync(archivedChange, { recursive: true });
     const released = JSON.parse(
       runNodeScript(runtimePath, ["release", "--issue", "APP-10B", "--status", "done"], repoRoot)
     );

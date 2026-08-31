@@ -345,6 +345,17 @@ process.exit(0);
     runNodeScript(runtimePath, ["init"], repoRoot);
     createOpenSpecChange(repoRoot, "wt-1-change");
     createOpenSpecChange(repoRoot, "wt-2-change");
+    const stalePlanFile = path.join(
+      repoRoot,
+      "openspec",
+      "changes",
+      "wt-1-change",
+      "stale.md"
+    );
+    fs.writeFileSync(stalePlanFile, "# stale plan artifact\n");
+    git(["add", "openspec/changes/wt-1-change", "openspec/changes/wt-2-change"]);
+    git(["commit", "-m", "add plans"]);
+    fs.rmSync(stalePlanFile);
     runNodeScript(
       runtimePath,
       [
@@ -368,6 +379,7 @@ process.exit(0);
     const started = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-1"], repoRoot));
     const worktreePath = started.worktreePath as string;
     expect(fs.existsSync(path.join(worktreePath, "openspec", "changes", "wt-1-change", "tasks.md"))).toBe(true);
+    expect(fs.existsSync(path.join(worktreePath, "openspec", "changes", "wt-1-change", "stale.md"))).toBe(false);
     const mainCheckoutHead = git(["rev-parse", "HEAD"]);
     const worktreeHead = spawnSync("git", ["rev-parse", "HEAD"], {
       cwd: worktreePath,
@@ -1186,6 +1198,17 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
       ) + "\n"
     );
 
+    for (const args of [
+      ["init"],
+      ["config", "user.email", "tests@example.com"],
+      ["config", "user.name", "AI Forge Tests"],
+      ["add", "."],
+      ["commit", "-m", "test: establish baseline"]
+    ]) {
+      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+    }
+
     runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
 
     const initialGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
@@ -1223,6 +1246,13 @@ fs.writeFileSync(path.join(destinationPath, ".copier-answers.yml"), "project_slu
     );
     runNodeScript(path.join(repoRoot, ".ai", "runtime", "task-state.mjs"), ["post", "verify"], repoRoot);
     expect(JSON.parse(runNodeScript(stopGuardPath, [], repoRoot)).continue).toBe(true);
+
+    for (const args of [["add", "."], ["commit", "-m", "test: preserve reviewed content"]]) {
+      const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+    }
+    const postCommitGuard = JSON.parse(runNodeScript(stopGuardPath, [], repoRoot));
+    expect(postCommitGuard.continue, JSON.stringify(postCommitGuard)).toBe(true);
   });
 
   test("codex hooks derive workflow commands from manifest task runner", async () => {

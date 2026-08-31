@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 
 const CONTENT_PATHSPECS = [
   ".",
+  ":(exclude).ai/runtime/*.json",
   ":(exclude).ai/runtime/**/*.json",
   ":(exclude).ai/context/runtime/**",
   ":(exclude).ai/context/current.md",
@@ -27,16 +28,27 @@ function git(args, cwd, encoding = "utf8") {
   return result.stdout;
 }
 
-function hashUntrackedFile(repoRoot, relativePath) {
+function hashWorkspaceEntry(repoRoot, relativePath) {
   const absolutePath = path.join(repoRoot, relativePath);
-  const stat = fs.lstatSync(absolutePath);
+  let stat;
+  try {
+    stat = fs.lstatSync(absolutePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return crypto.createHash("sha256").update("deleted").digest("hex");
+    }
+    throw error;
+  }
   if (stat.isSymbolicLink()) {
     return crypto.createHash("sha256").update(`symlink:${fs.readlinkSync(absolutePath)}`).digest("hex");
   }
   if (!stat.isFile()) {
     return crypto.createHash("sha256").update(`special:${stat.mode}`).digest("hex");
   }
-  return crypto.createHash("sha256").update(fs.readFileSync(absolutePath)).digest("hex");
+  const fileHash = crypto.createHash("sha256");
+  fileHash.update(`file:${stat.mode & 0o111}:`);
+  fileHash.update(fs.readFileSync(absolutePath));
+  return fileHash.digest("hex");
 }
 
 function isEvidencePath(relativePath) {
@@ -70,53 +82,35 @@ function filesystemFingerprint(repoRoot) {
   for (const relativePath of entries) {
     contentHash.update(relativePath);
     contentHash.update("\0");
-    contentHash.update(hashUntrackedFile(repoRoot, relativePath));
+    contentHash.update(hashWorkspaceEntry(repoRoot, relativePath));
     contentHash.update("\0");
   }
-  return JSON.stringify({
-    head: null,
-    status: "non-git-workspace",
-    contentHash: contentHash.digest("hex")
-  });
+  return JSON.stringify({ contentHash: contentHash.digest("hex") });
 }
 
 export function workspaceFingerprint(repoRoot = process.cwd()) {
-  let head;
   try {
-    head = String(git(["rev-parse", "HEAD"], repoRoot)).trim();
+    git(["rev-parse", "--is-inside-work-tree"], repoRoot);
   } catch {
     return filesystemFingerprint(repoRoot);
   }
-  const status = String(
-    git(["status", "--porcelain=v1", "--untracked-files=all", "--", ...CONTENT_PATHSPECS], repoRoot)
-  ).trim();
-  const trackedDiff = git(
-    ["diff", "--binary", "HEAD", "--", ...CONTENT_PATHSPECS],
+  const workspaceOutput = git(
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ...CONTENT_PATHSPECS],
     repoRoot,
     "buffer"
   );
-  const untrackedOutput = git(
-    ["ls-files", "--others", "--exclude-standard", "-z", "--", ...CONTENT_PATHSPECS],
-    repoRoot,
-    "buffer"
-  );
-  const untrackedPaths = untrackedOutput
+  const workspacePaths = workspaceOutput
     .toString("utf8")
     .split("\0")
     .filter(Boolean)
     .sort();
   const contentHash = crypto.createHash("sha256");
-  contentHash.update(trackedDiff);
-  for (const relativePath of untrackedPaths) {
-    contentHash.update("\0");
+  for (const relativePath of workspacePaths) {
     contentHash.update(relativePath);
     contentHash.update("\0");
-    contentHash.update(hashUntrackedFile(repoRoot, relativePath));
+    contentHash.update(hashWorkspaceEntry(repoRoot, relativePath));
+    contentHash.update("\0");
   }
 
-  return JSON.stringify({
-    head,
-    status,
-    contentHash: contentHash.digest("hex")
-  });
+  return JSON.stringify({ contentHash: contentHash.digest("hex") });
 }

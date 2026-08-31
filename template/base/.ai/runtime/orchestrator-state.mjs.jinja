@@ -397,6 +397,7 @@ function materializeBoundChange(run, worktreePath) {
   const sourcePath = path.join(repoRoot(), "openspec", "changes", changeId);
   const targetPath = path.join(worktreePath, "openspec", "changes", changeId);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(sourcePath, targetPath, { recursive: true, force: true });
   validateChangeId(changeId, worktreePath);
 }
@@ -525,7 +526,9 @@ function requireArchivedTerminalChange(run) {
   }
   const archiveRoot = path.join(changeWorkspace, "openspec", "changes", "archive");
   const archived = fs.existsSync(archiveRoot)
-    ? fs.readdirSync(archiveRoot).some((entry) => entry.endsWith(`-${run.changeId}`))
+    ? fs.readdirSync(archiveRoot).some(
+        (entry) => /^\d{4}-\d{2}-\d{2}-/.test(entry) && entry.slice(11) === run.changeId
+      )
     : false;
   if (!archived) {
     throw new Error(`archived OpenSpec change not found for ${run.changeId}`);
