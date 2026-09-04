@@ -196,7 +196,7 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
 }
 
 describe("orchestrator loop guards", () => {
-  test("submission requires and persists an existing explicit OpenSpec change id", () => {
+  test("submission permits deferred OpenSpec binding and persists an explicit existing change id", () => {
     const repoRoot = makeTempRepo("aiforge-orch-change-binding-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
@@ -214,8 +214,10 @@ describe("orchestrator loop guards", () => {
       ],
       { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
     );
-    expect(missing.status).toBe(2);
-    expect(missing.stderr).toContain("--change-id");
+    expect(missing.status).toBe(0);
+    const unboundRun = JSON.parse(missing.stdout);
+    expect(unboundRun.changeId).toBeNull();
+    expect(unboundRun.currentStep).toBe("awaiting-worktree-before-openspec");
 
     createOpenSpecChange(repoRoot, "browser-tenant-repair");
     const run = JSON.parse(

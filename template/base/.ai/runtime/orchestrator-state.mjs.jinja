@@ -600,7 +600,7 @@ function commandInit() {
 
 function commandSubmit(args) {
   const issueId = requireOption(args, "--issue");
-  const changeId = validateChangeId(requireOption(args, "--change-id"));
+  const requestedChangeId = getOption(args, "--change-id", null);
   const scope = parseScope(JSON.parse(requireOption(args, "--scope-json")));
   const baseBranchIdx = args.indexOf("--base-branch");
   let baseBranchPatch = {};
@@ -614,7 +614,10 @@ function commandSubmit(args) {
   const branch = getOption(args, "--branch", `${DEFAULT_BRANCH_PREFIX}${issueId.toLowerCase()}`);
   const registry = loadRegistry();
   const existingRun = loadRun(issueId);
-  if (existingRun?.changeId && existingRun.changeId !== changeId) {
+  const changeId = requestedChangeId
+    ? validateChangeId(requestedChangeId)
+    : (existingRun?.changeId ?? null);
+  if (existingRun?.changeId && requestedChangeId && existingRun.changeId !== changeId) {
     throw new Error(
       `issue ${issueId} is already bound to OpenSpec change ${existingRun.changeId}; refusing to switch to ${changeId}`
     );
@@ -629,7 +632,7 @@ function commandSubmit(args) {
     status: "submitted",
     branch,
     ...baseBranchPatch,
-    currentStep: "awaiting-admission",
+    currentStep: changeId ? "awaiting-admission" : "awaiting-worktree-before-openspec",
     conflictsWith: conflicts.map((entry) => entry.issueId)
   });
 
@@ -652,13 +655,16 @@ function commandSubmit(args) {
 
 function commandBindChange(args) {
   const issueId = requireOption(args, "--issue");
-  const changeId = validateChangeId(requireOption(args, "--change-id"));
   const registry = loadRegistry();
   const run = loadRun(issueId);
 
   if (!run) {
     throw new Error(`unknown issue: ${issueId}`);
   }
+  const changeId = validateChangeId(
+    requireOption(args, "--change-id"),
+    run.worktreePath ?? repoRoot()
+  );
   if (run.changeId && run.changeId !== changeId) {
     throw new Error(
       `issue ${issueId} is already bound to OpenSpec change ${run.changeId}; refusing to switch to ${changeId}`
@@ -666,6 +672,9 @@ function commandBindChange(args) {
   }
 
   run.changeId = changeId;
+  if (run.worktreePath && run.status === "building") {
+    run.currentStep = "openspec-change-bound";
+  }
   saveRun(run);
   updateRegistryForRun(registry, run);
   saveRegistry(registry);
@@ -978,7 +987,7 @@ function commandRecordReview(args) {
 
 function commandStartWorktree(args) {
   const issueId = requireOption(args, "--issue");
-  const currentStep = getOption(args, "--current-step", "worktree-created");
+  const requestedCurrentStep = getOption(args, "--current-step", null);
   const registry = loadRegistry();
   const run = loadRun(issueId);
 
@@ -994,8 +1003,6 @@ function commandStartWorktree(args) {
   if (run.worktreePath) {
     throw new Error(`worktree already exists for ${issueId}: ${run.worktreePath}`);
   }
-  requireBoundChange(run);
-
   const worktreeRoot = registry.worktreeRoot || configuredWorktreeRoot();
   const worktreePath = path.join(worktreeRoot, issueId);
   ensureDir(worktreeRoot);
@@ -1016,16 +1023,19 @@ function commandStartWorktree(args) {
   } else {
     runGit(["worktree", "add", "-b", branch, worktreePath, startPoint], repoRoot());
   }
-  try {
-    materializeBoundChange(run, worktreePath);
-  } catch (error) {
-    runGit(["worktree", "remove", "--force", worktreePath], repoRoot(), true);
-    throw error;
+  if (run.changeId) {
+    try {
+      materializeBoundChange(run, worktreePath);
+    } catch (error) {
+      runGit(["worktree", "remove", "--force", worktreePath], repoRoot(), true);
+      throw error;
+    }
   }
 
   run.worktreePath = worktreePath;
   run.status = "building";
-  run.currentStep = currentStep;
+  run.currentStep =
+    requestedCurrentStep ?? (run.changeId ? "worktree-created" : "create-and-bind-openspec-change");
   saveRun(run);
   updateRegistryForRun(registry, run);
   saveRegistry(registry);
@@ -1337,15 +1347,14 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_plan",
       issue: issueId,
-      message: "No orchestrator run exists yet. Create a plan with Claimed Write Scope first."
+      message: "No orchestrator run exists yet. Resolve the issue and submit its Claimed Write Scope before authoring a new OpenSpec change."
     };
-  } else if (!run.changeId) {
+  } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
     payload = {
-      step: "human_gate",
-      action: "bind_openspec_change",
+      step: "waiting_conflict",
       issue: issueId,
-      message: `Legacy run has no OpenSpec change binding. Run bind-change --issue ${issueId} --change-id <change-id> before continuing.`,
-      ...limits
+      status: run.status,
+      conflictsWith: run.conflictsWith
     };
   } else if (run.status === "reserved" && !run.worktreePath) {
     payload = {
@@ -1353,6 +1362,23 @@ function commandGraphNext(args) {
       action: "start_worktree",
       issue: issueId,
       worktreeRoot: configuredWorktreeRoot(),
+      ...limits
+    };
+  } else if (!run.changeId && run.worktreePath) {
+    payload = {
+      step: "pending",
+      action: "create_and_bind_openspec_change",
+      issue: issueId,
+      worktreePath: run.worktreePath,
+      message: `Create and validate the OpenSpec change inside the assigned worktree, then run bind-change --issue ${issueId} --change-id <change-id> from the orchestrator control checkout that owns this run registry.`,
+      ...limits
+    };
+  } else if (!run.changeId) {
+    payload = {
+      step: "human_gate",
+      action: "bind_openspec_change",
+      issue: issueId,
+      message: `Run bind-change --issue ${issueId} --change-id <change-id> before continuing.`,
       ...limits
     };
   } else if (run.status === "pre-finalize") {
@@ -1472,13 +1498,6 @@ function commandGraphNext(args) {
         ? "Run the initial findings-first review against the request, plan, diff and handoff evidence."
         : "Run the only permitted delta-only closure review against unresolved findings and the post-fix diff.",
       ...limits
-    };
-  } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
-    payload = {
-      step: "waiting_conflict",
-      issue: issueId,
-      status: run.status,
-      conflictsWith: run.conflictsWith
     };
   } else if (FLOW_COMPLETE_STATUSES.has(run.status)) {
     payload = {
