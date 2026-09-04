@@ -24,6 +24,7 @@ export interface TaskCommands {
   testScoped: string[];
   lint: string[];
   lintScoped: string[];
+  migrationVerify?: string[];
   verify: string[];
   review: string[];
 }
@@ -53,6 +54,7 @@ export interface ExecutionEntrypoints {
   testScoped: string;
   lint: string;
   lintScoped: string;
+  migrationVerify?: string;
   verify: string;
   review: string;
 }
@@ -169,6 +171,7 @@ export interface ProjectConfig {
       testScoped: string;
       lint: string;
       lintScoped: string;
+      migrationVerify?: string;
       verify: string;
       review: string;
     };

@@ -77,7 +77,21 @@ tasks:
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_lint_scoped_name }}
 
-  {{ task_verify_name }}:
+{% if migration_verify_enabled %}  {{ task_migration_verify_name }}:
+    desc: Canonical migration verification task
+    cmds:
+      - node .ai/runtime/task-state.mjs pre {{ task_migration_verify_name }}
+{% for command in commands.migrationVerify %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
+      - {{ command }}
+{% endif %}
+{% endfor %}
+      - node .ai/runtime/task-state.mjs post {{ task_migration_verify_name }}
+
+{% endif %}  {{ task_verify_name }}:
     desc: Canonical verify task
     cmds:
       - node .ai/runtime/verify-lease.mjs run -- {{ task_command }} aiforge:verify-body

@@ -204,6 +204,10 @@ execution_lint_scoped_entrypoint:
   type: str
   default: .ai/bin/go-task lint-scoped
 
+execution_migration_verify_entrypoint:
+  type: str
+  default: ""
+
 execution_verify_entrypoint:
   type: str
   default: .ai/bin/go-task verify
@@ -220,6 +224,7 @@ commands:
     testScoped: []
     lint: []
     lintScoped: []
+    migrationVerify: []
     verify: []
     review: []
 
@@ -234,6 +239,14 @@ mcp_placeholders:
 project_rules_markdown:
   type: str
   default: ""
+
+migration_verify_enabled:
+  type: bool
+  default: false
+
+task_migration_verify_name:
+  type: str
+  default: migration-verify
 
 agents_markdown:
   type: str

@@ -16,7 +16,12 @@ import { runMcpScaffoldCommand } from "../src/commands/mcp-scaffold.js";
 import { runProjectStubCommand } from "../src/commands/project-stub.js";
 import { runSyncCommand } from "../src/commands/sync.js";
 import { runUpdateCommand } from "../src/commands/update.js";
-import { CONFIG_FILE_NAME, loadConfig, saveConfig } from "../src/core/config.js";
+import {
+  CONFIG_FILE_NAME,
+  buildCopierAnswers,
+  loadConfig,
+  saveConfig
+} from "../src/core/config.js";
 import { DEFAULT_TASK_COMMAND } from "../src/core/task-runner.js";
 import {
   createFakeExecutable,
@@ -853,6 +858,39 @@ process.exit(0);
     expect(updatedProjectProfile).toContain("## Project-Specific Rules");
     expect(updatedProjectProfile).toContain("API schema changes require explicit migration notes.");
     expect(updatedProjectProfile).not.toContain("# manual overwrite");
+  });
+
+  test("Copier answers preserve an optional migration verification task from config", async () => {
+    const repoRoot = makeTempRepo("ai-simple-migration-verify-task-");
+    await runInitCommand({
+      repoRoot,
+      projectName: "Migration Verify Demo",
+      profileId: "python-fastapi-docker",
+      dryRun: false
+    });
+
+    const config = loadConfig(repoRoot);
+    config.task.tasks.migrationVerify = "migration-verify";
+    config.execution.entrypoints.migrationVerify = ".ai/bin/go-task migration-verify";
+    config.commands.migrationVerify = ["python scripts/verify_migrations.py"];
+    saveConfig(repoRoot, config);
+
+    const normalized = loadConfig(repoRoot);
+    expect(normalized.task.tasks.migrationVerify).toBe("migration-verify");
+    expect(normalized.execution.entrypoints.migrationVerify).toBe(
+      ".ai/bin/go-task migration-verify"
+    );
+    expect(normalized.commands.migrationVerify).toEqual([
+      "python scripts/verify_migrations.py"
+    ]);
+    expect(buildCopierAnswers(normalized)).toMatchObject({
+      migration_verify_enabled: true,
+      task_migration_verify_name: "migration-verify",
+      execution_migration_verify_entrypoint: ".ai/bin/go-task migration-verify",
+      commands: {
+        migrationVerify: ["python scripts/verify_migrations.py"]
+      }
+    });
   });
 
   test("sync and update regenerate manifesto from config markdown", async () => {

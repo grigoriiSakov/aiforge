@@ -18,7 +18,8 @@ alwaysApply: true
   - `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>`
   - `{{ task_command }} {{ task_lint_name }}`
   - `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>`
-  - `{{ task_command }} {{ task_verify_name }}`
+{% if migration_verify_enabled %}  - `{{ task_command }} {{ task_migration_verify_name }}`
+{% endif %}  - `{{ task_command }} {{ task_verify_name }}`
   - `{{ task_command }} {{ task_review_name }}`
 - Do not hardcode stack-specific commands in generic workflow prompts or status updates.
 - For non-trivial work, planning and execution memory must live in explicit local artifacts:

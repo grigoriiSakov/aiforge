@@ -41,6 +41,9 @@ Canonical phases:
 - Scoped test (explicit targets required): `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>`
 - Lint: `{{ task_command }} {{ task_lint_name }}`
 - Scoped lint (explicit targets required): `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>`
+{% if migration_verify_enabled -%}
+- Migration verification: `{{ task_command }} {{ task_migration_verify_name }}`
+{% endif -%}
 - Verify: `{{ task_command }} {{ task_verify_name }}`
 - Review: `{{ task_command }} {{ task_review_name }}`
 
@@ -51,6 +54,9 @@ Canonical phases:
 - Worktree strategy: `{{ execution_worktree_strategy }}`
 - Lint entrypoint: `{{ execution_lint_entrypoint }}`
 - Scoped lint entrypoint: `{{ execution_lint_scoped_entrypoint }} -- <targets...>`
+{% if migration_verify_enabled -%}
+- Migration verification entrypoint: `{{ execution_migration_verify_entrypoint }}`
+{% endif -%}
 - Test entrypoint: `{{ execution_test_entrypoint }}`
 - Scoped test entrypoint: `{{ execution_test_scoped_entrypoint }} -- <targets...>`
 - Verify entrypoint: `{{ execution_verify_entrypoint }}`

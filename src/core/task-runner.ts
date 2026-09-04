@@ -16,6 +16,9 @@ export function renderTaskCommands(taskCommands: TaskCommands, taskCommand: stri
     testScoped: renderCommandList(taskCommands.testScoped, taskCommand),
     lint: renderCommandList(taskCommands.lint, taskCommand),
     lintScoped: renderCommandList(taskCommands.lintScoped, taskCommand),
+    ...(taskCommands.migrationVerify
+      ? { migrationVerify: renderCommandList(taskCommands.migrationVerify, taskCommand) }
+      : {}),
     verify: renderCommandList(taskCommands.verify, taskCommand),
     review: renderCommandList(taskCommands.review, taskCommand)
   };

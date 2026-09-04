@@ -33,6 +33,9 @@
 {% for command in commands.verify -%}
 - `{{ command }}`
 {% endfor -%}
+{% if migration_verify_enabled -%}
+- `{{ execution_migration_verify_entrypoint }}`
+{% endif -%}
 {% if project_rules_markdown | trim %}
 
 ## Project-Specific Rules

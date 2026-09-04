@@ -230,6 +230,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     execution_test_scoped_entrypoint: config.execution.entrypoints.testScoped,
     execution_lint_entrypoint: config.execution.entrypoints.lint,
     execution_lint_scoped_entrypoint: config.execution.entrypoints.lintScoped,
+    execution_migration_verify_entrypoint: config.execution.entrypoints.migrationVerify ?? "",
     execution_verify_entrypoint: config.execution.entrypoints.verify,
     execution_review_entrypoint: config.execution.entrypoints.review,
     plan_progress_runtime_root: config.artifacts.planProgressRoot,
@@ -249,9 +250,15 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     task_test_scoped_name: config.task.tasks.testScoped,
     task_lint_name: config.task.tasks.lint,
     task_lint_scoped_name: config.task.tasks.lintScoped,
+    task_migration_verify_name: config.task.tasks.migrationVerify ?? "migration-verify",
     task_verify_name: config.task.tasks.verify,
     task_review_name: config.task.tasks.review,
     commands: config.commands,
+    migration_verify_enabled: Boolean(
+      config.task.tasks.migrationVerify &&
+        config.execution.entrypoints.migrationVerify &&
+        config.commands.migrationVerify?.length
+    ),
     profile_notes: getProfileDefinition(config.profile.id).notes,
     mcp_placeholders: config.mcp.placeholders,
     project_rules_markdown: config.projectRules?.markdown ?? "",
@@ -640,6 +647,9 @@ function normalizeTaskConfig(
       testScoped: currentTasks?.testScoped ?? defaultTask.tasks.testScoped,
       lint: currentTasks?.lint ?? defaultTask.tasks.lint,
       lintScoped: currentTasks?.lintScoped ?? defaultTask.tasks.lintScoped,
+      ...(currentTasks?.migrationVerify ?? defaultTask.tasks.migrationVerify
+        ? { migrationVerify: currentTasks?.migrationVerify ?? defaultTask.tasks.migrationVerify }
+        : {}),
       verify: currentTasks?.verify ?? defaultTask.tasks.verify,
       review: currentTasks?.review ?? defaultTask.tasks.review
     }
@@ -688,6 +698,15 @@ function normalizeExecutionEntrypoints(
     testScoped: normalizeExecutionEntrypoint(currentEntrypoints?.testScoped, task.command, task.tasks.testScoped),
     lint: normalizeExecutionEntrypoint(currentEntrypoints?.lint, task.command, task.tasks.lint),
     lintScoped: normalizeExecutionEntrypoint(currentEntrypoints?.lintScoped, task.command, task.tasks.lintScoped),
+    ...(task.tasks.migrationVerify
+      ? {
+          migrationVerify: normalizeExecutionEntrypoint(
+            currentEntrypoints?.migrationVerify,
+            task.command,
+            task.tasks.migrationVerify
+          )
+        }
+      : {}),
     verify: normalizeExecutionEntrypoint(currentEntrypoints?.verify, task.command, task.tasks.verify),
     review: normalizeExecutionEntrypoint(currentEntrypoints?.review, task.command, task.tasks.review)
   };
@@ -718,6 +737,9 @@ function buildDefaultExecutionEntrypoints(
     testScoped: buildTaskEntrypoint(taskCommand, taskNames.testScoped),
     lint: buildTaskEntrypoint(taskCommand, taskNames.lint),
     lintScoped: buildTaskEntrypoint(taskCommand, taskNames.lintScoped),
+    ...(taskNames.migrationVerify
+      ? { migrationVerify: buildTaskEntrypoint(taskCommand, taskNames.migrationVerify) }
+      : {}),
     verify: buildTaskEntrypoint(taskCommand, taskNames.verify),
     review: buildTaskEntrypoint(taskCommand, taskNames.review)
   };
@@ -744,6 +766,15 @@ function normalizeTaskCommands(
     testScoped: normalizeTaskCommandList(currentCommands?.testScoped, profileTaskCommands.testScoped, taskCommand),
     lint: normalizeTaskCommandList(currentCommands?.lint, profileTaskCommands.lint, taskCommand),
     lintScoped: normalizeTaskCommandList(currentCommands?.lintScoped, profileTaskCommands.lintScoped, taskCommand),
+    ...(currentCommands?.migrationVerify ?? profileTaskCommands.migrationVerify
+      ? {
+          migrationVerify: normalizeTaskCommandList(
+            currentCommands?.migrationVerify,
+            profileTaskCommands.migrationVerify ?? [],
+            taskCommand
+          )
+        }
+      : {}),
     verify: normalizeTaskCommandList(currentCommands?.verify, profileTaskCommands.verify, taskCommand),
     review: normalizeReviewCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
   };

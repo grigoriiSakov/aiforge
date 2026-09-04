@@ -275,6 +275,7 @@ describe("generic reusable surfaces", () => {
     // `{% endfor -%}` strips indent before the following `post` line when loops are empty.
     expect(content).not.toMatch(/\{%\s*for[^%]*-\s*%\}/);
     expect(content).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
+    expect(content).not.toMatch(/\{%\s*if\s+migration_verify_enabled\s*-\s*%\}/);
     expect(content).toContain("command | indent(8, true)");
   });
 
