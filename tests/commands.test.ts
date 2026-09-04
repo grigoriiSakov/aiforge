@@ -423,6 +423,97 @@ process.exit(0);
     expect(worktreeHead2).not.toBe(git(["rev-parse", "HEAD"]));
   });
 
+  test("orchestrator can reserve a worktree before creating and binding OpenSpec", () => {
+    const repoRoot = makeTempRepo("ai-simple-orchestrator-worktree-first-openspec-");
+    const git = (args: string[], cwd = repoRoot) => {
+      const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+      if (result.status !== 0) {
+        throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
+      }
+      return result.stdout.trim();
+    };
+
+    git(["init"]);
+    git(["config", "user.email", "t@t.t"]);
+    git(["config", "user.name", "t"]);
+    fs.writeFileSync(path.join(repoRoot, "README.md"), "# base\n");
+    git(["add", "."]);
+    git(["commit", "-m", "base"]);
+    git(["branch", "-M", "main"]);
+
+    const runtimeDir = path.join(repoRoot, ".ai", "runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    const templatePath = path.join(
+      process.cwd(),
+      "template",
+      "base",
+      ".ai",
+      "runtime",
+      "orchestrator-state.mjs.jinja"
+    );
+    const renderedRuntime = fs
+      .readFileSync(templatePath, "utf8")
+      .replaceAll("{{ orchestrator_worktree_root }}", path.join(repoRoot, "worktrees"))
+      .replaceAll("{{ orchestrator_branch_prefix }}", "agent/")
+      .replaceAll("{{ orchestrator_max_review_iterations }}", "1");
+    const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
+    fs.writeFileSync(runtimePath, renderedRuntime, { mode: 0o755 });
+    installWorkspaceFingerprintTemplate(repoRoot);
+
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    const submitted = JSON.parse(
+      runNodeScript(
+        runtimePath,
+        [
+          "submit",
+          "--issue",
+          "WT-3",
+          "--scope-json",
+          JSON.stringify({
+            areas: ["api"],
+            paths: ["openspec/changes/wt-3/proposal.md", "src/api/handler.ts"],
+            shared_surfaces: [],
+            related_issues: [],
+            touches_process_layer: false
+          })
+        ],
+        repoRoot
+      )
+    );
+    expect(submitted.status).toBe("reserved");
+    expect(submitted.changeId).toBeNull();
+
+    const beforeStart = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "WT-3"], repoRoot));
+    expect(beforeStart.action).toBe("start_worktree");
+    expect(beforeStart.changeId).toBeUndefined();
+
+    const started = JSON.parse(runNodeScript(runtimePath, ["start-worktree", "--issue", "WT-3"], repoRoot));
+    const worktreePath = started.worktreePath as string;
+    expect(started.currentStep).toBe("create-and-bind-openspec-change");
+    expect(fs.existsSync(path.join(repoRoot, "openspec", "changes", "wt-3"))).toBe(false);
+
+    const beforeBind = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "WT-3"], repoRoot));
+    expect(beforeBind.action).toBe("create_and_bind_openspec_change");
+    expect(beforeBind.worktreePath).toBe(worktreePath);
+
+    createOpenSpecChange(worktreePath, "wt-3");
+    const bound = JSON.parse(
+      runNodeScript(runtimePath, ["bind-change", "--issue", "WT-3", "--change-id", "wt-3"], repoRoot)
+    );
+    expect(bound.changeId).toBe("wt-3");
+    expect(bound.currentStep).toBe("openspec-change-bound");
+
+    const afterBind = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "WT-3"], repoRoot));
+    expect(afterBind.action).toBe("run_implementation");
+    expect(fs.existsSync(path.join(repoRoot, "openspec", "changes", "wt-3"))).toBe(false);
+
+    runNodeScript(
+      runtimePath,
+      ["release", "--issue", "WT-3", "--remove-worktree", "--status", "aborted"],
+      repoRoot
+    );
+  });
+
   test("dry-run init does not write config", async () => {
     const repoRoot = makeTempRepo("ai-simple-dry-init-");
     const result = await runInitCommand({

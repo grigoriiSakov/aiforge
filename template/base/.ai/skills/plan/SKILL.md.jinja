@@ -35,6 +35,8 @@ Use OpenSpec for durable requirements and planning artifacts. aiforge remains re
 
 1. Inspect the relevant code and existing `openspec/specs/` domains before proposing a change.
 2. Choose a stable kebab-case `<change-id>`. For tracker-backed work, use the normalized lowercase issue ID (`APP-123` → `app-123`) so Goal-mode workers and orchestrator resolve the same change, and record the original issue ID in the proposal.
+   - For a new orchestrator-managed change, submit its exact `Claimed Write Scope` without `--change-id`, start the assigned worktree, and author the OpenSpec change only inside that worktree.
+   - After the change exists and validates inside the assigned worktree, run `node .ai/runtime/orchestrator-state.mjs bind-change --issue ISSUE-ID --change-id <change-id>` from the orchestrator control checkout that owns the run registry.
 3. Create or update the OpenSpec change so it contains:
    - `proposal.md` with intent, in-scope behavior, explicit non-goals, impact, and affected spec domains;
    - delta specs with testable requirements and scenarios;

@@ -52,7 +52,8 @@ Pipeline owner for:
 {% endif %}
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
-   - `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --change-id <change-id> --scope-json '<json>'`
+   - for a new change that must be authored in isolation: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
+   - for an existing change: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --change-id <change-id> --scope-json '<json>'`
      По умолчанию ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`.
      Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/OpenSpec design не требует pinned base branch.
 9. Interpret submit result strictly:
@@ -61,6 +62,7 @@ Pipeline owner for:
    - `blocked-by-conflict` -> stop; direct file/shared-surface overlap exists
 10. Create the isolated worktree only through:
     - `node .ai/runtime/orchestrator-state.mjs start-worktree --issue ISSUE-ID`
+    - when submit omitted `--change-id`, create and validate `openspec/changes/<change-id>/` inside the assigned worktree, then run `node .ai/runtime/orchestrator-state.mjs bind-change --issue ISSUE-ID --change-id <change-id>` from the orchestrator control checkout that owns the run registry; implementation remains blocked until binding succeeds
 11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов и файлов из `Claimed Write Scope` выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
     - Implementation phase entrypoint: use the installed `openspec-apply-change` skill for the exact `<change-id>` and follow `openspec instructions apply --change <change-id>` inside that worktree.
     - Do not replace native skill delegation with a shell-launched agent CLI or PTY polling.
