@@ -24,18 +24,18 @@ alwaysApply: false
 - create issue
 - list issues
 - list issue statuses
-- create comment (general discussion only — **not** for `PLAN::` / `PROGRESS::` plan or progress bodies)
+- create comment (general discussion and acceptance evidence, without duplicating OpenSpec bodies)
 
-## Plan / progress storage
+## Planning / execution storage
 
-- Canonical plan/progress artifacts are always local: `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` and `progress.md`.
-- Do not create or update Linear issue comments to mirror `PLAN::ISSUE-ID` or `PROGRESS::ISSUE-ID` content.
+- Canonical planning lives in the selected OpenSpec change; orchestrator execution state lives in run JSON.
+- Do not copy entire OpenSpec artifacts into Linear comments.
 
 ## Stop / degraded mode
 
 {% if linear_enabled %}
-- If Linear MCP is unavailable and the step needs a **workflow state** change, stop or enter degraded mode explicitly; keep editing local `plan.md` / `progress.md` and report pending state sync.
-- Local plan/progress files remain source of truth; there is no sync-back of plan body into Linear when connectivity returns.
+- If Linear MCP is unavailable and the step needs a **workflow state** change, stop or enter degraded mode explicitly; continue with OpenSpec and run JSON and report pending state sync.
+- OpenSpec remains the planning source of truth; do not mirror its full body into Linear when connectivity returns.
 {% else %}
 - Linear is not enabled by default for this profile.
 - If the team wants Linear-first workflow, fill `.ai/linear-scope.json`, enable the plugin in `.cursor/settings.json`, and wire MCP locally.

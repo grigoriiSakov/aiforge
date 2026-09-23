@@ -39,9 +39,9 @@ OpenSpec is a runtime dependency of `aiforge` and is initialized by default duri
 Responsibilities are deliberately split:
 
 - OpenSpec owns durable requirements and planning through `/opsx:explore`, `/opsx:propose`, change specs, design, tasks, validation, sync, and archive.
-- aiforge owns execution: stack profiles, canonical Task commands, runtime guards, worktrees, progress state, tests, review gates, MCP, model routing, and tracker transitions.
+- aiforge owns execution: stack profiles, canonical Task commands, runtime guards, worktrees, test evidence, review gates, MCP, model routing, and tracker transitions.
 - `/plan` is an aiforge compatibility bridge that creates or updates an OpenSpec change. New local `PLAN::ISSUE-ID` artifacts are no longer created.
-- `/implement` and `/orchestrator` consume one validated `openspec/changes/<change-id>/` while keeping runtime evidence in `.ai/context/runtime/<issue-id>/progress.md`.
+- `/implement` and `/orchestrator` consume one validated `openspec/changes/<change-id>/`; the orchestrator run JSON keeps execution status and verification evidence.
 
 Start a change with:
 

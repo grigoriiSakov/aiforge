@@ -15,7 +15,7 @@ alwaysApply: true
 - Risky assumptions must be stated and validated before implementation starts.
 - Validate provider/source assumptions and likely cross-module seams before declaring implementation-ready.
 - The OpenSpec change must contain complete proposal, delta specs, design, and tasks.
-- Design must record important invariants, `Claimed Write Scope`, migration/rollback, and unresolved decisions.
+- Design must record important invariants, affected surfaces, migration/rollback, and unresolved decisions.
 - Tasks must map requirements to canonical verification evidence.
 - Open questions and blockers must be empty before `/implement`.
 - Reuse existing canonical surfaces before introducing new files or helpers.
@@ -24,10 +24,10 @@ alwaysApply: true
 
 ## Gate 2: Implement
 
-- Before the first code change, complete project-rules preflight: read `.ai/rules/project-profile.mdc`, extract every applicable rule from `## Project-Specific Rules`, and seed `## Project Rules Compliance` in `progress.md`.
+- Before the first code change, complete project-rules preflight: read `.ai/rules/project-profile.mdc` and identify every applicable rule from `## Project-Specific Rules`.
 - Implementation must follow the validated OpenSpec change, source request, and project-specific rules exactly.
 - Implementer must not silently reinterpret requirements during coding.
-- Before each step transition and before review handoff, re-read `.ai/rules/project-profile.mdc` and update `## Project Rules Compliance`; no open `fail` or unchecked applicable rule is allowed.
+- Before review handoff, re-read `.ai/rules/project-profile.mdc`; no known rule violation may remain.
 - Implementer must study relevant existing code and repository context first, then reuse or extend canonical implementation instead of cloning logic into a new branch/path.
 - Before and after coding, compare implementation against the source request, OpenSpec requirements/scenarios, design invariants, and tasks.
 - Any drift between code, plan, and spec must be fixed or escalated back to `/clarify` or `/plan`.
@@ -38,8 +38,8 @@ alwaysApply: true
 - Cross-module or cross-package shortcuts that bypass declared boundaries are architecture defects.
 - Project-specific architecture laws belong in profile-specific rules on top of this generic gate file.
 - If an issue is orchestrator-managed, implementation must happen only inside the assigned worktree, never in the main checkout.
-- If claimed write scope is incomplete, aggregate all related missing paths/seams into one amendment request per implementation attempt; do not churn one approval per file.
-- Before review handoff, run canonical scoped test and lint with explicit targets, update the progress artifact, and record the handoff against the current workspace fingerprint.
+- If implementation discovers a new seam, update OpenSpec when it changes the accepted contract.
+- Before review handoff, run canonical scoped test and lint with explicit targets, then record the handoff against the current workspace fingerprint.
 
 ## Gate 3: Data / Computation
 
@@ -63,8 +63,8 @@ alwaysApply: true
 - Real external smoke checks are opt-in and must stay outside the mandatory test gate.
 - A cheap scoped handoff is the first post-implementation gate; review consumes that evidence and must remain read-only.
 - If review reports `high`, `critical`, or `medium` findings, verification is failed and the task must re-enter the implement loop.
-- For **orchestrator-managed** work with a declared `Claimed Write Scope`, repo-wide `lint`/`verify` red caused by **pre-existing or out-of-scope** code does not by itself invalidate a green scoped handoff if the failure is documented in progress with path-level reasoning and review explicitly accepts the scope split (residual repo risk called out in the review summary).
-- The full verify gate runs once per workspace fingerprint and is serialized across generated projects by the host-wide lease. A suspected out-of-scope flaky failure permits one exact-target rerun and, only if it passes, one final full retry; any further failure stops at a human gate.
+- Repo-wide `lint`/`verify` red caused by pre-existing or unrelated code requires path-level reasoning and explicit reviewer acceptance of residual risk.
+- Test and full verify commands use the repository test resource lease; independent resource keys may run in parallel. A suspected out-of-scope flaky failure permits one exact-target rerun and, only if it passes, one final full retry; any further failure stops at a human gate.
 
 ## Gate 5: Review
 
@@ -80,7 +80,7 @@ alwaysApply: true
 - `high`, `critical`, or `medium` findings force a bounded loop: `implement fix -> affected scoped test + lint -> optional delta-only closure review`. Initial plus one closure is the hard automatic cap.
 - Missing required behavior, incorrect acceptance coverage, or unplanned contract drift must be reported as findings.
 - For orchestrated work, review must confirm the run is still aligned with the current worktree fingerprint before marking it review-ready.
-- When progress documents full-pipeline `lint`/`verify` failure outside `Claimed Write Scope`, review must either validate that justification or return findings — not stall indefinitely on global red alone.
+- When full-pipeline `lint`/`verify` fails outside the changed behavior, review must validate that justification or return findings.
 
 ## Gate 6: Docs / Process Artifacts
 
@@ -88,4 +88,4 @@ alwaysApply: true
 - Process docs must reference only skills, rules, hooks, and runtime surfaces that actually exist.
 - If tracker/runtime process changed, keep `.ai`, `.cursor`, `.codex`, `.claude`, `.agent`, and `.agents` surfaces in sync.
 - Profile-specific docs/export pipelines belong in profile overlays or project-specific customization.
-- If `/orchestrator` is used, the process docs must describe `Claimed Write Scope`, conflict serialization, and external worktree ownership consistently.
+- If `/orchestrator` is used, the process docs must describe independent issue worktrees, integration conflict handling, test resource leases, and worktree ownership consistently.

@@ -118,7 +118,7 @@ minimalism_review_gate:
 plan_progress_runtime_root:
   type: str
   default: .ai/context/runtime
-  help: Directory (repo-relative) under which each ISSUE-ID gets plan.md and progress.md
+  help: Legacy local artifact directory; new planning and execution use OpenSpec and orchestrator run JSON
 
 manifesto_title:
   type: str

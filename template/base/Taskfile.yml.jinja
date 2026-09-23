@@ -18,6 +18,14 @@ tasks:
   {{ task_test_name }}:
     desc: Canonical test task
     cmds:
+      - node .ai/runtime/verify-lease.mjs run -- {{ task_command }} aiforge:test-body
+
+  aiforge:test-body:
+    desc: Test body protected by the repository test resource lease
+    preconditions:
+      - sh: test -n "${AIFORGE_TEST_LEASE_KEY:-}"
+        msg: "Test body must run through the test resource lease"
+    cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_test_name }}
 {% for command in commands.test %}
 {% if '\n' in command %}
@@ -32,6 +40,16 @@ tasks:
   {{ task_test_scoped_name }}:
     desc: Scoped test task; requires explicit targets after --
     preconditions:
+      - sh: test {{ '{{' }} len .CLI_ARGS {{ '}}' }} -gt 0
+        msg: "Scoped test requires explicit targets after --"
+    cmds:
+      - node .ai/runtime/verify-lease.mjs run -- {{ task_command }} aiforge:test-scoped-body -- {{ '{{' }} .CLI_ARGS {{ '}}' }}
+
+  aiforge:test-scoped-body:
+    desc: Scoped test body protected by the repository test resource lease
+    preconditions:
+      - sh: test -n "${AIFORGE_TEST_LEASE_KEY:-}"
+        msg: "Scoped test body must run through the test resource lease"
       - sh: test {{ '{{' }} len .CLI_ARGS {{ '}}' }} -gt 0
         msg: "Scoped test requires explicit targets after --"
     cmds:
@@ -86,7 +104,7 @@ tasks:
     desc: Lease-protected full verification body; do not invoke directly
     preconditions:
       - sh: test "${AIFORGE_VERIFY_LEASE_HELD:-}" = "1"
-        msg: "Full verify body must run through the host-wide verify lease"
+        msg: "Full verify body must run through the test resource lease"
     cmds:
       - node .ai/runtime/task-state.mjs pre {{ task_verify_name }}
 {% for command in commands.verify %}
@@ -113,3 +131,29 @@ tasks:
 {% endif %}
 {% endfor %}
       - node .ai/runtime/task-state.mjs post {{ task_review_name }}
+{% for task_name, task_commands in (commands.custom or {}).items() %}
+
+  {{ task_name }}:
+    desc: Project-specific task
+    cmds:
+{% if task_name in (commands.testResourceTasks or []) %}
+      - node .ai/runtime/verify-lease.mjs run -- {{ task_command }} aiforge:{{ task_name }}-body -- {{ '{{' }} .CLI_ARGS {{ '}}' }}
+
+  aiforge:{{ task_name }}-body:
+    desc: Project-specific task body protected by the repository test resource lease
+    preconditions:
+      - sh: test -n "${AIFORGE_TEST_LEASE_KEY:-}"
+        msg: "Test body must run through the test resource lease"
+    cmds:
+{% endif %}
+      - node .ai/runtime/task-state.mjs pre {{ task_name }}
+{% for command in task_commands %}
+{% if '\n' in command %}
+      - |
+{{ command | indent(8, true) }}
+{% else %}
+      - {{ command }}
+{% endif %}
+{% endfor %}
+      - node .ai/runtime/task-state.mjs post {{ task_name }}
+{% endfor -%}

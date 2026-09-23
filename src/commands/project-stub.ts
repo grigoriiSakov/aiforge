@@ -19,7 +19,7 @@ Please analyze this project and produce only the project-specific additions I st
 - Tracker states: \`plan-ready=${config.workflow.trackerStates.planReady}\`, \`active=${config.workflow.trackerStates.active}\`, \`review=${config.workflow.trackerStates.review}\`
 - Main branch: \`${config.project.mainBranch}\`
 - Orchestrator worktree root: \`${config.orchestrator.worktreeRoot}\`
-- Plan/progress local root: \`${config.artifacts.planProgressRoot}\` (per issue: \`plan.md\`, \`progress.md\`)
+- Execution state: \`.ai/runtime/orchestrator/runs/ISSUE-ID.json\`; planning lives in the selected OpenSpec change.
 - Canonical tasks:
   - implement: \`${config.task.command} ${config.task.tasks.implement}\`
   - test: \`${config.task.command} ${config.task.tasks.test}\`

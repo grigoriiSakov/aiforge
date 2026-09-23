@@ -12,8 +12,8 @@ Cut token burn from repeated `implement -> full test -> review -> fix` loops. De
 
 During implementation handoff and `fix-loop`:
 
-- Run **only** tests/checks tied to `Claimed Write Scope` and the active plan step.
-- Examples: Pest `--filter=…`, single test file, path from plan `Verify:` line, scoped lint on touched paths.
+- Run **only** tests/checks tied to the actual changed behavior and selected OpenSpec tasks.
+- Examples: Pest `--filter=…`, single test file, a verification command from `tasks.md`, scoped lint on touched paths.
 - Do **not** run full `{{ task_command }} {{ task_verify_name }}` / full project suite unless the user explicitly asked in this turn.
 - Use `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>` and `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>`; both reject empty targets.
 
@@ -22,10 +22,10 @@ Record evidence:
 ```bash
 node .ai/runtime/orchestrator-state.mjs record-test --issue ISSUE-ID --result pass|fail --scope scoped
 node .ai/runtime/orchestrator-state.mjs record-lint --issue ISSUE-ID --result pass|fail --scope scoped
-node .ai/runtime/orchestrator-state.mjs record-handoff --issue ISSUE-ID --progress-path {{ plan_progress_runtime_root }}/ISSUE-ID/progress.md
+node .ai/runtime/orchestrator-state.mjs record-handoff --issue ISSUE-ID --note "scoped commands and result summary"
 ```
 
-Document the exact scoped command in `progress.md`.
+Pass the exact scoped commands and result to the reviewer; the run JSON records pass/fail and the handoff note.
 
 ## Full suite (once per issue, end of pipeline)
 

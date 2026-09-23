@@ -11,7 +11,7 @@ alwaysApply: true
 - Stack-specific and repo-specific gates must layer on top through profile-specific rules instead of mutating the generic gate file.
 - `.ai/rules/project-profile.mdc` is the canonical repo-local rule layer generated from `ai.config.yaml`; always read it before executing any skill.
 - If `.ai/rules/project-profile.mdc` contains `## Project-Specific Rules`, treat them as mandatory repository overrides on top of the generic workflow rules.
-- `/implement` must track per-rule compliance in `progress.md` (`## Project Rules Compliance`); `/review` must verify each rule with explicit pass/fail evidence before a clean verdict.
+- `/implement` must apply project rules; `/review` must verify each applicable rule with explicit pass/fail evidence before a clean verdict.
 - Use canonical tasks only:
   - `{{ task_command }} {{ task_implement_name }}`
   - `{{ task_command }} {{ task_test_name }}`
@@ -23,12 +23,12 @@ alwaysApply: true
 - Do not hardcode stack-specific commands in generic workflow prompts or status updates.
 - For non-trivial work, planning and execution memory must live in explicit local artifacts:
   - `openspec/changes/<change-id>/` for proposal, delta specs, design, and tasks
-  - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (`PROGRESS::ISSUE-ID` marker block inside the file) for execution evidence
+  - `.ai/runtime/orchestrator/runs/ISSUE-ID.json` for execution state and check results
 - When a tracker is enabled, use it for issue workflow **states** only; do not mirror plan/progress bodies into tracker comments.
 - OpenSpec change quality minimum:
   - proposal intent, scope, non-goals, and impact
   - testable delta requirements and scenarios
-  - design decisions, invariants, migration, rollback, and `Claimed Write Scope`
+  - design decisions, invariants, migration, rollback, and affected surfaces
   - tasks mapped to requirements and canonical verification commands
   - no unresolved implementation blockers
 {% if minimalism_enabled and minimalism_level != "off" -%}
@@ -44,7 +44,7 @@ alwaysApply: true
   - `Minimal Solution Conformance`
 {% endif -%}
   - `Решения по ходу`
-- If work is orchestrator-managed, reservation/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
+- If work is orchestrator-managed, run/worktree ownership must live in `.ai/runtime/orchestrator-state.mjs` and `.ai/runtime/orchestrator/runs/ISSUE-ID.json`.
 - Multi-issue work uses the host product's Goal mode as its only long-running manager:
   - the main Goal thread selects runnable work, delegates it, verifies evidence, integrates accepted output, and does not edit product code;
   - one native worker owns exactly one issue, one OpenSpec `changeId`, and one repository-local orchestrator worktree;
@@ -54,7 +54,7 @@ alwaysApply: true
   - wait once on native completion/message events; repeated short status/list polling is forbidden;
   - unavailable model preferences fall back only to a compatible native or inherited model, with the fallback recorded;
   - dependent work waits for accepted review, full verification, terminal OpenSpec sync/archive, and integration into the next base;
-  - Goal state is rehydrated from the initiative manifest, OpenSpec, progress, and orchestrator artifacts; do not create a duplicate ledger;
+  - Goal state is rehydrated from the initiative manifest, OpenSpec, and orchestrator run artifacts; do not create a duplicate ledger;
   - repository, conflict, approval, live MR, deployment, failed full-suite, and human-decision boundaries pause execution.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
 - Completion means all required OpenSpec, implementation, verification, and review points are done; partial completion is not completion.
@@ -64,4 +64,4 @@ alwaysApply: true
 - The default post-implementation order is `implement -> scoped test/lint -> review -> full verify`.
 - The handoff evidence is bound to the current workspace fingerprint and is reused after a clean read-only review.
 - If the initial review produces `high`, `critical`, or `medium` findings, fix them and rerun affected scoped test + lint. Run at most one delta-only closure review when risk requires it; a second blocking verdict is a human gate.
-- `review` is semantic/findings-only and never invokes full `verify`. Full verify runs once per fingerprint under the generated host-wide lease, except one exact flaky rerun followed by at most one final full retry.
+- `review` is semantic/findings-only and never invokes full `verify`. Full verify runs once per fingerprint under the generated test resource lease, except one exact flaky rerun followed by at most one final full retry.

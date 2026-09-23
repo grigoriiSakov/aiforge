@@ -194,7 +194,7 @@ process.exit(0);
     expect(result.details?.remediation).toBe("Run aiforge sync to reinstall OpenSpec workflows.");
   });
 
-  test("orchestrator runtime serializes related issues and direct conflicts", () => {
+  test("orchestrator admits overlapping and related issues independently", () => {
     const repoRoot = makeTempRepo("ai-simple-orchestrator-runtime-");
     const runtimeDir = path.join(repoRoot, ".ai", "runtime");
     fs.mkdirSync(runtimeDir, { recursive: true });
@@ -217,7 +217,7 @@ process.exit(0);
     installWorkspaceFingerprintTemplate(repoRoot);
 
     const registry = JSON.parse(runNodeScript(runtimePath, ["init"], repoRoot));
-    expect(registry.activeReservations).toEqual({});
+    expect(registry.runs).toEqual({});
     createOpenSpecChange(repoRoot, "app-1-change");
     createOpenSpecChange(repoRoot, "app-2-change");
     createOpenSpecChange(repoRoot, "app-3-change");
@@ -266,7 +266,7 @@ process.exit(0);
         repoRoot
       )
     );
-    expect(relatedRun.status).toBe("queued");
+    expect(relatedRun.status).toBe("reserved");
 
     const conflictingRun = JSON.parse(
       runNodeScript(
@@ -289,12 +289,12 @@ process.exit(0);
         repoRoot
       )
     );
-    expect(conflictingRun.status).toBe("blocked-by-conflict");
+    expect(conflictingRun.status).toBe("reserved");
 
     const releaseResult = JSON.parse(
       runNodeScript(runtimePath, ["release", "--issue", "APP-1", "--status", "aborted"], repoRoot)
     );
-    expect(releaseResult.promoted).toContain("APP-2");
+    expect(releaseResult.promoted).toEqual([]);
 
     const promotedRun = JSON.parse(runNodeScript(runtimePath, ["status", "--issue", "APP-2"], repoRoot));
     expect(promotedRun.status).toBe("reserved");
@@ -717,6 +717,29 @@ process.exit(0);
     expect(runDoctorCommand(repoRoot).ok).toBe(true);
   });
 
+  test("sync preserves project-specific tasks from config", async () => {
+    const repoRoot = makeTempRepo("aiforge-custom-task-");
+    await runInitCommand({ repoRoot, projectName: "Custom Task Demo", profileId: "laravel-docker", dryRun: false });
+    const config = loadConfig(repoRoot);
+    config.commands.custom = {
+      "migration-verify": ["echo migration", "echo verified"],
+      "test-audit": ["echo audit {{.CLI_ARGS}}"]
+    };
+    config.commands.testResourceTasks = ["test-audit"];
+    saveConfig(repoRoot, config);
+    delete process.env.AI_SIMPLE_COPIER_BIN;
+    expect((await runSyncCommand(repoRoot, false)).ok).toBe(true);
+    const taskfile = YAML.parse(fs.readFileSync(path.join(repoRoot, "Taskfile.yml"), "utf8"));
+    expect(taskfile.tasks["migration-verify"].cmds).toEqual([
+      "node .ai/runtime/task-state.mjs pre migration-verify",
+      "echo migration",
+      "echo verified",
+      "node .ai/runtime/task-state.mjs post migration-verify"
+    ]);
+    expect(taskfile.tasks["test-audit"].cmds[0]).toContain("verify-lease.mjs run --");
+    expect(taskfile.tasks["aiforge:test-audit-body"].cmds).toContain("echo audit {{.CLI_ARGS}}");
+  }, 20000);
+
   test("sync renders multiline task commands as valid YAML block scalars", async () => {
     const repoRoot = makeTempRepo("aiforge-multiline-task-");
     await runInitCommand({
@@ -748,7 +771,8 @@ process.exit(0);
     const taskfile = fs.readFileSync(path.join(repoRoot, "Taskfile.yml"), "utf8");
     const parsed = YAML.parse(taskfile) as { tasks?: { test?: { cmds?: unknown[] } } };
     expect(taskfile).toContain("      - |\n        task_root=");
-    expect(parsed.tasks?.test?.cmds).toHaveLength(3);
+    expect(parsed.tasks?.test?.cmds).toHaveLength(1);
+    expect((parsed.tasks as Record<string, { cmds?: unknown[] }>)?.["aiforge:test-body"]?.cmds).toHaveLength(3);
     const runtimePath = path.join(repoRoot, ".ai", "runtime", "orchestrator-state.mjs");
     expect(fs.readFileSync(runtimePath, "utf8")).not.toContain("/tmp/local-machine-worktrees");
     const runtimeStatus = spawnSync("node", [runtimePath, "status"], {
@@ -759,7 +783,7 @@ process.exit(0);
     expect(JSON.parse(runtimeStatus.stdout)).toMatchObject({
       worktreeRoot: "/tmp/local-machine-worktrees"
     });
-  });
+  }, 20_000);
 
   test("doctor fails when the canonical task runner cannot list tasks", async () => {
     const repoRoot = makeTempRepo("aiforge-doctor-task-parse-");

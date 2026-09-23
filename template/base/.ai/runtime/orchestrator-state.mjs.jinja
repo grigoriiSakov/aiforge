@@ -12,7 +12,7 @@ const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
 const MAX_AUTOMATIC_FIX_ITERATIONS = Math.min({{ orchestrator_max_review_iterations }}, 1);
 const MAX_AUTOMATIC_REVIEW_PASSES = MAX_AUTOMATIC_FIX_ITERATIONS + 1;
 
-const ACTIVE_SCOPE_HOLDER_STATUSES = new Set([
+const ACTIVE_RUN_STATUSES = new Set([
   "reserved",
   "building",
   "testing",
@@ -34,8 +34,6 @@ const MODEL_HINT_SKIP = new Set(["auto", "default", "none", ""]);
 const AGENT_RUNTIME_IDS = ["cursor", "codex", "claude", "agent", "agents"];
 const CURSOR_ONLY_SLUG = /^(auto|composer[\w.-]*|gpt-5\.5-(medium|fast)|claude-opus-4-8-thinking-high)$/i;
 const CODEX_ONLY_SLUG = /^gpt-5\.3-codex/i;
-const PROCESS_LAYER_PREFIXES = [".ai/", ".cursor/", ".codex/", ".claude/", ".agent/", ".agents/"];
-const PROCESS_LAYER_FILES = new Set(["ai.config.yaml", "AGENTS.md", "MANIFESTO.md", "Taskfile.yml"]);
 const ALLOWED_STATUS_TRANSITIONS = {
   submitted: new Set(["reserved", "queued", "blocked-by-conflict", "aborted"]),
   reserved: new Set(["building", "testing", "aborted"]),
@@ -116,9 +114,6 @@ function defaultRegistry() {
     updatedAt: utcNow(),
     worktreeRoot: configuredWorktreeRoot(),
     branchPrefix: DEFAULT_BRANCH_PREFIX,
-    activeReservations: {},
-    queue: [],
-    blocked: {},
     runs: {}
   };
 }
@@ -166,26 +161,6 @@ function dedupe(values) {
   return [...new Set(values.map((item) => String(item).trim()).filter(Boolean))];
 }
 
-function isProcessLayerPath(claimPath) {
-  const normalized = normalizePath(claimPath);
-  return PROCESS_LAYER_FILES.has(normalized) || PROCESS_LAYER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
-}
-
-function isFileLevelClaim(claimPath) {
-  const normalized = normalizePath(claimPath);
-  if (!normalized) {
-    return false;
-  }
-
-  const absolutePath = path.join(repoRoot(), normalized);
-  if (fs.existsSync(absolutePath)) {
-    return fs.statSync(absolutePath).isFile();
-  }
-
-  const baseName = path.posix.basename(normalized);
-  return baseName.includes(".") || PROCESS_LAYER_FILES.has(baseName);
-}
-
 function parseScope(rawScope) {
   const scope = {
     areas: dedupe(Array.isArray(rawScope?.areas) ? rawScope.areas : []),
@@ -196,24 +171,6 @@ function parseScope(rawScope) {
     relatedIssues: dedupe(Array.isArray(rawScope?.related_issues) ? rawScope.related_issues : []),
     touchesProcessLayer: Boolean(rawScope?.touches_process_layer)
   };
-
-  if (scope.paths.length === 0 && scope.sharedSurfaces.length === 0) {
-    throw new Error("claimed_write_scope must contain at least one file in paths/shared_surfaces");
-  }
-
-  const invalidClaims = [...scope.paths, ...scope.sharedSurfaces].filter((claimPath) => !isFileLevelClaim(claimPath));
-  if (invalidClaims.length > 0) {
-    throw new Error(`scope claims must be file-level exact: ${invalidClaims.join(", ")}`);
-  }
-
-  if (scope.touchesProcessLayer) {
-    const processClaims = [...scope.paths, ...scope.sharedSurfaces].filter(isProcessLayerPath);
-    if (processClaims.length === 0) {
-      throw new Error(
-        "touches_process_layer=true requires at least one claimed file in .ai/.cursor/.codex/.claude/.agent/.agents or root process files"
-      );
-    }
-  }
 
   return scope;
 }
@@ -243,8 +200,7 @@ function buildRun(issueId, changeId, scope, existingRun = null, overrides = {}) 
     reviewIteration: overrides.reviewIteration ?? existingRun?.reviewIteration ?? 0,
     handoffFingerprint:
       overrides.handoffFingerprint ?? existingRun?.handoffFingerprint ?? null,
-    handoffProgressPath:
-      overrides.handoffProgressPath ?? existingRun?.handoffProgressPath ?? null,
+    handoffNote: overrides.handoffNote ?? existingRun?.handoffNote ?? null,
     afterFixRereviewHint:
       overrides.afterFixRereviewHint ?? existingRun?.afterFixRereviewHint ?? null,
     lastFixResolution:
@@ -278,44 +234,6 @@ function updateRegistryForRun(registry, run) {
     conflictsWith: run.conflictsWith,
     updatedAt: run.updatedAt
   };
-}
-
-function pathOverlap(leftPath, rightPath) {
-  return normalizePath(leftPath) === normalizePath(rightPath);
-}
-
-function collectConflicts(issueId, incomingScope, registry) {
-  const conflicts = [];
-  for (const otherIssueId of Object.keys(registry.activeReservations ?? {})) {
-    if (otherIssueId === issueId) {
-      continue;
-    }
-
-    const otherRun = loadRun(otherIssueId);
-    if (!otherRun) {
-      continue;
-    }
-
-    const otherScope = parseScope(otherRun.claimedWriteScope);
-    const directOverlap =
-      incomingScope.paths.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
-      incomingScope.paths.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right))) ||
-      incomingScope.sharedSurfaces.some((left) => otherScope.paths.some((right) => pathOverlap(left, right))) ||
-      incomingScope.sharedSurfaces.some((left) => otherScope.sharedSurfaces.some((right) => pathOverlap(left, right)));
-    const related =
-      incomingScope.relatedIssues.includes(otherIssueId) || otherScope.relatedIssues.includes(issueId);
-
-    if (directOverlap) {
-      conflicts.push({ issueId: otherIssueId, relation: "hard-conflict" });
-      continue;
-    }
-
-    if (related) {
-      conflicts.push({ issueId: otherIssueId, relation: "related-conflict" });
-    }
-  }
-
-  return conflicts;
 }
 
 function requireTransition(currentStatus, nextStatus) {
@@ -402,51 +320,6 @@ function materializeBoundChange(run, worktreePath) {
   validateChangeId(changeId, worktreePath);
 }
 
-function sectionBody(markdown, heading) {
-  const start = markdown.indexOf(`${heading}\n`);
-  if (start === -1) {
-    return null;
-  }
-  const bodyStart = start + heading.length + 1;
-  const nextHeading = markdown.slice(bodyStart).search(/^##\s+/m);
-  return (nextHeading === -1
-    ? markdown.slice(bodyStart)
-    : markdown.slice(bodyStart, bodyStart + nextHeading)
-  ).trim();
-}
-
-function validateProgressArtifact(progress, issueId, changeId) {
-  const manifest = readJson(machineManifestPath(), null);
-  const requiredSections = [
-    "## Выполнено",
-    "## Текущий шаг",
-    "## Дальше",
-    "## Spec Conformance",
-    "## Project Rules Compliance",
-    "## Решения по ходу"
-  ];
-  if (manifest?.minimalism?.enabled && manifest?.minimalism?.level !== "off") {
-    requiredSections.push("## Minimal Solution Conformance");
-  }
-  const missing = requiredSections.filter((heading) => sectionBody(progress, heading) == null);
-  if (!progress.includes(`# PROGRESS::${issueId}`)) {
-    missing.unshift(`# PROGRESS::${issueId}`);
-  }
-  if (missing.length > 0) {
-    throw new Error(`progress artifact missing required sections: ${missing.join(", ")}`);
-  }
-  const changeLine = `Change: \`${changeId}\``;
-  if (!progress.split(/\r?\n/).some((line) => line.trim() === changeLine)) {
-    throw new Error(`progress artifact must bind Change: \`${changeId}\``);
-  }
-  for (const heading of ["## Spec Conformance", "## Project Rules Compliance"]) {
-    const body = sectionBody(progress, heading) ?? "";
-    if (!body || /- \[ \]/.test(body)) {
-      throw new Error(`${heading} must be non-empty and contain no unchecked items`);
-    }
-  }
-}
-
 function requirePassingTest(run) {
   if (run.lastTestResult !== "pass" || run.lastTestScope !== "full") {
     throw new Error("cannot finalize without passing full verify evidence");
@@ -459,7 +332,7 @@ function requirePassingTest(run) {
 function requireCurrentHandoff(run) {
   requirePassingScopedValidation(run);
   const fingerprint = currentWorkspaceFingerprint(run);
-  if (run.handoffFingerprint !== fingerprint || !run.handoffProgressPath) {
+  if (run.handoffFingerprint !== fingerprint) {
     throw new Error(
       "cannot move to review without record-handoff evidence for the current workspace fingerprint"
     );
@@ -536,12 +409,13 @@ function requireArchivedTerminalChange(run) {
 }
 
 function reconcilePendingRuns(registry) {
-  const candidateIssueIds = [
+  const candidateIssueIds = new Set([
     ...(registry.queue ?? []),
-    ...Object.keys(registry.blocked ?? {}).filter((issueId) => !(registry.queue ?? []).includes(issueId))
-  ];
-  const nextQueue = [];
-  const nextBlocked = {};
+    ...Object.keys(registry.blocked ?? {}),
+    ...Object.entries(registry.runs ?? {})
+      .filter(([, summary]) => PENDING_STATUSES.has(summary.status))
+      .map(([issueId]) => issueId)
+  ]);
   const promoted = [];
 
   for (const issueId of candidateIssueIds) {
@@ -550,28 +424,17 @@ function reconcilePendingRuns(registry) {
       continue;
     }
 
-    const scope = parseScope(run.claimedWriteScope);
-    const conflicts = collectConflicts(issueId, scope, registry);
-    run.conflictsWith = conflicts.map((entry) => entry.issueId);
-
-    if (conflicts.some((entry) => entry.relation === "hard-conflict")) {
-      run.status = "blocked-by-conflict";
-      nextBlocked[issueId] = run.conflictsWith;
-    } else if (conflicts.length > 0) {
-      run.status = "queued";
-      nextQueue.push(issueId);
-    } else {
-      run.status = "reserved";
-      registry.activeReservations[issueId] = run.claimedWriteScope;
-      promoted.push(issueId);
-    }
+    run.status = "reserved";
+    run.conflictsWith = [];
+    promoted.push(issueId);
 
     saveRun(run);
     updateRegistryForRun(registry, run);
   }
 
-  registry.queue = nextQueue;
-  registry.blocked = nextBlocked;
+  delete registry.activeReservations;
+  delete registry.queue;
+  delete registry.blocked;
   return promoted;
 }
 
@@ -594,6 +457,7 @@ function requireOption(args, name) {
 function commandInit() {
   ensureStateDirs();
   const registry = loadRegistry();
+  reconcilePendingRuns(registry);
   saveRegistry(registry);
   process.stdout.write(`${JSON.stringify(registry, null, 2)}\n`);
 }
@@ -601,7 +465,7 @@ function commandInit() {
 function commandSubmit(args) {
   const issueId = requireOption(args, "--issue");
   const requestedChangeId = getOption(args, "--change-id", null);
-  const scope = parseScope(JSON.parse(requireOption(args, "--scope-json")));
+  const scope = parseScope(JSON.parse(getOption(args, "--scope-json", "{}")));
   const baseBranchIdx = args.indexOf("--base-branch");
   let baseBranchPatch = {};
   if (baseBranchIdx !== -1) {
@@ -623,29 +487,14 @@ function commandSubmit(args) {
     );
   }
 
-  delete registry.activeReservations[issueId];
-  registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
-  delete registry.blocked[issueId];
-
-  const conflicts = collectConflicts(issueId, scope, registry);
   const run = buildRun(issueId, changeId, scope, existingRun, {
-    status: "submitted",
+    status: "reserved",
     branch,
     ...baseBranchPatch,
     currentStep: changeId ? "awaiting-admission" : "awaiting-worktree-before-openspec",
-    conflictsWith: conflicts.map((entry) => entry.issueId)
+    conflictsWith: []
   });
-
-  if (conflicts.some((entry) => entry.relation === "hard-conflict")) {
-    run.status = "blocked-by-conflict";
-    registry.blocked[issueId] = run.conflictsWith;
-  } else if (conflicts.length > 0) {
-    run.status = "queued";
-    registry.queue.push(issueId);
-  } else {
-    run.status = "reserved";
-    registry.activeReservations[issueId] = run.claimedWriteScope;
-  }
+  reconcilePendingRuns(registry);
 
   saveRun(run);
   updateRegistryForRun(registry, run);
@@ -697,10 +546,6 @@ function commandRelease(args) {
     requireArchivedTerminalChange(run);
   }
 
-  delete registry.activeReservations[issueId];
-  registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
-  delete registry.blocked[issueId];
-
   if (removeWorktree && run.worktreePath) {
     runGit(["worktree", "remove", "--force", run.worktreePath], repoRoot(), true);
     run.worktreePath = null;
@@ -742,14 +587,7 @@ function commandSetStatus(args) {
   }
   saveRun(run);
 
-  if (ACTIVE_SCOPE_HOLDER_STATUSES.has(run.status)) {
-    registry.activeReservations[issueId] = run.claimedWriteScope;
-  } else {
-    delete registry.activeReservations[issueId];
-    registry.queue = (registry.queue ?? []).filter((queuedIssueId) => queuedIssueId !== issueId);
-    delete registry.blocked[issueId];
-    reconcilePendingRuns(registry);
-  }
+  reconcilePendingRuns(registry);
 
   updateRegistryForRun(registry, run);
   saveRegistry(registry);
@@ -758,7 +596,7 @@ function commandSetStatus(args) {
 
 function commandRecordHandoff(args) {
   const issueId = requireOption(args, "--issue");
-  const progressPath = requireOption(args, "--progress-path");
+  const note = getOption(args, "--note", null);
   const registry = loadRegistry();
   const run = loadRun(issueId);
 
@@ -768,27 +606,11 @@ function commandRecordHandoff(args) {
   if (!["building", "testing", "fix-loop"].includes(run.status)) {
     throw new Error(`record-handoff is not allowed in status ${run.status}`);
   }
-  const changeId = requireBoundChange(run, run.worktreePath);
+  requireBoundChange(run, run.worktreePath);
   requirePassingScopedValidation(run);
-  const absoluteProgressPath = path.resolve(run.worktreePath, progressPath);
-  const relativeProgressPath = path.relative(run.worktreePath, absoluteProgressPath);
-  if (
-    !relativeProgressPath ||
-    relativeProgressPath.startsWith("..") ||
-    path.isAbsolute(relativeProgressPath)
-  ) {
-    throw new Error("record-handoff --progress-path must resolve inside the orchestrator worktree");
-  }
-  const progress = fs.existsSync(absoluteProgressPath)
-    ? fs.readFileSync(absoluteProgressPath, "utf8").trim()
-    : "";
-  if (!progress) {
-    throw new Error("record-handoff requires a non-empty progress artifact");
-  }
-  validateProgressArtifact(progress, issueId, changeId);
 
   run.handoffFingerprint = currentWorkspaceFingerprint(run);
-  run.handoffProgressPath = relativeProgressPath;
+  run.handoffNote = note;
   run.currentStep = "handoff-ready-for-review";
   saveRun(run);
   updateRegistryForRun(registry, run);
@@ -997,7 +819,7 @@ function commandStartWorktree(args) {
   if (PENDING_STATUSES.has(run.status)) {
     throw new Error(`issue ${issueId} is not reserved yet (status=${run.status})`);
   }
-  if (!ACTIVE_SCOPE_HOLDER_STATUSES.has(run.status)) {
+  if (!ACTIVE_RUN_STATUSES.has(run.status)) {
     throw new Error(`issue ${issueId} is in status ${run.status}; worktree startup is not allowed`);
   }
   if (run.worktreePath) {
@@ -1347,7 +1169,7 @@ function commandGraphNext(args) {
       step: "pending",
       action: "run_plan",
       issue: issueId,
-      message: "No orchestrator run exists yet. Resolve the issue and submit its Claimed Write Scope before authoring a new OpenSpec change."
+      message: "No orchestrator run exists yet. Resolve the issue and submit it before authoring a new OpenSpec change."
     };
   } else if (PENDING_STATUSES.has(run.status) || run.status === "aborted") {
     payload = {

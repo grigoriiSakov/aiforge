@@ -25,8 +25,8 @@ Use this skill for a read-only architecture and quality audit.
 2. Use model tier `{{ agent_model_audit }}` (`.ai/reference/model-profiles.md`); in `orchestrator-delegate` mode stay read-only.
 3. Read `.ai/context/current.md` if it exists.
 4. For issue-scoped audits, read local plan/progress:
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md`
-   - `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+   - selected `openspec/changes/<change-id>/`
+   - `.ai/runtime/orchestrator/runs/ISSUE-ID.json` when orchestrated
 5. Confirm the selected profile and its canonical verify commands.
 6. Audit only:
    - workflow rule compliance

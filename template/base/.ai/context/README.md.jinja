@@ -5,7 +5,6 @@ This directory stores short-lived local runtime artifacts for planning and execu
 Recommended layout:
 
 - `current.md` — session digest
-- `runtime/ISSUE-ID/plan.md` — canonical `PLAN::ISSUE-ID` artifact (root is `artifacts.planProgressRoot` in `ai.config.yaml`, default `.ai/context/runtime`)
-- `runtime/ISSUE-ID/progress.md` — canonical `PROGRESS::ISSUE-ID` artifact
+- `runtime/ISSUE-ID/` — legacy local artifacts; new planning lives in OpenSpec and execution state in `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 
 When a tracker (e.g. Linear) is active, it holds workflow **state** only; plan/progress bodies stay in these local files.

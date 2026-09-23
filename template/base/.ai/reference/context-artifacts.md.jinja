@@ -12,11 +12,8 @@ Keep short-lived execution memory in explicit runtime artifacts instead of scatt
 
 - `.ai/context/current.md`
 - `.ai/context/initiatives/<slug>/issues-manifest.json`
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (canonical `PROGRESS::ISSUE-ID` artifact)
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
-
-Configured in `ai.config.yaml` as `artifacts.planProgressRoot` (template default: `.ai/context/runtime`).
 
 ## `current.md`
 
@@ -30,17 +27,13 @@ Use as a short digest only:
 
 Do not dump large research or full code excerpts into `current.md`.
 
-## Execution progress layout
+## Execution evidence
 
-OpenSpec owns planning. Keep execution evidence under the configured root, one directory per issue:
-
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
-
-Use the `PROGRESS::ISSUE-ID` marker, an exact `Change: \`<change-id>\`` binding, and the required sections from `.ai/rules/workflow.mdc`. The tracker carries workflow state only. Orchestrator handoff rejects a merely non-empty artifact when this structure is missing.
+OpenSpec owns planning and task completion. The per-issue run JSON records the selected change, worktree, checks, review result, and current step. Use `record-handoff --note` for a short review handoff when needed.
 
 ## Orchestrator runtime
 
-If work is coordinated through `/orchestrator`, the source of truth for reservation, queueing, and worktree ownership is:
+If work is coordinated through `/orchestrator`, the source of truth for run state and worktree ownership is:
 
 - `.ai/runtime/orchestrator/registry.json`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
@@ -51,7 +44,6 @@ Goal mode owns conversational continuity, not a second durable state machine. Be
 
 - `.ai/context/initiatives/<slug>/issues-manifest.json`
 - the selected `openspec/changes/<change-id>/`
-- `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
 - `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 
 Historical files under `.ai/runtime/supervisor/` may be retained as evidence, but they are not active workflow state.

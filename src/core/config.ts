@@ -745,7 +745,9 @@ function normalizeTaskCommands(
     lint: normalizeTaskCommandList(currentCommands?.lint, profileTaskCommands.lint, taskCommand),
     lintScoped: normalizeTaskCommandList(currentCommands?.lintScoped, profileTaskCommands.lintScoped, taskCommand),
     verify: normalizeTaskCommandList(currentCommands?.verify, profileTaskCommands.verify, taskCommand),
-    review: normalizeReviewCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand)
+    review: normalizeReviewCommandList(currentCommands?.review, profileTaskCommands.review, taskCommand),
+    custom: currentCommands?.custom ?? {},
+    testResourceTasks: currentCommands?.testResourceTasks ?? []
   };
 }
 

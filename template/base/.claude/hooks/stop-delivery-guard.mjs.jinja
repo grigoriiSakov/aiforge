@@ -62,7 +62,7 @@ function getCurrentOrchestratorRun() {
     "pre-finalize"
   ]);
   const branchName = currentBranch();
-  const orderedIssueIds = [...Object.keys(registry.activeReservations ?? {}), ...Object.keys(registry.runs ?? {})];
+  const orderedIssueIds = Object.keys(registry.runs ?? {});
 
   for (const issueId of orderedIssueIds) {
     const run = loadRun(issueId);

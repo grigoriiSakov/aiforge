@@ -55,7 +55,7 @@ The target repository's application files remain unmanaged. They are read for de
 
 OpenSpec owns durable planning state under `openspec/`: current behavior specs, proposed changes, design decisions, implementation tasks, validation, and archive history.
 
-aiforge owns operational execution state under `.ai/`: canonical stack commands, worktree reservations, progress evidence, test and review gates, runtime adapters, MCP provisioning, model hints, and tracker transitions.
+aiforge owns operational execution state under `.ai/`: canonical stack commands, issue worktrees, test and review evidence, runtime adapters, MCP provisioning, model hints, and tracker transitions.
 
 The shared post-Copier pipeline creates runtime symlinks first and then invokes the external `@fission-ai/openspec` runtime dependency non-interactively with the enabled runtime tool IDs. The `aiforge` package exports a thin `openspec` binary proxy; it does not copy, fork, or rewrite OpenSpec skills. This order lets official OpenSpec skills land in the shared `.ai/skills` source while runtime-specific command files remain in their native directories.
 

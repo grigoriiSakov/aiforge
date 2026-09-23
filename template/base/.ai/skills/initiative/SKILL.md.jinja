@@ -30,7 +30,7 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
 ## Related skills (follow their contracts)
 
 - `investigate` — codebase facts before committing to a design; reuse its discipline (evidence, separate current vs desired vs unknown).
-- `issue` — task context shape, `related_issues` / orchestrator serialization when relevant.
+   - `issue` — task context and explicit dependencies when relevant.
 - `plan` — OpenSpec change quality and implementation readiness.
 - `tracker` — scope from `.ai/linear-scope.json`, degraded-mode rules in `.ai/reference/tracker-degraded-mode.md`.
 
@@ -95,13 +95,13 @@ Full **pre-implement** cycle for a large initiative when a correct project-level
     - Each issue description must link to the applicable OpenSpec change/spec and carry only the technical-spec bullets that apply to **that** slice; do not duplicate the whole initiative spec in every body.
     - Order work via milestones/phases, `blockedBy`, and the execution map.
     - Frontend (or downstream) issues only when upstream contracts are clear; mark real backend blockers.
-    - If `/orchestrator` is likely, note `related_issues` early for risky overlap (see `issue` skill).
+    - If one change requires another's accepted result, record the dependency early (see `issue` skill).
 
 10. **Project hygiene** — when PRD + project docs + atomic issue set are complete, set the **project** (and individual issues per tracker rules) to appropriate states; there is no dedicated planning issue to advance.
 
 11. **Verification** — confirm PRD and initiative spec/execution map are visible on the project, atomic issues are implement-ready, blockers and order are unambiguous, and `.ai/context/initiatives/<slug>/issues-manifest.json` matches the final ordering exactly.
 
-12. **Goal handoff package** — for each native worker, pass the exact issue/changeId, repository root, manifest, selected OpenSpec change, `progress.md`, and orchestrator run paths. Use no inherited turns or the smallest bounded history supported by the host. The manager waits once on native completion/message events; it does not poll status/list in a short loop.
+12. **Goal handoff package** — for each native worker, pass the exact issue/changeId, repository root, manifest, selected OpenSpec change, and orchestrator run path. Use no inherited turns or the smallest bounded history supported by the host. The manager waits once on native completion/message events; it does not poll status/list in a short loop.
 {% else %}
 7. **Local initiative bundle (Linear integration off)** — after steps 1–6, do **not** call Linear MCP. Write a **local initiative bundle** (replace `<slug>` with a stable identifier). Do **not** model a fake “planning issue” that only exists to describe how you will open other issues — keep initiative-level narrative in files you attach to a **project** / wiki / epic, not as a standalone meta-ticket template:
 

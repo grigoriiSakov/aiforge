@@ -63,7 +63,6 @@ function getCurrentOrchestratorRun() {
   ]);
   const branchName = currentBranch();
   const orderedIssueIds = [
-    ...Object.keys(registry.activeReservations ?? {}),
     ...Object.keys(registry.runs ?? {})
   ];
 

@@ -142,41 +142,6 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
   run.worktreePath = repoRoot;
   run.status = "building";
   fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
-  const progressPath = path.join(".ai", "context", "runtime", issueId, "progress.md");
-  fs.mkdirSync(path.dirname(path.join(repoRoot, progressPath)), { recursive: true });
-  fs.writeFileSync(
-    path.join(repoRoot, progressPath),
-    [
-      `# PROGRESS::${issueId}`,
-      "",
-      `Change: \`${run.changeId}\``,
-      "",
-      "## Выполнено",
-      "",
-      "- Реализация завершена.",
-      "",
-      "## Текущий шаг",
-      "",
-      "- Handoff.",
-      "",
-      "## Дальше",
-      "",
-      "- Review.",
-      "",
-      "## Spec Conformance",
-      "",
-      "- [x] Requirement Example — evidence: focused test.",
-      "",
-      "## Project Rules Compliance",
-      "",
-      "- [x] Project rules — evidence: scoped lint.",
-      "",
-      "## Решения по ходу",
-      "",
-      "- Использован минимальный путь.",
-      ""
-    ].join("\n")
-  );
   runNodeScript(
     runtimePath,
     ["record-test", "--issue", issueId, "--result", "pass", "--scope", "scoped"],
@@ -189,7 +154,7 @@ function prepareForReview(runtimePath: string, repoRoot: string, issueId: string
   );
   runNodeScript(
     runtimePath,
-    ["record-handoff", "--issue", issueId, "--progress-path", progressPath],
+    ["record-handoff", "--issue", issueId, "--note", "Scoped checks passed"],
     repoRoot
   );
   runNodeScript(runtimePath, ["set-status", "--issue", issueId, "--status", "reviewing"], repoRoot);
@@ -238,7 +203,7 @@ describe("orchestrator loop guards", () => {
     expect(run.changeId).toBe("browser-tenant-repair");
   });
 
-  test("handoff rejects a non-empty progress file without mandatory conformance sections", () => {
+  test("handoff uses scoped checks without a progress file", () => {
     const repoRoot = makeTempRepo("aiforge-orch-progress-contract-");
     initGitRepo(repoRoot);
     const runtimePath = renderOrchestratorRuntime(repoRoot, "1");
@@ -250,9 +215,6 @@ describe("orchestrator loop guards", () => {
     run.worktreePath = repoRoot;
     run.status = "building";
     fs.writeFileSync(runPath, `${JSON.stringify(run, null, 2)}\n`);
-    const progressPath = path.join(".ai", "context", "runtime", "APP-7B", "progress.md");
-    fs.mkdirSync(path.dirname(path.join(repoRoot, progressPath)), { recursive: true });
-    fs.writeFileSync(path.join(repoRoot, progressPath), "non-empty but incomplete\n");
     runNodeScript(
       runtimePath,
       ["record-test", "--issue", "APP-7B", "--result", "pass", "--scope", "scoped"],
@@ -266,11 +228,11 @@ describe("orchestrator loop guards", () => {
 
     const handoff = spawnSync(
       "node",
-      [runtimePath, "record-handoff", "--issue", "APP-7B", "--progress-path", progressPath],
+      [runtimePath, "record-handoff", "--issue", "APP-7B", "--note", "Scoped checks passed"],
       { cwd: repoRoot, encoding: "utf8", env: isolatedAgentEnv() }
     );
-    expect(handoff.status).toBe(2);
-    expect(handoff.stderr).toContain("missing required sections");
+    expect(handoff.status).toBe(0);
+    expect(JSON.parse(handoff.stdout).handoffNote).toBe("Scoped checks passed");
   });
 
   test("implementation cannot move to review without fingerprinted handoff evidence", () => {

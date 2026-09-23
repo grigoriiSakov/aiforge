@@ -26,6 +26,8 @@ export interface TaskCommands {
   lintScoped: string[];
   verify: string[];
   review: string[];
+  custom?: Record<string, string[]>;
+  testResourceTasks?: string[];
 }
 
 export type WorktreeExecutionStrategy = "direct" | "overlay";

@@ -4,7 +4,7 @@ title: "Orchestrator Claimed Write Scope Template"
 
 # Claimed Write Scope
 
-Use this machine-readable section inside `{{ plan_progress_runtime_root }}/ISSUE-ID/plan.md` (`PLAN::ISSUE-ID` artifact) for any task that may run through `/orchestrator`.
+Optionally put this section in the selected OpenSpec change's `design.md`. It helps choose scoped checks and review depth; it does not reserve files or block another issue.
 
 ```markdown
 ## Claimed Write Scope
@@ -30,12 +30,10 @@ Use this machine-readable section inside `{{ plan_progress_runtime_root }}/ISSUE
 - `areas`: logical business areas/modules touched by the issue.
 - `paths`: exact file paths that will be created or modified.
 - `shared_surfaces`: exact high-conflict files that multiple areas depend on.
-- `related_issues`: issue IDs that must not execute in parallel even without path overlap.
+- `related_issues`: related issue IDs for review context; use explicit dependencies in the initiative manifest when execution order matters.
 - `touches_process_layer`: `true` when changing workflow/process surfaces like `.ai/*`, `.cursor/*`, `.codex/*`, `.claude/*`, `.agent/*`, `.agents/*`, `ai.config.yaml`, `AGENTS.md`, `MANIFESTO.md`, or `Taskfile.yml`.
 
 ## Constraints
 
-- `paths` and `shared_surfaces` must be file-level claims, not directories.
-- If a future file does not exist yet, use its exact intended path from the plan.
-- If `touches_process_layer` is `true`, at least one claimed file must live in the process layer.
-- If deterministic file-level scope is impossible, the plan is not orchestrator-ready.
+- Prefer concrete paths, but revise them as implementation discovers the actual touched files.
+- Compare the final diff with the selected OpenSpec change during review and integration.

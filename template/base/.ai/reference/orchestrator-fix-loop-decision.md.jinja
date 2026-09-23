@@ -8,7 +8,7 @@ One automatic fix iteration is a **ceiling**, not a target. Do **not** burn a re
 
 ## When fix-loop status + scoped test pass
 
-1. Read the last `orchestrator_review_verdict` in the review subagent output (or `progress.md` Fix Loop).
+1. Read the last `orchestrator_review_verdict` in the review subagent output.
 2. Map each `medium`/`high`/`critical` finding → concrete change in the worktree.
 3. Choose **one** path:
 
@@ -21,9 +21,9 @@ One automatic fix iteration is a **ceiling**, not a target. Do **not** burn a re
 
 OK when **all** apply:
 
-- Every `medium`/`high`/`critical` finding has a matching fix in claimed paths (or plan amended).
+- Every `medium`/`high`/`critical` finding has a matching fix in the worktree.
 - Scoped test and lint pass recorded (`record-test --scope scoped --result pass` and `record-lint --scope scoped --result pass`).
-- No new behavior outside `Claimed Write Scope`.
+- No unreviewed behavior outside the selected OpenSpec change.
 - Fix is not a refactor — comment, test, typo, single guard, import, type hint.
 
 **Not OK** to skip:
@@ -55,4 +55,4 @@ node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID -
 node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision require-rereview --note "architecture finding needs second pair of eyes"
 ```
 
-Document the decision under `### Fix resolution` in `progress.md` (see verify-fix-loop.md).
+The `record-fix-resolution --note` argument records the decision in the run JSON.

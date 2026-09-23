@@ -4,42 +4,12 @@ title: "Verify And Fix Loop"
 
 # Verify And Fix Loop
 
-Use after implement/test when acceptance or scoped verify fails, or when review (or optional audit) returns actionable findings.
+Use after scoped verification or review finds a concrete problem.
 
-## Artifact
+1. Read the finding, the selected OpenSpec change, and the current worktree diff.
+2. Fix the smallest affected behavior. Update the OpenSpec change first if the accepted contract changes.
+3. Run affected scoped test and lint commands with explicit targets.
+4. Record both results in the orchestrator run JSON with `record-test` and `record-lint`.
+5. Use `record-fix-resolution --decision skip-rereview|require-rereview --note "finding → fix → check"`.
 
-Append to `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` under `## Fix Loop` (create section on first failure):
-
-```markdown
-## Fix Loop
-
-### Trigger
-- source: verify | review | audit (audit only when orchestrator ran it)
-- at: ISO-8601 timestamp
-- summary: one line
-
-### Diagnosis
-- symptom:
-- likely cause:
-- in_scope: yes | no
-
-### Fix plan
-1. Step — files — verify command
-2. Step — files — verify command
-
-### Re-verify
-- scoped test + lint: `{{ task_command }} {{ task_test_scoped_name }} -- <targets...>` and `{{ task_command }} {{ task_lint_scoped_name }} -- <targets...>` (targets from Claimed Write Scope)
-- then: orchestrator **decides** skip-rereview vs require-rereview (`.ai/reference/orchestrator-fix-loop-decision.md`)
-
-### Fix resolution
-- decision: skip-rereview | require-rereview
-- rationale: map each review finding → fix or open item
-- command evidence: `record-fix-resolution --issue ISSUE-ID --decision … --note "…"`
-```
-
-## Rules
-
-- Fix plans target **Claimed Write Scope** only unless the plan is amended.
-- Do not close the issue on chat-only “looks fine”; require command evidence from the plan.
-- After a fix loop, update `Spec Conformance` in progress and shrink open items.
-- Orchestrator: after scoped `record-test pass` and `record-lint pass`, use `record-fix-resolution` — **not** automatic review subagent every time.
+Do not close the issue on a chat-only claim. A second blocking review verdict requires a human decision.

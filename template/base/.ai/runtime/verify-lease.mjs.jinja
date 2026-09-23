@@ -2,9 +2,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import crypto from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
 
-const LOCK_DIR = path.join(os.tmpdir(), "aiforge-full-verify.lock");
+function resourceKey() {
+  if (process.env.AIFORGE_TEST_RESOURCE_KEY?.trim()) {
+    return process.env.AIFORGE_TEST_RESOURCE_KEY.trim();
+  }
+  const git = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+  return git.status === 0 ? fs.realpathSync(git.stdout.trim()) : fs.realpathSync(process.cwd());
+}
+
+const RESOURCE_KEY = resourceKey();
+const RESOURCE_HASH = crypto.createHash("sha256").update(RESOURCE_KEY).digest("hex").slice(0, 24);
+const LOCK_DIR = path.join(os.tmpdir(), `aiforge-test-${RESOURCE_HASH}.lock`);
 const OWNER_PATH = path.join(LOCK_DIR, "owner.json");
 const DEFAULT_TIMEOUT_SECONDS = 7200;
 const POLL_INTERVAL_MS = 1000;
@@ -15,11 +29,11 @@ function usage() {
 }
 
 function timeoutMilliseconds() {
-  const raw = process.env.AIFORGE_VERIFY_LOCK_TIMEOUT_SECONDS;
+  const raw = process.env.AIFORGE_TEST_LOCK_TIMEOUT_SECONDS ?? process.env.AIFORGE_VERIFY_LOCK_TIMEOUT_SECONDS;
   if (!raw) return DEFAULT_TIMEOUT_SECONDS * 1000;
   const seconds = Number(raw);
   if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error("AIFORGE_VERIFY_LOCK_TIMEOUT_SECONDS must be a positive number");
+    throw new Error("test lock timeout must be a positive number");
   }
   return seconds * 1000;
 }
@@ -48,12 +62,14 @@ function delay(milliseconds) {
 
 async function acquireLease(token) {
   const deadline = Date.now() + timeoutMilliseconds();
+  const waitStartedAt = Date.now();
+  let waitingReported = false;
   while (true) {
     try {
       fs.mkdirSync(LOCK_DIR);
       fs.writeFileSync(
         OWNER_PATH,
-        `${JSON.stringify({ pid: process.pid, token, cwd: process.cwd(), acquiredAt: new Date().toISOString() }, null, 2)}\n`
+        `${JSON.stringify({ pid: process.pid, token, resource: RESOURCE_KEY, cwd: process.cwd(), acquiredAt: new Date().toISOString() }, null, 2)}\n`
       );
       return;
     } catch (error) {
@@ -61,6 +77,10 @@ async function acquireLease(token) {
     }
 
     const owner = readOwner();
+    if (!waitingReported && (owner || Date.now() - waitStartedAt >= POLL_INTERVAL_MS)) {
+      console.error(`Waiting for test resource ${RESOURCE_KEY}; owner pid=${owner?.pid ?? "unknown"} cwd=${owner?.cwd ?? "unknown"}`);
+      waitingReported = true;
+    }
     if (owner && !processIsAlive(owner.pid)) {
       fs.rmSync(LOCK_DIR, { recursive: true, force: true });
       continue;
@@ -74,7 +94,7 @@ async function acquireLease(token) {
     }
     if (Date.now() >= deadline) {
       const ownerLabel = owner?.pid ? `pid=${owner.pid} cwd=${owner.cwd ?? "unknown"}` : "unknown owner";
-      throw new Error(`Timed out waiting for the host-wide full verify lease (${ownerLabel})`);
+      throw new Error(`Timed out waiting for test resource ${RESOURCE_KEY} (${ownerLabel})`);
     }
     await delay(POLL_INTERVAL_MS);
   }
@@ -91,7 +111,8 @@ const [action, separator, command, ...args] = process.argv.slice(2);
 if (action !== "run" || separator !== "--" || !command) usage();
 
 const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-await acquireLease(token);
+const alreadyHeld = process.env.AIFORGE_TEST_LEASE_KEY === RESOURCE_KEY;
+if (!alreadyHeld) await acquireLease(token);
 
 let child;
 let receivedSignal = null;
@@ -105,7 +126,7 @@ process.once("SIGTERM", () => forwardSignal("SIGTERM"));
 try {
   child = spawn(command, args, {
     cwd: process.cwd(),
-    env: { ...process.env, AIFORGE_VERIFY_LEASE_HELD: "1" },
+    env: { ...process.env, AIFORGE_TEST_LEASE_KEY: RESOURCE_KEY, AIFORGE_VERIFY_LEASE_HELD: "1" },
     stdio: "inherit"
   });
   const result = await new Promise((resolve, reject) => {
@@ -115,5 +136,5 @@ try {
   const signal = result.signal ?? receivedSignal;
   process.exitCode = signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : (result.code ?? 1);
 } finally {
-  releaseLease(token);
+  if (!alreadyHeld) releaseLease(token);
 }

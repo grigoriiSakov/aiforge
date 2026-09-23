@@ -30,14 +30,10 @@ After Rule preflight, **before the first code change**:
 
 1. Extract every bullet from `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`.
 2. Extract manifesto and workflow-gate constraints that apply to the touched scope.
-3. Add `## Project Rules Compliance` to `progress.md` — one line per rule:
-   - `- [ ] <rule text> — evidence: pending`
-4. On every step transition and before `/review` handoff:
-   - re-read `.ai/rules/project-profile.mdc`
-   - update each line to `[x]` with concrete evidence (`file:line`, test, command) or `N/A (reason)` if truly out of scope
-5. An unchecked applicable rule or a known violation blocks progress — fix code or update the plan first; do not hand off to review with open violations.
+3. Before `/review` handoff, re-read `.ai/rules/project-profile.mdc` and pass concrete code/test evidence for applicable rules to the reviewer.
+4. A known rule violation blocks progress — fix code or update the OpenSpec change first.
 
-If `## Project-Specific Rules` is empty, still record explicit compliance checks for manifesto, `ai.config.yaml`, and workflow gates in `## Project Rules Compliance`.
+If `## Project-Specific Rules` is empty, still check manifesto, `ai.config.yaml`, and workflow gates.
 
 ## Mandatory protocol
 
@@ -59,16 +55,9 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
 {% if minimalism_enabled and minimalism_level != "off" %}
 8a. **Before the first code change**, re-run the minimal solution ladder against the actual codebase. If a simpler approach works:
    - update `design.md` and `tasks.md` before coding
-   - record the decision in `progress.md` → `## Minimal Solution Conformance`
+   - explain the decision in the implementation handoff
 {% endif %}
-9. Before the first code change, create or update execution memory in `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` only (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments).
-9. Execute strictly step by step. On every step transition:
-   - update `## Выполнено`
-   - update `## Текущий шаг`
-   - update `## Дальше`
-   - update `## Spec Conformance`
-   - update `## Project Rules Compliance` (per-rule pass/N/A with evidence)
-   - append short decisions to `## Решения по ходу`
+9. Execute step by step against the selected OpenSpec `tasks.md`; update its checkboxes as implementation and checks finish. For an orchestrated run, record check results and a concise handoff note in run JSON.
 10. Implement abstraction-first **and** minimal-solution aligned:
    - prefer extending existing abstractions over introducing parallel branches
    - do not add a new abstraction layer with one implementation (see `.ai/rules/minimal-solution.mdc`)
@@ -91,7 +80,7 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
    - default to the smallest credible test scope that covers the touched behavior
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
-   - if an orchestrator run has `Claimed Write Scope` and full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails only outside that scope, record command output + rationale in `progress.md` and still attach scoped green evidence for the task; do not stall review solely on repo-wide red (orchestrator skill defines the bar)
+   - if full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails outside the changed behavior, pass command output and path-level rationale to review; do not hide residual repo risk
 14. If implementation drifts from the source request or OpenSpec artifacts:
    - either fix the code
    - or update the OpenSpec change first with `/opsx:update`
@@ -121,7 +110,7 @@ If `## Project-Specific Rules` is empty, still record explicit compliance checks
 ## Do not do this
 
 - Do not silently invent extra scope.
-- Do not write a long diary instead of a progress artifact.
+- Do not write a long execution diary; keep the OpenSpec tasks and run evidence concise.
 - Do not bypass canonical tasks with direct stack commands in prompts or status updates.
 - Do not ignore reusable code that was already discoverable through local code reading.
 - Do not solve growing complexity with another layer of ad-hoc `if/else`.

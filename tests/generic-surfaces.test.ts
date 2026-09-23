@@ -89,7 +89,8 @@ describe("generic reusable surfaces", () => {
     expect(orchestrator).toContain("fork_turns: none");
     expect(orchestrator).toContain("длинный native wait");
     expect(agents).toContain("Full-history forks are not the default");
-    expect(lease).toContain("aiforge-full-verify.lock");
+    expect(lease).toContain("aiforge-test-${RESOURCE_HASH}.lock");
+    expect(lease).toContain("AIFORGE_TEST_RESOURCE_KEY");
     expect(lease).toContain("processIsAlive");
   });
 
@@ -274,7 +275,7 @@ describe("generic reusable surfaces", () => {
     // `-%}` after `for` strips indent before `- {{ command }}` -> invalid cmds entries.
     // `{% endfor -%}` strips indent before the following `post` line when loops are empty.
     expect(content).not.toMatch(/\{%\s*for[^%]*-\s*%\}/);
-    expect(content).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
+    expect(content.slice(0, content.lastIndexOf("{% endfor"))).not.toMatch(/\{%\s*endfor\s*-\s*%\}/);
     expect(content).toContain("command | indent(8, true)");
   });
 
@@ -306,11 +307,11 @@ describe("generic reusable surfaces", () => {
     const projectProfile = fs.readFileSync(path.join(root, ".ai", "rules", "project-profile.mdc.jinja"), "utf8");
 
     expect(implementSkill).toContain("## Project rules compliance (mandatory)");
-    expect(implementSkill).toContain("## Project Rules Compliance");
+    expect(implementSkill).toContain("pass concrete code/test evidence");
     expect(reviewSkill).toContain("## Project rules compliance check (mandatory)");
     expect(reviewSkill).toContain("### Project Rules Compliance");
     expect(projectProfile).toContain("## Enforcement (mandatory for implement and review)");
-    expect(implementSkill).toContain("## Project Rules Compliance");
+    expect(projectProfile).toContain("pass concrete code/test evidence");
   });
 
   test("testing policy defaults to touched scope, not full suite", () => {

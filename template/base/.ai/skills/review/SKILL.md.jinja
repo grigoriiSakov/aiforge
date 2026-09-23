@@ -31,7 +31,7 @@ Before any clean verdict, explicitly audit:
 1. Every bullet in `.ai/rules/project-profile.mdc` → `## Project-Specific Rules`
 2. Applicable manifesto non-negotiables from `{{ manifesto_path }}`
 3. Applicable workflow gates from `.ai/rules/workflow-gates.mdc` for the touched scope
-4. Mandatory `## Project Rules Compliance` in `progress.md` — cross-check every claim against diff and evidence; missing or incomplete progress blocks a clean verdict
+4. The implementation evidence and worktree diff — cross-check every rule claim; missing evidence blocks a clean verdict
 
 Required output section in every review (before summary):
 
@@ -67,14 +67,14 @@ Severity mapping into main findings:
 - `delete` speculative code in scope → **medium**
 - `shrink` / advisory only → **low** or note in summary
 
-A clean verdict is **forbidden** while a **medium+** complexity finding remains unaddressed or undocumented as accepted debt in `progress.md`.
+A clean verdict is **forbidden** while a **medium+** complexity finding remains unaddressed or undocumented as accepted debt in OpenSpec.
 {% endif %}
 
 ## Mandatory protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
 2. Use model tier `{{ agent_model_review }}` (`.ai/reference/model-profiles.md`); in `orchestrator-delegate` mode stay lean — no orchestrator runtime mutations.
-3. Read the selected `openspec/changes/<change-id>/` and `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`. Run `openspec validate <change-id>` before a clean verdict.
+3. Read the selected `openspec/changes/<change-id>/` and orchestrator run JSON when present. Run `openspec validate <change-id>` before a clean verdict.
 4. When available, inspect evidence for:
    - `{{ task_command }} {{ task_lint_name }}`
    - `{{ task_command }} {{ task_test_name }}`
@@ -84,15 +84,15 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
    - default expectation is scoped tests for the behavior that changed
    - do not require a full project run unless the user explicitly asked for it, repository rules require it, or the change is too broad for scoped evidence
 
-**Orchestrator / repo-wide lint-verify:** If the issue is orchestrator-managed and `progress.md` documents that full `{{ task_command }} {{ task_lint_name }}` or `{{ task_command }} {{ task_verify_name }}` is red **only** outside `Claimed Write Scope`, do not block the review loop on that alone: validate the OOS justification (claimed paths vs failure locations, logs). Scoped evidence for the change must remain credible. If the split is honest and in-scope work is complete, sign off clean for the issue scope and state **residual risk** (repo-wide red) explicitly in the summary. If failures actually touch claimed paths, that is a finding or a forced return to implement — not an OOS waiver.
+**Orchestrator / repo-wide lint-verify:** If full `{{ task_command }} {{ task_lint_name }}` or `{{ task_command }} {{ task_verify_name }}` is red outside the changed behavior, validate the path-level explanation and logs. Scoped evidence must remain credible. State residual repo risk explicitly. Failures that touch changed behavior are findings.
 
 6. Review not only the diff, but also:
    - proposal scope and explicit non-goals
    - delta requirements and scenarios
    - design decisions, invariants, migration, and rollback
    - tasks-to-requirements and verification mapping
-   - `Spec Conformance`
-   - `Project Rules Compliance` in `progress.md` and the mandatory `### Project Rules Compliance` table in this review output
+   - spec conformance from OpenSpec tasks and the diff
+   - the mandatory `### Project Rules Compliance` table in this review output
 7. Review for completion, not just local code quality:
    - confirm every requirement in the spec is implemented or explicitly marked as non-goal/follow-up
    - confirm every planned item that should be done in this task is actually done
@@ -127,22 +127,22 @@ A clean verdict is **forbidden** while a **medium+** complexity finding remains 
 
 Use when the parent `/orchestrator` launched this run as a **separate** review subagent immediately after implementation.
 
-- Read only the assigned issue's selected OpenSpec change, `progress.md`, and diff/evidence from the orchestrator worktree path in the prompt.
+- Read only the assigned issue's selected OpenSpec change, run JSON, and diff/evidence from the orchestrator worktree path in the prompt.
 - Honor parent-provided `review_depth: simple|full`.
 - If `review_depth` is missing, infer it from the rules below and state the inference in the YAML `review_depth` field.
-- `simple` review is allowed only for small local changes: <=2 claimed files, no dependency/config/runtime/process-layer/security/API/schema/concurrency/migration/architecture impact, clear scoped evidence, no unresolved plan ambiguity, and no previous blocking review.
+- `simple` review is allowed only for small local changes: <=2 changed files, no dependency/config/runtime/process-layer/security/API/schema/concurrency/migration/architecture impact, clear scoped evidence, no unresolved OpenSpec ambiguity, and no previous blocking review.
 - Escalate to `full` immediately if the diff or artifacts violate any simple-review precondition; do not run both passes.
 - In `simple`, skip broad architecture/process sweeps beyond touched files and mandatory project-rule checks; focus on changed behavior, obvious regressions, evidence credibility, and rule compliance for touched scope.
 - In `full`, run the complete checklist below, including artifact quality, process/compliance drift, architecture/spec completion, and OOS waiver validation.
 - Do **not** call `orchestrator-state.mjs`, `review-state.mjs`, or Linear MCP (no state transitions, no comment sync).
-- Do **not** run full-project `{{ task_command }} {{ task_verify_name }}` or the full test suite; use scoped evidence from `progress.md` only.
+- Do **not** run full-project `{{ task_command }} {{ task_verify_name }}` or the full test suite; use scoped evidence from the run and implementation handoff.
 - Do **not** start another implement loop yourself; return a verdict to the parent orchestrator only.
 - Stay read-only; minimal context — no re-implementation.
 - On the closure pass, inspect only unresolved findings and the post-fix delta from the recorded handoff baseline; do not repeat the broad initial review.
 - **Single gate (default):** when orchestrator `auditGate` is `never`, you also cover the former audit checklist:
   - workflow rule compliance (`.ai/rules/*`, gates, worktree/write path)
   - **project rules compliance** — per-rule `pass|fail|N/A` for every bullet in `## Project-Specific Rules` plus applicable manifesto/gate constraints
-  - plan/progress artifact quality (markers, Fix Loop, scoped evidence documented, `## Project Rules Compliance` present and accurate)
+  - OpenSpec and run evidence quality (task completion, scoped checks, review handoff)
   - dangerous or out-of-contract commands (full suite when only scoped allowed, edits outside worktree)
   - architecture/process drift vs manifesto for claimed paths
 
@@ -175,5 +175,5 @@ orchestrator_review_verdict:
 - Open questions second.
 - Brief summary last.
 - If no findings exist, say so explicitly and mention residual risk.
-- A clean verdict is valid only when the task is 100% complete against the source spec and plan **within the effective scope** (orchestrator: `Claimed Write Scope` + honest OOS documentation when full lint/verify stays red outside it).
+- A clean verdict is valid only when the task is complete against the source request and selected OpenSpec change, with honest residual risk when full lint/verify stays red outside the changed behavior.
 - `high`, `critical`, or `medium` findings require an implement → scoped test + lint fix loop before the task can be considered complete; repeat review only when required by the fix risk.

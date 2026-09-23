@@ -58,7 +58,6 @@ function getCurrentOrchestratorSummary() {
   const activeStatuses = new Set(["reserved", "building", "testing", "fix-loop", "reviewing"]);
   const branchName = currentBranch();
   const orderedIssueIds = [
-    ...Object.keys(registry.activeReservations ?? {}),
     ...Object.keys(registry.runs ?? {})
   ];
 

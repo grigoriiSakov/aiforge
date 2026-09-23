@@ -31,39 +31,35 @@ Pipeline owner for:
 ## Mandatory protocol
 
 1. Read `{{ manifesto_path }}` and `ai.config.yaml`.
-2. Treat the selected OpenSpec change and the configured runtime `progress.md` as the planning/execution contracts.
+2. Treat the selected OpenSpec change and orchestrator run JSON as the planning/execution contracts.
 3. Read `.ai/reference/orchestrator-claimed-scope-template.md`.
 4. Use `node .ai/runtime/orchestrator-state.mjs` as the source of truth for:
-   - reservation
-   - queue / conflict state
+   - issue run registration
    - worktree assignment
    - implement / review / test transitions
    - terminal release
 5. Accept exactly one issue ID per orchestrator run.
-6. Do not start implementation until `openspec validate <change-id>` passes and `design.md` contains machine-readable `Claimed Write Scope`.
+6. Do not start implementation until `openspec validate <change-id>` passes. An affected-paths hint in `design.md` is optional.
    - Before declaring readiness, verify provider/source assumptions and likely cross-module seams.
-   - If implementation discovers missing scope, bundle all related files/seams into one amendment request for that attempt; do not request one path at a time.
+   - If implementation discovers a new contract or dependency, update the selected OpenSpec change before continuing.
 7. Ensure the workflow keeps a single source of truth for:
    - plan memory: `openspec/changes/<change-id>/` (proposal, delta specs, design, and tasks)
-   - execution memory: `{{ plan_progress_runtime_root }}/ISSUE-ID/progress.md` (local `PROGRESS::ISSUE-ID` artifact; never mirror progress body into Linear comments)
-   - orchestration memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
+   - execution memory: `.ai/runtime/orchestrator/runs/ISSUE-ID.json`
 {% if linear_enabled %}
    - tracker issue **state** only via Linear MCP (plan-ready / active / review-ready); see item 28
 {% endif %}
 8. Register orchestrator admission through:
    - `node .ai/runtime/orchestrator-state.mjs init`
-   - for a new change that must be authored in isolation: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --scope-json '<json>'`
-   - for an existing change: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --change-id <change-id> --scope-json '<json>'`
+   - for a new change that must be authored in isolation: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID`
+   - for an existing change: `node .ai/runtime/orchestrator-state.mjs submit --issue ISSUE-ID --change-id <change-id>`
+   - optional `--scope-json '<json>'` provides review context; it does not lock files
      По умолчанию ветка для будущего worktree берётся с **текущего checkout** на момент `start-worktree`.
      Не передавай `--base-branch`, если человек явно не попросил закрепить конкретную базу или если issue/OpenSpec design не требует pinned base branch.
-9. Interpret submit result strictly:
-   - `reserved` -> create the isolated worktree
-   - `queued` -> stop; a related issue is still active
-   - `blocked-by-conflict` -> stop; direct file/shared-surface overlap exists
+9. `reserved` means the issue is registered; create its isolated worktree. Resolve file conflicts when integrating into the target branch.
 10. Create the isolated worktree only through:
     - `node .ai/runtime/orchestrator-state.mjs start-worktree --issue ISSUE-ID`
     - when submit omitted `--change-id`, create and validate `openspec/changes/<change-id>/` inside the assigned worktree, then run `node .ai/runtime/orchestrator-state.mjs bind-change --issue ISSUE-ID --change-id <change-id>` from the orchestrator control checkout that owns the run registry; implementation remains blocked until binding succeeds
-11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов и файлов из `Claimed Write Scope` выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
+11. **Write path contract:** после появления `worktreePath` у run все правки кода/тестов выполнять **только** внутри `{worktreePath}/...` (абсолютный путь из `status` или `runs/ISSUE-ID.json`). Не дублировать те же изменения в основном checkout Cursor, пока человек явно не попросит merge/синхронизацию.
     - Implementation phase entrypoint: use the installed `openspec-apply-change` skill for the exact `<change-id>` and follow `openspec instructions apply --change <change-id>` inside that worktree.
     - Do not replace native skill delegation with a shell-launched agent CLI or PTY polling.
 12. After every side effect, re-check the next machine action through:
@@ -89,12 +85,12 @@ Pipeline owner for:
 
 ## Test strategy (token guard)
 
-20. **Дешёвый handoff перед review:** после implementation запусти только узкие canonical scoped commands с явными targets; оба entrypoint fail-closed без targets. Обнови `progress.md`, затем выполни `record-handoff`. Полный suite и simplify-review здесь запрещены.
-21. **Scoped в handoff и fix-loop:** lint/test только по `Claimed Write Scope` и активному шагу плана (filter, один файл, команда из plan `Verify:`). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
+20. **Дешёвый handoff перед review:** после implementation запусти только узкие canonical scoped commands с явными targets; оба entrypoint fail-closed без targets. Выполни `record-handoff --note` с кратким результатом. Полный suite и simplify-review здесь запрещены.
+21. **Scoped в handoff и fix-loop:** lint/test по изменённому поведению и проверкам из OpenSpec `tasks.md` (filter, один файл, конкретный target). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
 22. Запись scoped evidence и handoff:
     - `record-test --issue ISSUE-ID --result pass|fail --scope scoped`
     - `record-lint --issue ISSUE-ID --result pass|fail --scope scoped`
-    - `record-handoff --issue ISSUE-ID --progress-path {{ plan_progress_runtime_root }}/ISSUE-ID/progress.md`
+    - `record-handoff --issue ISSUE-ID --note "scoped commands and result summary"`
 23. После `record-handoff` выполни `set-status --status reviewing`. Clean/low read-only review на том же fingerprint переиспользует scoped evidence и сразу переводит run в `pre-finalize`.
 24. **Полный suite — один раз в конце:** только после clean/low review gate и зелёного scoped test + lint, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
     - `{{ execution_verify_entrypoint }}` (full)
@@ -113,8 +109,8 @@ Pipeline owner for:
    - `scoped test/lint` -> canonical scoped test + lint evidence (п. 20–23)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
    - `full verify` -> canonical full verification after a clean/low review (п. 24)
-   - **Quality bar (in-scope):** scoped test и lint по `Claimed Write Scope` должны быть green до review handoff; после clean review их fingerprint переиспользуется для единственного full verify.
-   - **Repo-wide red вне скоупа:** не блокирует review gate при честной записи OOS в `progress.md` + scoped evidence (как раньше).
+   - **Quality bar (in-scope):** scoped test и lint по изменённому поведению должны быть green до review handoff; после clean review их fingerprint переиспользуется для единственного full verify.
+   - **Repo-wide red вне скоупа:** требует конкретного объяснения и оценки reviewer; scoped green сам по себе не закрывает риск.
    - **«Старые» ошибки внутри скоупа:** не отмазка.
 
 ## OpenSpec terminal gate
@@ -133,10 +129,10 @@ Terminal sequence:
 2. Invoke `/opsx:sync <change-id>` using the installed `openspec-sync-specs` skill so accepted delta requirements become current specs before archival.
 3. Run `openspec archive <change-id> --yes`. Archive is non-interactive here because review, full verify, and sync already passed.
 4. Confirm the active change no longer appears in `openspec list` and its dated archive exists under `openspec/changes/archive/`.
-5. Record sync/archive evidence in `progress.md` under `## OpenSpec Finalization`.
+5. Record sync/archive result in the terminal handoff and verify the archived change before release.
 6. Only now release the orchestrator runtime with terminal status `done` and perform tracker finalization.
 
-Do not release the orchestrator run when sync or archive fails. Keep runtime status `awaiting-finalize`, record the exact failure in `progress.md`, and stop for correction or human decision. Never use `--no-validate` during automatic finalization.
+Do not release the orchestrator run when sync or archive fails. Keep runtime status `awaiting-finalize`, report the exact failure, and stop for correction or human decision. Never use `--no-validate` during automatic finalization.
 
 ## Review gate + models
 
@@ -155,17 +151,17 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
     - запрещено превращать model hint в shell launch (`codex exec`, `claude`, `cursor-agent`) или PTY polling.
     - если `warnings` или `skipReason` про Cursor/Codex mismatch — **стоп**, не угадывай модель; поправь `agents.runtimeModels` или `AIFORGE_ACTIVE_RUNTIME`.
 27. После implementation выполни bounded scoped handoff из п. 20–23 и только затем `set-status --status reviewing`.
-    - **review-depth triage (обязательно до делегирования):** модель-оркестратор классифицирует изменение по diff + `Claimed Write Scope` + `Execution Contract`, выбирает ровно один режим и записывает выбор в `progress.md` → `### Review gate`:
-      - `simple` — только если все признаки одновременно верны: <=2 claimed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, план без открытых спорных решений.
+    - **review-depth triage (обязательно до делегирования):** модель-оркестратор классифицирует изменение по diff + OpenSpec + `Execution Contract`, выбирает ровно один режим и передаёт причину reviewer:
+      - `simple` — только если все признаки одновременно верны: <=2 changed files, локальный diff, нет новых dependency/config/runtime surfaces, нет process-layer/security/API/schema/concurrency/migration/architecture изменений, scoped evidence прямо покрывает изменённое поведение, OpenSpec без открытых спорных решений.
       - `full` — если любой признак риска: process-layer (`.ai/`, hooks, config, AGENTS), security/auth/data integrity, public API/schema/DB, multi-module behavior, new dependency/abstraction, migration, concurrency, performance-sensitive path, unclear spec coverage, OOS waiver, previous `medium|high|critical`, `after_fix_re_review: required`, или оркестратор сомневается.
       - default при сомнении — `full`; запрещено запускать одновременно `simple` и `full` review для одного gate.
-    - **ровно один initial subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change / `progress.md`.
+    - **ровно один initial subagent review:** `.ai/skills/review/SKILL.md`, режим `orchestrator-delegate`, `review_depth: simple|full`, issue ID, `worktreePath`, selected OpenSpec change and run JSON.
     - Делегируй с `fork_turns: none` или минимальным bounded history; в prompt передай точные artifact paths и fingerprint. Full-history fork запрещён по умолчанию.
     - Ожидай один раз через длинный native wait до completion/message/user steering; не делай heartbeat через частые list/status вызовы.
 {% if orchestrator_audit_gate == "always" %}
     - **дополнительно audit** (параллельно с review): `.ai/skills/audit/SKILL.md`, `orchestrator-delegate`; перед делегированием — `model-hint --role audit` (без hardcoded runtime).
 {% elif orchestrator_audit_gate == "process-layer-only" %}
-    - **audit только если** в `Claimed Write Scope` JSON `touches_process_layer: true` **или** есть claimed paths под `.ai/`, `.cursor/`, `.codex/`, `.claude/`, `.agent/`, `.agents/`, либо process files (`ai.config.yaml`, `AGENTS.md`, …): тогда второй subagent audit параллельно review; иначе **не** запускай audit.
+    - **audit только если** фактический diff затрагивает `.ai/`, `.cursor/`, `.codex/`, `.claude/`, `.agent/`, `.agents/` или process files (`ai.config.yaml`, `AGENTS.md`, …): тогда второй subagent audit параллельно review; иначе **не** запускай audit.
 {% else %}
     - **отдельный audit subagent не запускать** — process/compliance checks входят в review-delegate (см. review skill).
 {% endif %}
@@ -183,7 +179,7 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
       → `pre-finalize` / full suite (п. 24) **без** нового review subagent;
     - **`require-rereview`**: сомнение, partial fix, `after_fix_re_review: required`, security/architecture →  
       `record-fix-resolution --decision require-rereview` → затем **один delta-only closure** review по unresolved findings и post-fix diff (п. 27);
-    - зафиксируй выбор в `progress.md` → `### Fix resolution`;
+    - зафиксируй выбор через `record-fix-resolution --note`;
     - второй blocking verdict — human gate; третий автоматический review запрещён.
 30. Re-check managed runtime state before stopping the turn.
 {% if orchestrator_audit_gate != "never" %}
@@ -198,21 +194,18 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
 31. Do not drive Linear issue states via MCP; rely on local artifacts and orchestrator JSON.
 {% endif %}
 
-## Conflict policy
+## Integration policy
 
-- Direct overlap in `paths` or `shared_surfaces` is a hard conflict.
-- Explicit `related_issues` also serialize execution, even without path overlap.
-- Directory claims are invalid; scope must be file-level exact.
-- Process-layer changes must be serialized unless the claimed files are explicitly non-overlapping.
+- File overlap does not block parallel work in separate worktrees.
+- Explicit dependencies in the initiative manifest determine ordering when one change needs another's accepted result.
+- Before integration, update the base, resolve Git and semantic conflicts, and rerun affected checks on the integrated tree.
 
 ## Stop conditions
 
 - No source request / issue contract
 - No valid OpenSpec change for non-trivial work
-- Missing or invalid `Claimed Write Scope`
 - Drift between source request, plan, and implementation
 - Attempt to implement outside the assigned orchestrator worktree
-- Runtime state is `queued` or `blocked-by-conflict`
 - `graph next` → `await_human_decision` (fix-loop limit or full-suite fail) without user answer
 - Missing scoped verify evidence before review
 - Missing clean review verdict
