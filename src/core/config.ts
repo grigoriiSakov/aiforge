@@ -88,6 +88,7 @@ export function createConfig(params: {
       worktreeRoot: `~/worktrees/${params.projectSlug}`,
       branchPrefix: "agent/",
       maxReviewIterations: 1,
+      fullVerifyPolicy: "required",
       auditGate: "never",
       simplifyGate: "never"
     },
@@ -217,6 +218,7 @@ export function buildCopierAnswers(config: ProjectConfig): Record<string, unknow
     orchestrator_worktree_root: config.orchestrator.worktreeRoot,
     orchestrator_branch_prefix: config.orchestrator.branchPrefix,
     orchestrator_max_review_iterations: config.orchestrator.maxReviewIterations,
+    orchestrator_full_verify_policy: config.orchestrator.fullVerifyPolicy,
     orchestrator_audit_gate: config.orchestrator.auditGate,
     orchestrator_simplify_gate: config.orchestrator.simplifyGate,
     minimalism_enabled: config.minimalism.enabled,
@@ -554,6 +556,7 @@ function normalizeConfig(config: ProjectConfig): ProjectConfig {
       ...defaults.orchestrator,
       ...config.orchestrator,
       maxReviewIterations: 1,
+      fullVerifyPolicy: config.orchestrator?.fullVerifyPolicy === "on-request" ? "on-request" : "required",
       auditGate: normalizeOrchestratorAuditGate(config.orchestrator?.auditGate),
       simplifyGate: normalizeOrchestratorSimplifyGate(config.orchestrator?.simplifyGate)
     },

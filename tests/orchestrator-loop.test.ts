@@ -26,7 +26,7 @@ function initGitRepo(repoRoot: string): void {
   git(["commit", "-m", "init"]);
 }
 
-function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2"): string {
+function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2", fullVerifyPolicy = "required"): string {
   const runtimeDir = path.join(repoRoot, ".ai", "runtime");
   fs.mkdirSync(runtimeDir, { recursive: true });
   fs.copyFileSync(
@@ -52,7 +52,8 @@ function renderOrchestratorRuntime(repoRoot: string, maxIterations = "2"): strin
     .readFileSync(templatePath, "utf8")
     .replaceAll("{{ orchestrator_worktree_root }}", path.join(repoRoot, "worktrees"))
     .replaceAll("{{ orchestrator_branch_prefix }}", "agent/")
-    .replaceAll("{{ orchestrator_max_review_iterations }}", maxIterations);
+    .replaceAll("{{ orchestrator_max_review_iterations }}", maxIterations)
+    .replaceAll("{{ orchestrator_full_verify_policy }}", fullVerifyPolicy);
   const runtimePath = path.join(runtimeDir, "orchestrator-state.mjs");
   fs.writeFileSync(runtimePath, rendered, { mode: 0o755 });
   return runtimePath;
@@ -297,6 +298,33 @@ describe("orchestrator loop guards", () => {
       runNodeScript(runtimePath, ["approve-fix-loop", "--issue", "APP-9"], repoRoot)
     );
     expect(approved.status).toBe("fix-loop");
+  });
+
+  test("on-request policy finalizes from scoped evidence and runs full only after explicit request", () => {
+    const repoRoot = makeTempRepo("aiforge-orch-on-request-");
+    initGitRepo(repoRoot);
+    const runtimePath = renderOrchestratorRuntime(repoRoot, "2", "on-request");
+    runNodeScript(runtimePath, ["init"], repoRoot);
+    submitIssue(runtimePath, repoRoot, "APP-9");
+    prepareForReview(runtimePath, repoRoot, "APP-9");
+
+    const afterReview = JSON.parse(
+      runNodeScript(runtimePath, ["record-review", "--issue", "APP-9", "--result", "clean"], repoRoot)
+    );
+    expect(afterReview.status).toBe("awaiting-finalize");
+    const graph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-9"], repoRoot));
+    expect(graph.action).toBe("finalize_openspec");
+
+    const afterRequest = JSON.parse(
+      runNodeScript(runtimePath, ["request-full-verify", "--issue", "APP-9"], repoRoot)
+    );
+    expect(afterRequest.status).toBe("pre-finalize");
+    const fullGraph = JSON.parse(runNodeScript(runtimePath, ["graph", "next", "APP-9"], repoRoot));
+    expect(fullGraph.action).toBe("run_full_verify");
+    const afterFull = JSON.parse(
+      runNodeScript(runtimePath, ["record-test", "--issue", "APP-9", "--result", "pass", "--scope", "full"], repoRoot)
+    );
+    expect(afterFull.status).toBe("awaiting-finalize");
   });
 
   test("clean review reuses unchanged handoff evidence before full verification", () => {

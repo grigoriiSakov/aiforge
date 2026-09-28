@@ -76,7 +76,7 @@ If `## Project-Specific Rules` is empty, still check manifesto, `ai.config.yaml`
    - `{{ task_command }} {{ task_test_name }}`
    - `{{ task_command }} {{ task_verify_name }}`
 13. Testing policy:
-   - under `/orchestrator`, run **scoped** tests only until the orchestrator runs the single end-of-pipeline full verify (see `.ai/reference/orchestrator-test-strategy.md`)
+   - under `/orchestrator`, run **scoped** tests for the affected behavior{% if orchestrator_full_verify_policy == "required" %} until the orchestrator runs the single end-of-pipeline full verify{% endif %} (see `.ai/reference/orchestrator-test-strategy.md`)
    - default to the smallest credible test scope that covers the touched behavior
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
@@ -100,7 +100,7 @@ If `## Project-Specific Rules` is empty, still check manifesto, `ai.config.yaml`
    - check off completed entries in `tasks.md` as evidence is produced
    - Use `/opsx:update <change-id>` when implementation changes the approved artifacts; update proposal/specs/design/tasks before continuing code work
    - run `openspec validate <change-id>` before review handoff
-   - Do not run `/opsx:sync` or archive the change from `/implement`; review and final full verification have not completed yet
+   - Do not run `/opsx:sync` or archive the change from `/implement`; review{% if orchestrator_full_verify_policy == "required" %} and final full verification{% endif %} have not completed yet
 {% if linear_enabled %}
 18. When execution starts and Linear MCP is available, move the issue workflow state to `{{ tracker_status_active }}` per tracker rules (state only — no progress comment sync).
 {% else %}

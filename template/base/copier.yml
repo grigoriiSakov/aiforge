@@ -78,6 +78,13 @@ orchestrator_max_review_iterations:
   type: int
   default: 1
 
+orchestrator_full_verify_policy:
+  type: str
+  default: required
+  choices:
+    - required
+    - on-request
+
 orchestrator_audit_gate:
   type: str
   default: never

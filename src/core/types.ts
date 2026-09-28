@@ -148,6 +148,7 @@ export interface ProjectConfig {
     worktreeRoot: string;
     branchPrefix: string;
     maxReviewIterations: number;
+    fullVerifyPolicy: "required" | "on-request";
     auditGate: OrchestratorAuditGate;
     simplifyGate: OrchestratorSimplifyGate;
   };

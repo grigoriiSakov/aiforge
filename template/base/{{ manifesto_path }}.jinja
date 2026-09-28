@@ -10,7 +10,7 @@
 
 ## Workflow
 
-- Canonical phases: issue -> plan -> implement -> scoped test/lint -> review -> full verify
+- Canonical phases: issue -> plan -> implement -> scoped test/lint -> review{% if orchestrator_full_verify_policy == "required" %} -> full verify{% endif %} -> finalize
 - Canonical verify task: `{{ task_command }} {{ task_verify_name }}`
 
 ## Execution Contract

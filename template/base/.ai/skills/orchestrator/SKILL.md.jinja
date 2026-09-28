@@ -1,13 +1,13 @@
 ---
 name: orchestrator
-description: Own the issue -> plan -> implement -> scoped test/lint -> review -> full verify pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
+description: Own the issue -> plan -> implement -> scoped test/lint -> review -> finalize pipeline and verify state transitions. Use when coordinating a full workflow or /orchestrator.
 ---
 
 # Orchestrator
 
 Pipeline owner for:
 
-`issue -> plan -> implement -> scoped test/lint -> review -> full verify`
+`issue -> plan -> implement -> scoped test/lint -> review{% if orchestrator_full_verify_policy == "required" %} -> full verify{% endif %} -> finalize`
 
 ## Rule preflight
 
@@ -86,12 +86,15 @@ Pipeline owner for:
 ## Test strategy (token guard)
 
 20. **Дешёвый handoff перед review:** после implementation запусти только узкие canonical scoped commands с явными targets; оба entrypoint fail-closed без targets. Выполни `record-handoff --note` с кратким результатом. Полный suite и simplify-review здесь запрещены.
-21. **Scoped в handoff и fix-loop:** lint/test по изменённому поведению и проверкам из OpenSpec `tasks.md` (filter, один файл, конкретный target). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite до clean/low review.
+21. **Scoped в handoff и fix-loop:** lint/test по изменённому поведению и проверкам из OpenSpec `tasks.md` (filter, один файл, конкретный target). **Запрещено** гонять полный `{{ task_command }} {{ task_verify_name }}` / весь проектный suite{% if orchestrator_full_verify_policy == "on-request" %} без прямого запроса пользователя{% else %} до clean/low review{% endif %}.
 22. Запись scoped evidence и handoff:
     - `record-test --issue ISSUE-ID --result pass|fail --scope scoped`
     - `record-lint --issue ISSUE-ID --result pass|fail --scope scoped`
     - `record-handoff --issue ISSUE-ID --note "scoped commands and result summary"`
-23. После `record-handoff` выполни `set-status --status reviewing`. Clean/low read-only review на том же fingerprint переиспользует scoped evidence и сразу переводит run в `pre-finalize`.
+23. После `record-handoff` выполни `set-status --status reviewing`. Clean/low read-only review на том же fingerprint переиспользует scoped evidence и сразу переводит run в {% if orchestrator_full_verify_policy == "on-request" %}`awaiting-finalize`{% else %}`pre-finalize`{% endif %}.
+{% if orchestrator_full_verify_policy == "on-request" %}
+24. **Полный suite только по прямому запросу пользователя:** после clean/low review можно завершать OpenSpec с зелёными affected tests и scoped lint. В отчёте явно укажи, что полный suite не запускался. Если пользователь попросил полный suite, выполни `node .ai/runtime/orchestrator-state.mjs request-full-verify --issue ISSUE-ID`, затем `{{ execution_verify_entrypoint }}` и `record-test --issue ISSUE-ID --result pass|fail --scope full`. При первом подозрительно постороннем failure допускается один exact rerun и после его pass один последний полный retry; следующий failure — human gate.
+{% else %}
 24. **Полный suite — один раз в конце:** только после clean/low review gate и зелёного scoped test + lint, когда `graph next` вернёт `run_full_verify` (`pre-finalize`):
     - `{{ execution_verify_entrypoint }}` (full)
     - `record-test --issue ISSUE-ID --result pass|fail --scope full`
@@ -99,6 +102,7 @@ Pipeline owner for:
     - exact pass разрешает ровно один final full retry; exact fail или второй full fail переводит в `awaiting-human-approval`
     - full fail без достоверного exact OOS target сразу переводит в human gate
     - при **pass** full — runtime переводит в `awaiting-finalize`
+{% endif %}
 25. **Лимит review:** один initial review и максимум один delta-only closure review. `orchestrator.maxReviewIterations` принудительно ограничен одной автоматической fix-итерацией; второй blocking verdict переводит в `awaiting-human-approval`.
 
 ## Phase evidence
@@ -108,8 +112,8 @@ Pipeline owner for:
    - `implement` -> `openspec-apply-change <change-id>` tasks and code changes aligned with the selected OpenSpec change
    - `scoped test/lint` -> canonical scoped test + lint evidence (п. 20–23)
    - `review` -> delegated review subagent verdict + recorded review (optional audit — п. 27)
-   - `full verify` -> canonical full verification after a clean/low review (п. 24)
-   - **Quality bar (in-scope):** scoped test и lint по изменённому поведению должны быть green до review handoff; после clean review их fingerprint переиспользуется для единственного full verify.
+{% if orchestrator_full_verify_policy == "required" %}   - `full verify` -> canonical full verification after a clean/low review (п. 24)
+{% endif %}   - **Quality bar (in-scope):** scoped test и lint по изменённому поведению должны быть green до review handoff; после clean review их fingerprint переиспользуется для {% if orchestrator_full_verify_policy == "on-request" %}finalize{% else %}единственного full verify{% endif %}.
    - **Repo-wide red вне скоупа:** требует конкретного объяснения и оценки reviewer; scoped green сам по себе не закрывает риск.
    - **«Старые» ошибки внутри скоупа:** не отмазка.
 
@@ -119,7 +123,7 @@ Run this gate exactly once, only after all of these are true:
 
 - the selected change is still present at `openspec/changes/<change-id>/`
 - review evidence is `clean` or `low`
-- the full verification result is `pass`
+- {% if orchestrator_full_verify_policy == "on-request" %}scoped affected-test and lint results are `pass` at the reviewed fingerprint{% else %}the full verification result is `pass`{% endif %}
 - orchestrator runtime status is `awaiting-finalize`
 - every required checkbox in the change `tasks.md` is complete
 
@@ -127,7 +131,7 @@ Terminal sequence:
 
 1. Run `openspec status --change <change-id>` and `openspec validate <change-id>`. Stop on incomplete artifacts, tasks, ambiguity, or validation errors.
 2. Invoke `/opsx:sync <change-id>` using the installed `openspec-sync-specs` skill so accepted delta requirements become current specs before archival.
-3. Run `openspec archive <change-id> --yes`. Archive is non-interactive here because review, full verify, and sync already passed.
+3. Run `openspec archive <change-id> --yes`. Archive is non-interactive here because review, {% if orchestrator_full_verify_policy == "on-request" %}affected verification{% else %}full verify{% endif %}, and sync already passed.
 4. Confirm the active change no longer appears in `openspec list` and its dated archive exists under `openspec/changes/archive/`.
 5. Record sync/archive result in the terminal handoff and verify the archived change before release.
 6. Only now release the orchestrator runtime with terminal status `done` and perform tracker finalization.
@@ -171,12 +175,12 @@ Do not release the orchestrator run when sync or archive fails. Keep runtime sta
       `--after-fix-rereview required|optional|not_needed` (как в вердикте).
 28. По вердиктам:
     - review `medium`/`high`/`critical`{% if orchestrator_audit_gate != "never" %} **или** audit `blocking`{% endif %} -> `record-review` (+ опционально `--after-fix-rereview required|optional|not_needed` из YAML review) -> `fix-loop` → scoped fix → **оба** `record-test` и `record-lint` с `pass` → **`graph next` → `decide_fix_loop`** (п. 29), **не** автоматический повтор review.
-    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> переиспользовать handoff evidence -> `pre-finalize` / full suite (п. 24)
+    - review `clean`/`low`{% if orchestrator_audit_gate != "never" %} и audit не `blocking`{% endif %} -> `record-review --result clean|low` -> переиспользовать handoff evidence -> {% if orchestrator_full_verify_policy == "on-request" %}`awaiting-finalize` / OpenSpec finalize{% else %}`pre-finalize` / full suite (п. 24){% endif %}
 29. **После фикса — решение оркестратора (обязательно):** см. `.ai/reference/orchestrator-fix-loop-decision.md`. Кратко:
     - прочитай `orchestrator_review_verdict` и diff; сопоставь каждый finding с правкой;
     - **`skip-rereview`** (типичный trivial fix): все findings закрыты, scoped test + lint green, локальный diff →  
       `node .ai/runtime/orchestrator-state.mjs record-fix-resolution --issue ISSUE-ID --decision skip-rereview --note "..."`  
-      → `pre-finalize` / full suite (п. 24) **без** нового review subagent;
+      → {% if orchestrator_full_verify_policy == "on-request" %}`awaiting-finalize` / OpenSpec finalize{% else %}`pre-finalize` / full suite (п. 24){% endif %} **без** нового review subagent;
     - **`require-rereview`**: сомнение, partial fix, `after_fix_re_review: required`, security/architecture →  
       `record-fix-resolution --decision require-rereview` → затем **один delta-only closure** review по unresolved findings и post-fix diff (п. 27);
     - зафиксируй выбор через `record-fix-resolution --note`;

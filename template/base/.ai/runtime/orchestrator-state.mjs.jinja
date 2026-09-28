@@ -11,6 +11,11 @@ const DEFAULT_WORKTREE_ROOT = "{{ orchestrator_worktree_root }}";
 const DEFAULT_BRANCH_PREFIX = "{{ orchestrator_branch_prefix }}";
 const MAX_AUTOMATIC_FIX_ITERATIONS = Math.min({{ orchestrator_max_review_iterations }}, 1);
 const MAX_AUTOMATIC_REVIEW_PASSES = MAX_AUTOMATIC_FIX_ITERATIONS + 1;
+const FULL_VERIFY_POLICY = "{{ orchestrator_full_verify_policy }}";
+
+function readyAfterReviewStatus() {
+  return FULL_VERIFY_POLICY === "on-request" ? "awaiting-finalize" : "pre-finalize";
+}
 
 const ACTIVE_RUN_STATUSES = new Set([
   "reserved",
@@ -321,11 +326,15 @@ function materializeBoundChange(run, worktreePath) {
 }
 
 function requirePassingTest(run) {
-  if (run.lastTestResult !== "pass" || run.lastTestScope !== "full") {
-    throw new Error("cannot finalize without passing full verify evidence");
+  if (run.lastTestResult !== "pass" ||
+      (run.lastTestScope !== "full" && !(FULL_VERIFY_POLICY === "on-request" && run.lastTestScope === "scoped"))) {
+    throw new Error("cannot finalize without passing required test evidence");
   }
   if (run.lastTestFingerprint !== currentWorkspaceFingerprint(run)) {
     throw new Error("worktree changed after the last passing test; rerun tests first");
+  }
+  if (FULL_VERIFY_POLICY === "on-request" && run.lastTestScope === "scoped") {
+    requirePassingScopedValidation(run);
   }
 }
 
@@ -383,8 +392,9 @@ function requireArchivedTerminalChange(run) {
   if (run.status !== "awaiting-finalize") {
     throw new Error(`terminal release requires status awaiting-finalize (current: ${run.status})`);
   }
-  if (run.lastTestResult !== "pass" || run.lastTestScope !== "full") {
-    throw new Error("terminal release requires recorded passing full verify evidence");
+  if (run.lastTestResult !== "pass" ||
+      (run.lastTestScope !== "full" && !(FULL_VERIFY_POLICY === "on-request" && run.lastTestScope === "scoped"))) {
+    throw new Error("terminal release requires recorded passing required test evidence");
   }
   if (!["clean", "low"].includes(run.lastReviewResult)) {
     throw new Error("terminal release requires recorded clean or low review evidence");
@@ -573,6 +583,9 @@ function commandSetStatus(args) {
   }
 
   requireTransition(run.status, nextStatus);
+  if (FULL_VERIFY_POLICY === "on-request" && nextStatus === "pre-finalize") {
+    throw new Error("full verify is on request; use request-full-verify after explicit user direction");
+  }
   if (nextStatus === "reviewing") {
     requireCurrentHandoff(run);
   }
@@ -589,6 +602,23 @@ function commandSetStatus(args) {
 
   reconcilePendingRuns(registry);
 
+  updateRegistryForRun(registry, run);
+  saveRegistry(registry);
+  process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+}
+
+function commandRequestFullVerify(args) {
+  const issueId = requireOption(args, "--issue");
+  const registry = loadRegistry();
+  const run = loadRun(issueId);
+  if (!run || run.status !== "awaiting-finalize" || FULL_VERIFY_POLICY !== "on-request") {
+    throw new Error("request-full-verify requires an on-request run awaiting finalization");
+  }
+  requirePassingScopedValidation(run);
+  requireCleanReview(run);
+  run.status = "pre-finalize";
+  run.currentStep = "user-requested-full-verify";
+  saveRun(run);
   updateRegistryForRun(registry, run);
   saveRegistry(registry);
   process.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
@@ -693,8 +723,8 @@ function commandRecordTest(args) {
     run.lastLintFingerprint === run.lastTestFingerprint
   ) {
     requirePassingScopedValidation(run);
-    run.status = "pre-finalize";
-    run.currentStep = currentStep ?? "run-full-verify";
+    run.status = readyAfterReviewStatus();
+    run.currentStep = currentStep ?? (FULL_VERIFY_POLICY === "on-request" ? "finalize-after-affected-tests" : "run-full-verify");
   } else if (currentStep) {
     run.currentStep = currentStep;
   }
@@ -740,8 +770,8 @@ function commandRecordLint(args) {
     run.lastTestFingerprint === run.lastLintFingerprint
   ) {
     requirePassingScopedValidation(run);
-    run.status = "pre-finalize";
-    run.currentStep = currentStep ?? "run-full-verify";
+    run.status = readyAfterReviewStatus();
+    run.currentStep = currentStep ?? (FULL_VERIFY_POLICY === "on-request" ? "finalize-after-affected-tests" : "run-full-verify");
   } else if (currentStep) {
     run.currentStep = currentStep;
   }
@@ -783,8 +813,8 @@ function commandRecordReview(args) {
 
   if (["clean", "low"].includes(result)) {
     if (hasCurrentScopedValidation(run) && run.handoffFingerprint === run.lastReviewFingerprint) {
-      run.status = "pre-finalize";
-      run.currentStep = currentStep ?? "run-full-verify";
+      run.status = readyAfterReviewStatus();
+      run.currentStep = currentStep ?? (FULL_VERIFY_POLICY === "on-request" ? "finalize-after-affected-tests" : "run-full-verify");
     } else {
       run.status = "testing";
       run.currentStep = currentStep ?? "run-scoped-validation";
@@ -1106,7 +1136,7 @@ function commandRecordFixResolution(args) {
   if (decision === "skip-rereview") {
     run.lastReviewResult = "low";
     run.lastReviewFingerprint = currentWorkspaceFingerprint(run);
-    run.status = "pre-finalize";
+    run.status = readyAfterReviewStatus();
     run.currentStep = "fix-resolved-without-rereview";
   } else {
     run.handoffFingerprint = currentWorkspaceFingerprint(run);
@@ -1371,6 +1401,9 @@ function main() {
       return;
     case "set-status":
       commandSetStatus(args);
+      return;
+    case "request-full-verify":
+      commandRequestFullVerify(args);
       return;
     case "record-test":
       commandRecordTest(args);

@@ -24,7 +24,7 @@ Canonical phases:
 - `implement`
 - `scoped test/lint`
 - `review`
-- `full verify`
+- `{% if orchestrator_full_verify_policy == "on-request" %}finalize (full verify on request){% else %}full verify{% endif %}`
 
 ## Runtime Surfaces
 
@@ -67,6 +67,7 @@ Canonical phases:
 - {{ note }}
 {% endfor -%}
 {% endif -%}
+{% if "## Goal-Mode Multi-Task Contract" not in agents_markdown %}
 
 ## Goal-Mode Multi-Task Contract
 
@@ -78,7 +79,8 @@ Canonical phases:
 - Launch workers with no inherited turns or the smallest bounded positive history supported by the host; pass exact manifest/OpenSpec/orchestrator paths as the evidence package. Full-history forks are not the default.
 - Wait on native completion/message events with one long wait. Do not heartbeat with repeated status/list calls. At a human gate, report once and stop that dependency edge.
 - Treat configured worker/review model names as native-tool preferences. If a model is unavailable, use a compatible native or inherited model and record the fallback.
-- Do not launch dependent work until the prior change has clean/accepted review evidence, full verification, terminal OpenSpec sync/archive, and its accepted commit is integrated into the next worker's base.
+- Do not launch dependent work until the prior change has clean/accepted review evidence, {% if orchestrator_full_verify_policy == "on-request" %}affected verification{% else %}full verification{% endif %}, terminal OpenSpec sync/archive, and its accepted commit is integrated into the next worker's base.
 - Rehydrate initiative state from `.ai/context/initiatives/<slug>/issues-manifest.json`, the selected OpenSpec change, and orchestrator run JSON. Do not create a second Goal ledger.
 - Pause at repository, conflict, approval, live MR, deployment, failed full-suite, and explicit human-decision boundaries.
-- Before review, record passing scoped test/lint and a handoff note for the current fingerprint. Run full verify only after a clean/low review. Automatic review is capped at initial review plus one delta-only closure review.
+- Before review, record passing scoped test/lint and a handoff note for the current fingerprint. Run full verify {% if orchestrator_full_verify_policy == "on-request" %}only on explicit user request{% else %}after a clean/low review{% endif %}. Automatic review is capped at initial review plus one delta-only closure review.
+{% endif -%}

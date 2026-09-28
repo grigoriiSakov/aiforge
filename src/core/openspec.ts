@@ -9,7 +9,8 @@ import { writeTextFile } from "./filesystem.js";
 import type { ProjectConfig, RuntimeFlags } from "./types.js";
 
 const OBSOLETE_MANAGED_RULES = new Set([
-  "Include focused tests and the full verification gate required before review."
+  "Include focused tests and the full verification gate required before review.",
+  "Require scoped tests and lint before review, then full verification after a clean review."
 ]);
 
 export type OpenSpecToolId = "codex" | "cursor" | "claude" | "antigravity";
@@ -89,7 +90,9 @@ function configureOpenSpecProject(repoRoot: string, config: ProjectConfig): void
     design: ["Reuse existing architecture and document migration or rollback for risky changes."],
     tasks: [
       "Map every task to a requirement and a canonical aiforge verification command.",
-      "Require scoped tests and lint before review, then full verification after a clean review."
+      config.orchestrator.fullVerifyPolicy === "on-request"
+        ? "Require affected tests and scoped lint before review; run full verification only on explicit user request."
+        : "Require scoped tests and lint before review, then full verification after a clean review."
     ]
   });
   writeTextFile(configPath, YAML.stringify(next));

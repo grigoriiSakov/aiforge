@@ -53,7 +53,7 @@ alwaysApply: true
   - worker context uses no inherited turns or the smallest bounded history plus exact artifact paths; full-history forks are not the default;
   - wait once on native completion/message events; repeated short status/list polling is forbidden;
   - unavailable model preferences fall back only to a compatible native or inherited model, with the fallback recorded;
-  - dependent work waits for accepted review, full verification, terminal OpenSpec sync/archive, and integration into the next base;
+  - dependent work waits for accepted review, {% if orchestrator_full_verify_policy == "on-request" %}affected verification{% else %}full verification{% endif %}, terminal OpenSpec sync/archive, and integration into the next base;
   - Goal state is rehydrated from the initiative manifest, OpenSpec, and orchestrator run artifacts; do not create a duplicate ledger;
   - repository, conflict, approval, live MR, deployment, failed full-suite, and human-decision boundaries pause execution.
 - Workflow language contract is `{{ workflow_language }}` for reasoning, progress artifacts, review artifacts, and user-facing workflow dialogue unless the user explicitly requests another language.
@@ -61,7 +61,7 @@ alwaysApply: true
 {% if minimalism_enabled and minimalism_level != "off" -%}
 - When `minimalism.enabled` is true, read `.ai/rules/minimal-solution.mdc` before `/plan`, `/implement`, and `/review`. The orchestrator does not run a separate pre-review simplify gate.
 {% endif -%}
-- The default post-implementation order is `implement -> scoped test/lint -> review -> full verify`.
+- The default post-implementation order is `implement -> scoped test/lint -> review{% if orchestrator_full_verify_policy == "required" %} -> full verify{% endif %}`.
 - The handoff evidence is bound to the current workspace fingerprint and is reused after a clean read-only review.
 - If the initial review produces `high`, `critical`, or `medium` findings, fix them and rerun affected scoped test + lint. Run at most one delta-only closure review when risk requires it; a second blocking verdict is a human gate.
-- `review` is semantic/findings-only and never invokes full `verify`. Full verify runs once per fingerprint under the generated test resource lease, except one exact flaky rerun followed by at most one final full retry.
+- `review` is semantic/findings-only and never invokes full `verify`.{% if orchestrator_full_verify_policy == "on-request" %} Full verify runs only on explicit user request.{% else %} Full verify runs once per fingerprint under the generated test resource lease, except one exact flaky rerun followed by at most one final full retry.{% endif %}

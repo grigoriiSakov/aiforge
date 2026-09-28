@@ -6,7 +6,7 @@ title: "Orchestrator Test Strategy"
 
 ## Goal
 
-Cut token burn from repeated `implement -> full test -> review -> fix` loops. Default: a cheap fingerprinted scoped handoff, one initial review, and one full project verify after a clean review gate.
+Cut token burn from repeated `implement -> full test -> review -> fix` loops. Default: a fingerprinted affected-test handoff and one initial review.{% if orchestrator_full_verify_policy == "required" %} Run one full project verify after a clean review gate.{% else %} Run full project verify only on explicit user request.{% endif %}
 
 ## Scoped runs (default)
 
@@ -27,9 +27,9 @@ node .ai/runtime/orchestrator-state.mjs record-handoff --issue ISSUE-ID --note "
 
 Pass the exact scoped commands and result to the reviewer; the run JSON records pass/fail and the handoff note.
 
-## Full suite (once per issue, end of pipeline)
+## Full suite{% if orchestrator_full_verify_policy == "on-request" %} (on explicit user request){% else %} (once per issue, end of pipeline){% endif %}
 
-After the review gate returns **clean/low** (and optional audit is not **blocking** when `auditGate` ≠ `never`):
+After the review gate returns **clean/low** (and optional audit is not **blocking** when `auditGate` ≠ `never`){% if orchestrator_full_verify_policy == "on-request" %}, proceed directly to OpenSpec finalization. Only after explicit user direction, run `node .ai/runtime/orchestrator-state.mjs request-full-verify --issue ISSUE-ID` and then:{% else %}:{% endif %}
 
 1. Run full canonical verify: `{{ execution_verify_entrypoint }}` (with worktree env exported).
 2. Record:
