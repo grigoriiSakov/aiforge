@@ -78,6 +78,8 @@ If `## Project-Specific Rules` is empty, still check manifesto, `ai.config.yaml`
 13. Testing policy:
    - under `/orchestrator`, run **scoped** tests for the affected behavior{% if orchestrator_full_verify_policy == "required" %} until the orchestrator runs the single end-of-pipeline full verify{% endif %} (see `.ai/reference/orchestrator-test-strategy.md`)
    - default to the smallest credible test scope that covers the touched behavior
+   - when practical, write a focused behavior test before the change and confirm it fails for the expected reason; then make it pass. Use an existing regression or other appropriate evidence when a useful first failing test is impractical
+   - assert observable results at the relevant public boundary, including meaningful errors and invariants; check that the assertions would detect the defect rather than only exercising the implementation
    - do not assume the full project suite is required unless the user explicitly asks for it or repository rules require it
    - if scoped testing is not enough because the change crosses broad/shared surfaces, say that and expand the scope deliberately
    - if full `{{ task_command }} {{ task_lint_name }}` / `{{ task_command }} {{ task_verify_name }}` fails outside the changed behavior, pass command output and path-level rationale to review; do not hide residual repo risk

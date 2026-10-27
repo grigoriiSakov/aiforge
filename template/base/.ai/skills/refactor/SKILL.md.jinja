@@ -21,6 +21,7 @@ Use this skill for structure improvements without changing intended behavior.
 
 ## Protocol
 
-1. Define invariants before edits.
-2. Prefer decomposition over adding more logic to overloaded files.
-3. Require focused verification after each structural step.
+1. Define invariants and affected consumers before edits; identify existing focused regression evidence or add it where needed.
+2. Prefer decomposition over adding more logic to overloaded files. Treat apparent duplicates as candidates: compare their behavior, scope and lifecycle before merging them.
+3. Change one owned boundary at a time and verify observable behavior after each structural step; a complexity score or matching line coverage alone does not prove equivalence.
+4. Remove a replaced path only after checking its real consumers and preserving the required behavior.

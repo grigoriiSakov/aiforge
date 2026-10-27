@@ -23,5 +23,7 @@ Use this skill for reproduce-first troubleshooting.
 
 1. Establish the failing behavior with evidence.
 2. Isolate the smallest reproducible scope.
-3. Fix only after reproducing or building a strong evidence chain.
-4. Re-run the smallest relevant canonical verification command.
+3. Trace the failure to its cause and distinguish it from symptoms; a guard that only hides the failure is not evidence of a fix. If the cause remains uncertain, say what the evidence does and does not establish.
+4. When practical, capture the failure as a focused regression test and confirm it fails for the expected reason before changing code. If reproduction is impractical, use the strongest available evidence and report the limitation.
+5. Fix only after reproducing or building a strong evidence chain, preserving the affected contracts.
+6. Re-run the smallest relevant canonical verification command and confirm the observed failure is resolved.
