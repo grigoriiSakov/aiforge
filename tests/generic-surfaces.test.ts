@@ -139,7 +139,12 @@ describe("generic reusable surfaces", () => {
       expect(content).toContain(".ai/rules/workflow.mdc");
       expect(content).toContain(".ai/rules/workflow-gates.mdc");
       expect(content).toContain(".ai/rules/project-profile.mdc");
-      expect(content).toContain(".ai/context/current.md");
+      if (relativePath.startsWith("skeptic/")) {
+        // A plan reviewer must not fill missing requirements from a session digest.
+        expect(content).not.toContain(".ai/context/current.md");
+      } else {
+        expect(content).toContain(".ai/context/current.md");
+      }
       expect(content).toContain("Treat those files as hard constraints");
     }
   });

@@ -10,6 +10,7 @@ alwaysApply: true
 ## Gate 1: Plan
 
 - No clear requirements/spec -> no implementation.
+- Before detailed planning, apply the intent check in `.ai/skills/clarify/SKILL.md`, including for direct OpenSpec entrypoints. Record the outcome, evidence/assumptions, boundaries, and success scenario in the existing proposal or initiative PRD; reuse settled answers and ask only about material unresolved choices.
 - Medium/large work requires a validated OpenSpec change before code changes.
 - The OpenSpec change must map source requirements, explicit non-goals, and follow-ups without silent omissions.
 - Risky assumptions must be stated and validated before implementation starts.
@@ -17,7 +18,8 @@ alwaysApply: true
 - The OpenSpec change must contain complete proposal, delta specs, design, and tasks.
 - Design must record important invariants, affected surfaces, migration/rollback, and unresolved decisions.
 - Tasks must map requirements to canonical verification evidence.
-- Open questions and blockers must be empty before `/implement`.
+- Before declaring an OpenSpec change implement-ready, follow the plan review protocol in `.ai/skills/plan/SKILL.md`; complex or risky changes require a completed independent `/skeptic` review and reconciliation of its understanding with the source request.
+- Material decisions and blockers must be resolved before `/implement`; non-blocking uncertainty must have an explicit verification step.
 - Reuse existing canonical surfaces before introducing new files or helpers.
 - If the touched scope contains overloaded or giant files, the plan must include decomposition-on-touch steps.
 - If the request touches user-facing text or AI output, the plan must state the language/locale contract explicitly.

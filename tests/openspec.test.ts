@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import YAML from "yaml";
 
 import { createConfig } from "../src/core/config.js";
+import { resolveTemplatePath } from "../src/core/template.js";
 import {
   ensureOpenSpecProject,
   resolveOpenSpecTools,
@@ -116,6 +117,57 @@ fs.mkdirSync(path.join(repoRoot, "openspec"), { recursive: true });
     expect(parsed.rules?.tasks).toContain(
       "Require scoped tests and lint before review, then full verification after a clean review."
     );
+  });
+
+  test("sync preserves project rules and installs resolvable planning checks idempotently", () => {
+    const repoRoot = makeTempRepo("aiforge-planning-rules-");
+    const openSpecBin = createFakeExecutable(
+      repoRoot,
+      "fake-openspec",
+      "#!/usr/bin/env node\nprocess.exit(0);\n"
+    );
+    const configPath = path.join(repoRoot, "openspec", "config.yaml");
+    const customRules = {
+      proposal: ["Preserve the existing account ownership contract."],
+      tasks: ["Verify compatibility with the supported client."],
+      customArtifact: ["Keep project-specific review evidence."]
+    };
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, YAML.stringify({
+      schema: "project-workflow",
+      context: "Project-owned constraints.",
+      rules: customRules,
+      projectSetting: { enabled: true }
+    }));
+    const config = createConfig({
+      repoRoot,
+      projectSlug: "demo",
+      projectName: "Demo",
+      profileId: "react-vite"
+    });
+
+    ensureOpenSpecProject(repoRoot, config, { bin: openSpecBin });
+    const first = YAML.parse(fs.readFileSync(configPath, "utf8"));
+    ensureOpenSpecProject(repoRoot, config, { bin: openSpecBin });
+    const second = YAML.parse(fs.readFileSync(configPath, "utf8"));
+
+    expect(second).toEqual(first);
+    expect(second.schema).toBe("project-workflow");
+    expect(second.context).toContain("Project-owned constraints.");
+    expect(second.projectSetting).toEqual({ enabled: true });
+    for (const [artifact, rules] of Object.entries(customRules)) {
+      expect(second.rules[artifact]).toEqual(expect.arrayContaining(rules));
+    }
+
+    const skillPaths = [...JSON.stringify(second.rules).matchAll(/\.ai\/skills\/[a-z-]+\/SKILL\.md/g)]
+      .map(([skillPath]) => skillPath);
+    expect(skillPaths).toEqual([
+      ".ai/skills/clarify/SKILL.md",
+      ".ai/skills/plan/SKILL.md"
+    ]);
+    for (const skillPath of skillPaths) {
+      expect(fs.existsSync(path.join(resolveTemplatePath(), `${skillPath}.jinja`))).toBe(true);
+    }
   });
 
   test("ships the OpenSpec CLI as a runtime dependency", () => {

@@ -13,7 +13,6 @@ Use this skill to stress-test a draft plan before implementation.
   - `{{ manifesto_path }}`
   - `ai.config.yaml`
   - `openspec/config.yaml`
-  - `.ai/context/current.md` if it exists
   - `.ai/rules/workflow.mdc`
   - `.ai/rules/workflow-gates.mdc`
   - `.ai/rules/project-profile.mdc`
@@ -27,6 +26,8 @@ Use this skill to stress-test a draft plan before implementation.
 
 Find plan defects while the cost to fix them is still low.
 
+The planner selects same-session or independent review using `.ai/skills/plan/SKILL.md`. An assigned reviewer performs the review itself and does not spawn another reviewer. Stay read-only: return findings to the planner, without editing the plan, code, tracker, or run state. Read source requirements and project rules, but do not retrieve conversation history, memory, or session digests to supply missing design decisions.
+
 The skeptic is adversarial about assumptions, not about people. Every objection must be grounded in one of:
 
 - source request / issue text
@@ -38,12 +39,15 @@ The skeptic is adversarial about assumptions, not about people. Every objection 
 ## Mandatory protocol
 
 1. Use model tier `{{ agent_model_skeptic }}` for this skill (see `.ai/reference/model-profiles.md`).
-2. Read the selected `openspec/changes/<change-id>/` proposal, delta specs, design, and tasks plus the orchestrator run JSON when present.
+2. Read the selected `openspec/changes/<change-id>/` proposal, delta specs, design, and tasks. When a run JSON is supplied, use only its scope and artifact/revision references; prior author/reviewer conclusions are not evidence for your verdict. Identify required inputs that are missing or inaccessible and return an incomplete review rather than inferring their contents.
 3. Read the relevant source request / issue, selected OpenSpec specs and nearby repository context used by `/plan`.
-4. Inspect existing code surfaces named by the draft plan before criticizing architecture or file scope.
+4. Before evaluating the design, describe in your own words the intended behavior change, relevant current behavior, and success scenario, based on the supplied artifacts. Name what cannot be inferred. Then inspect existing code surfaces named by the draft plan before criticizing architecture or file scope.
 5. Search for adjacent/sibling implementations in the repository before claiming a pattern is missing.
 6. When external best practice materially affects the plan and is not already captured by repo rules or OpenSpec context, use current primary/credible documentation and cite the source in the critique.
 7. Evaluate the draft plan against:
+   - whether the solution addresses the source problem and preserves explicit user decisions
+   - material assumptions supported by evidence or a concrete investigation/verification step
+   - whether a new implementer can understand the goal, boundaries, and critical contracts without the discussion history
    - requirements coverage and explicit non-goals
    - reuse of existing abstractions and generated runtime surfaces
    - file-level write scope accuracy
@@ -57,6 +61,8 @@ The skeptic is adversarial about assumptions, not about people. Every objection 
    - `risk` - implementable, but plan needs mitigation or acceptance
    - `note` - useful context, not a planning gate
 9. Do not invent uncertainty. If evidence is missing, state the exact missing evidence and how to obtain it.
+   - Distinguish existing behavior from proposed changes; a file explicitly planned for creation is not a missing-current-code defect.
+   - Require decisions that affect correctness, user expectations, compatibility, or safety. Leave ordinary implementation choices to the implementer; do not demand exhaustive pseudocode, general-term glossaries, or stylistic additions as readiness gates.
 10. Do not require full-suite verification by default. Follow `.ai/rules/workflow-gates.mdc`: scoped evidence is enough when it credibly covers the touched behavior.
 11. All critique and user-facing workflow dialogue must follow workflow language `{{ workflow_language }}` unless the user explicitly requests another language.
 
@@ -67,8 +73,14 @@ Return this concise structure:
 ```markdown
 ## Skeptic Review
 
+### Understanding
+- Intended change, current behavior, and success scenario in your own words; include this even when there are no findings.
+
+### Review Coverage
+- Mode: independent | same-session; required inputs read and any missing evidence. State independent only when the host actually supplied a fresh context.
+
 ### Verdict
-pass | revise
+pass | revise | incomplete
 
 ### Blockers
 - `None.` or `blocker`: evidence -> required plan change
@@ -85,4 +97,5 @@ pass | revise
 
 - `pass` means there are no blockers and all important risks are either mitigated in the plan or explicitly accepted.
 - `revise` means at least one blocker remains.
+- `incomplete` means required input or reviewer execution is missing; it does not satisfy the planning gate.
 - Keep the review short enough to apply directly to the relevant OpenSpec artifacts.

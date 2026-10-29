@@ -51,6 +51,12 @@ Start a change with:
 
 For a multi-change initiative, start one host Goal and give it the ordered issue/change manifest. The Goal thread manages dependencies and integration; it delegates one `issue + changeId` at a time through native subagents. Each worker runs the repository orchestrator in its own worktree and uses `openspec-apply-change` for implementation. Recursive agent CLI launches, PTY polling, and a separate project manager daemon are not part of the workflow.
 
+Planning starts with a proportional intent check in the existing `clarify` skill: desired outcome, evidence versus assumptions, scope, and an observable success scenario. It reuses settled decisions, inspects discoverable facts first, and asks only about material unresolved choices. The result stays in the existing OpenSpec proposal or initiative PRD. Clear local fixes do not require an interview.
+
+Before implementation, `plan` uses the existing `skeptic` skill. Complex or risky changes receive one native reviewer without the author's conversation history. The reviewer explains its understanding before reporting findings, and the planner reconciles that understanding against the source request and code. Missing inputs or unavailable isolation leave the review incomplete; an explicit user-approved same-session fallback is reported as such. Ordinary implementation choices and editorial nits do not block readiness. These techniques are inspired by [EGM's comprehension review](https://github.com/google/elephant-goldfish-model/blob/f0ba151b252c9abf1318d9fe857a43265d06de89/agents/comprehension.md) and [fresh-context review guidance](https://github.com/google/elephant-goldfish-model/blob/f0ba151b252c9abf1318d9fe857a43265d06de89/docs/codex.md), expressed in aiforge's existing workflow; EGM is not installed or required.
+
+After updating the aiforge checkout/package, run `aiforge sync` in each managed project to regenerate the skills, runtime projections, and OpenSpec rules. Synchronization does not establish that planning quality improved: evaluate useful findings, rework, elapsed time, and user interruptions on representative tasks.
+
 ## Supported Profiles
 
 Profiles are starter defaults, not hard locks. After `init` or `adopt`, edit `ai.config.yaml` if a repository has different commands.

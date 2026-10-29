@@ -1,11 +1,11 @@
 ---
 name: clarify
-description: Ask only the focused questions needed to unblock safe planning. Use when the current request is too ambiguous for plan, implement, or coding work.
+description: Check task intent and material assumptions before planning. Use when the desired outcome, proposed solution, or acceptance criteria need clarification.
 ---
 
 # Clarify
 
-Use this skill when the current request is too ambiguous for safe planning or implementation.
+Use this skill to establish what should change and why before committing to a solution. A precise implementation request can still rest on an unverified assumption.
 
 ## Rule preflight
 
@@ -19,10 +19,20 @@ Use this skill when the current request is too ambiguous for safe planning or im
 - Treat those files as hard constraints for this run, not background reference.
 - Do not continue with clarification until this preflight read is complete.
 
+## Intent check
+
+Keep the check proportional: a clear local fix may need only a few sentences. Reuse settled requirements and prior authorization; revisit them only when new evidence changes the decision. Do not turn this into a mandatory questionnaire or section-by-section approval flow.
+
+- Separate the user's desired outcome from the suggested mechanism. State whose observable behavior should change, the current problem, and what would count as success; for internal work, identify the affected operator or system contract.
+- Inspect the relevant code, issue, examples, and existing specs before asking about discoverable facts. Distinguish observed facts, agreed constraints, hypotheses, and unknowns; do not present a plausible cause as established.
+- Check whether the proposed mechanism addresses the problem. Consider an existing capability or smaller change when it is a credible alternative; do not invent competing designs just to fill a template or silently override an explicit user choice.
+- Make scope, non-goals, and a concrete success scenario explicit. For risky changes, include the failure or compatibility behavior that must remain true.
+- Ask only about unresolved choices that materially change scope, user-visible behavior, acceptance, or risk. Resolve ordinary implementation details within the user's authorization. If a technical unknown is testable, propose or perform a scoped investigation within existing permissions and record what it establishes; do not guess or start production implementation to settle a blocking design question.
+
 ## Protocol
 
 1. Read `.ai/reference/model-profiles.md`; use tier `{{ agent_model_clarify }}`.
-2. List exact ambiguities.
-3. Ask only the minimum focused questions needed to unblock `/plan`.
-4. Summarize answers as bullet **Implementation Decisions** candidates for the planner (do not write the full plan here).
-5. Do not start coding while blockers remain unresolved.
+2. Apply the intent check above and identify only material gaps.
+3. Ask the minimum focused questions needed to resolve those gaps, with the evidence and consequence of each choice. Continue independent investigation while an answer is pending; do not treat silence as agreement.
+4. Return a concise **Task Intent** handoff: outcome, evidence and assumptions, scope/non-goals, success scenario, and unresolved decisions or investigation results. Put it in the existing issue/proposal or initiative PRD when that artifact is being authored; otherwise return it to the planner. Do not create a second brief or planning ledger.
+5. Do not start implementation while a material intent or safety blocker remains. Non-blocking uncertainty may remain explicit with a verification step; exhaustive advance specification is not required.

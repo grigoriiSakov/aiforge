@@ -33,12 +33,12 @@ Use OpenSpec for durable requirements and planning artifacts. aiforge remains re
 
 ## Mandatory protocol
 
-1. Inspect the relevant code and existing `openspec/specs/` domains before proposing a change.
+1. Inspect the relevant code and existing `openspec/specs/` domains before proposing a change. Apply the **Intent check** in `.ai/skills/clarify/SKILL.md` before detailed planning; reuse an existing task-intent handoff and investigate only changed assumptions. Resolve material gaps before choosing the design.
 2. Choose a stable kebab-case `<change-id>`. For tracker-backed work, use the normalized lowercase issue ID (`APP-123` → `app-123`) so Goal-mode workers and orchestrator resolve the same change, and record the original issue ID in the proposal.
    - For a new orchestrator-managed change, submit the issue without `--change-id`, start the assigned worktree, and author the OpenSpec change only inside that worktree.
    - After the change exists and validates inside the assigned worktree, run `node .ai/runtime/orchestrator-state.mjs bind-change --issue ISSUE-ID --change-id <change-id>` from the orchestrator control checkout that owns the run registry.
 3. Create or update the OpenSpec change so it contains:
-   - `proposal.md` with intent, in-scope behavior, explicit non-goals, impact, and affected spec domains;
+   - `proposal.md` with the desired outcome, supporting evidence and material assumptions, in-scope behavior, explicit non-goals, impact, and affected spec domains;
    - delta specs with testable requirements and scenarios;
    - `design.md` with important implementation decisions, reuse points, migrations, rollback, and risks;
    - `tasks.md` whose tasks map to requirements and verification evidence.
@@ -54,12 +54,22 @@ Use OpenSpec for durable requirements and planning artifacts. aiforge remains re
    - acceptance traceability from requirements to tasks and checks;
    - explicit blockers and unresolved decisions;
    - data/query, security, compatibility, and migration risks where applicable.
-6. Run `/skeptic` against the complete OpenSpec change. Apply blocking findings to the artifacts before implementation.
+6. Run `/skeptic` against the complete OpenSpec change using the review protocol below. Reconcile its understanding with the source request and apply confirmed blocking findings to the original artifacts before implementation.
 7. Run `openspec validate <change-id>` and resolve validation errors.
-8. Do not hand off to implementation while required artifacts, non-goals, decisions, or validation are incomplete.
+8. Do not hand off to implementation while required artifacts, non-goals, material decisions, or validation are incomplete.
 {% if linear_enabled %}
 9. When the change is implement-ready and Linear MCP is available, move the issue to `{{ tracker_status_plan_ready }}`. If state update is unavailable, follow `.ai/reference/tracker-degraded-mode.md` without duplicating OpenSpec artifacts into tracker comments.
 {% endif %}
+
+## Plan review protocol
+
+- For a small, clear, local change, a same-session `/skeptic` pass is sufficient. Use one independent reviewer for architecture, cross-module/repository contracts, public APIs, migrations, authorization, concurrency, significant user journeys, or material uncertainty about the chosen solution. Record the reason for the selected mode.
+- For independent review, use the host's native subagent tool with no inherited conversation (`fork_turns: "none"` or `fork_context: false`, according to the actual tool schema). Pass absolute paths to `.ai/skills/skeptic/SKILL.md`, the selected OpenSpec change, the source request/issue, applicable rules, and a bounded reading list of relevant code/specs. Include explicit user decisions as source requirements; exclude the author's reasoning transcript, preferred verdict, and explanations that the plan itself must supply.
+- If requirements exist only in chat, preserve the relevant user request and subsequent decisions in the existing proposal, clearly separated from the planner's interpretation. The reviewer must be able to compare the plan with its source without inheriting the conversation.
+- Tell the child it is the reviewer: read those inputs, return its own understanding and evidence-backed findings, stay read-only, and do not delegate another review. Context isolation is not a separate filesystem sandbox. Do not retrieve chat history or memory to fill gaps in the plan.
+- Wait for actual completion and verify the returned input coverage. A missing required read, failed reviewer, or unavailable fresh-context tool is an incomplete review, not a pass. Do not substitute an in-context role-play or recursive agent CLI. Report the limitation; the independent gate remains pending unless the user explicitly accepts a same-session fallback. Reuse such authorization for the same scope.
+- Compare the reviewer's paraphrase with the intended outcome and success scenario. Investigate disagreements against the source request and code: fix the plan when it is ambiguous or wrong, or contest the finding with evidence when the reviewer is wrong. Do not rewrite valid requirements merely to obtain agreement.
+- Keep review evidence and dispositions with the existing change/run evidence; never create a second authoritative plan. After material corrections, obtain a focused fresh-context recheck of the affected findings and changed contract. Editorial fixes do not require another pass. Repeated disagreement without new evidence goes to the owner with concrete alternatives, not an unbounded review swarm.
 
 ## Quality bar
 

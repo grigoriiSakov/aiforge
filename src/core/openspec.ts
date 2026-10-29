@@ -85,11 +85,16 @@ function configureOpenSpecProject(repoRoot: string, config: ProjectConfig): void
   );
   const currentRules = isRecord(next.rules) ? next.rules : {};
   next.rules = mergeRules(currentRules, {
-    proposal: ["State explicit non-goals.", "Identify affected behavior and specification domains."],
+    proposal: [
+      "State explicit non-goals.",
+      "Identify affected behavior and specification domains.",
+      "Before detailed planning, apply the intent check in .ai/skills/clarify/SKILL.md; keep the outcome, evidence and assumptions, boundaries, and success scenario in this proposal."
+    ],
     specs: ["Use testable scenarios and SHALL or MUST for normative requirements."],
     design: ["Reuse existing architecture and document migration or rollback for risky changes."],
     tasks: [
       "Map every task to a requirement and a canonical aiforge verification command.",
+      "Before implementation readiness, follow the plan review protocol in .ai/skills/plan/SKILL.md, including independent skeptic review for complex or risky changes.",
       config.orchestrator.fullVerifyPolicy === "on-request"
         ? "Require affected tests and scoped lint before review; run full verification only on explicit user request."
         : "Require scoped tests and lint before review, then full verification after a clean review."
